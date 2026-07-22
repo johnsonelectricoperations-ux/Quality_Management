@@ -18,7 +18,8 @@
 | 불량 입력 화면 | 공정불량과 셋팅불량은 불량유형이 달라 **탭으로 분리된 별도 화면** 구성 |
 | Customer Incident | KPI는 **건수(건)**, COPQ 구성요소인 Customer Incident Cost는 **금액(천원)** — 별개 관리 |
 | SVP 입력 단위 | **VMS / TM 파트별 전체 금액** (월 1회) |
-| 로그인/권한 | **조회자 / 입력자 / 관리자** 3단계 권한 구분 |
+| 로그인/권한 | **조회자 / 입력자 / 관리자** 3단계 권한 구분. 100EA 검토 승인/수정은 입력자도 가능 |
+| COPQ 제외 규칙 | COPQ 계산 시 Scrap Cost에서 **성형공정에 배분된 공정불량·셋팅불량 비용은 제외** (KPI의 Scrap Cost 자체는 전체 포함) |
 
 ---
 
@@ -48,7 +49,8 @@
 | 셋팅불량율 | % | **VMS / TM 별도만** (통합 안 함) | 생산수량 |
 
 - 기간 축: **일별 / 주별 / 월별** 전환 (대시보드 상단 세그먼트 토글 — 디자인 시안에 이미 반영됨)
-- COPQ 세부 = Scrap Cost + Warranty + 3rd Party Containment + Quality Special Freight + Customer Incident Cost + Unplanned Inspection & Sorting Cost + Variance → 합산액 ÷ SVP × 100
+- COPQ 세부 = Scrap Cost(성형공정 제외분) + Warranty + 3rd Party Containment + Quality Special Freight + Customer Incident Cost + Unplanned Inspection & Sorting Cost + Variance → 합산액 ÷ SVP × 100
+- ⚠ COPQ에 들어가는 Scrap Cost는 **성형공정에 배분된 공정불량·셋팅불량 비용을 제외**한 값이다. KPI 카드의 Scrap Cost는 전체(성형 포함) 금액 그대로 표시하므로 두 값이 다를 수 있다 — 화면에 각주로 표기.
 - Claim 항목(Warranty 등)은 월 단위 수기 입력이므로, **일별/주별 화면에서 COPQ는 "월 누계 기준" 표기** 또는 Scrap Cost 중심으로 표시 (구현 시 화면에서 명확히 라벨링)
 
 ### 2.2 데이터 소스
@@ -81,7 +83,7 @@
 ```
 제품 (product)          : tm_no(PK), 품명, 파트구분(파생)
 제품공정 (product_route): tm_no(FK), 공정순서(seq), 공정명, 기준단가(누적, 천원)
-공정 (process)          : 공정명(PK), 파트구분(VMS/TM)
+공정 (process)          : 공정명(PK), 파트구분(VMS/TM), COPQ제외여부(기본 N, 성형=Y)
 불량유형 (defect_type)  : 불량코드(PK), 구분(공정/셋팅), 불량명, 발생공정, 배분기준(원문)
 불량배분규칙 (defect_alloc): 불량코드(FK), 배분대상공정, 배분비율   ← 배분기준 파싱 결과
 ```
@@ -188,11 +190,14 @@ Scrap Quantity = Σ 불량수량                                      [파트/�
 Scrap Cost     = Σ scrap_cost (천원)                             [파트/통합/공정별 × 일/주/월]
 공정불량율      = 공정불량수량 ÷ 생산수량 × 100                    [파트별만, 공정별]
 셋팅불량율      = 셋팅불량수량 ÷ 생산수량 × 100                    [파트별만, 공정별]
-COPQ(%)        = (ScrapCost + Warranty + 3rdParty + SpecialFreight
+ScrapCost_COPQ = ScrapCost − (성형공정에 배분된 공정불량·셋팅불량 비용)
+COPQ(%)        = (ScrapCost_COPQ + Warranty + 3rdParty + SpecialFreight
                   + CustomerIncidentCost + UnplannedInspection + Variance) ÷ 분모 × 100
 Warranty       = Claim 입력값 (천원, 월 단위)
 Customer Incident = Incident 등록 건수 집계 (건)
 ```
+- 성형공정 제외는 코드에 "성형"을 하드코딩하지 않고 **공정 마스터의 COPQ제외여부 플래그**로 구현한다 (공정명 변경·제외 공정 추가에 대비). 공정명 마스터 양식에 해당 컬럼을 추가한다.
+- COPQ 상세 리포트에 "제외된 성형공정 Scrap Cost" 금액을 별도 표기해 검산 가능하게 한다.
 
 ### 5.5 권한 체계
 | 권한 | 범위 |
