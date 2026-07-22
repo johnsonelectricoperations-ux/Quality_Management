@@ -104,8 +104,8 @@ def gen_masters():
     prod_rows = []
     for tm, (name, part, rt) in PRODUCTS.items():
         for seq, (proc, price) in enumerate(rt, start=1):
-            prod_rows.append((tm, name, seq, proc, price))
-    save("제품마스터.xlsx", ["TM-NO", "품명", "공정순서", "공정명", "기준단가(원)"],
+            prod_rows.append((tm, name, part, seq, proc, price))
+    save("제품마스터.xlsx", ["TM-NO", "품명", "파트구분", "공정순서", "공정명", "기준단가(원)"],
          prod_rows, text_cols=(1,))
 
     dt_rows = [(v[0], v[1], name, v[2]) for name, v in DEFECT_TYPES.items()]
@@ -132,14 +132,12 @@ def gen_defect_direct():
     rows = []
     for d in weekdays(START, END):
         for tm in PRODUCTS:
-            if random.random() < 0.55:                    # 공정불량 1~2건
-                for _ in range(random.randint(1, 2)):
-                    name = random.choice(PROC_DEFECTS)
-                    qty = random.randint(2, 40)
-                    rows.append((d.isoformat(), tm, name, qty))
-            if random.random() < 0.15:                    # 셋팅불량 가끔
+            if random.random() < 0.30:                    # 공정불량 (과다 방지)
+                name = random.choice(PROC_DEFECTS)
+                rows.append((d.isoformat(), tm, name, random.randint(1, 4)))
+            if random.random() < 0.05:                    # 셋팅불량 가끔
                 name = random.choice(SET_DEFECTS)
-                rows.append((d.isoformat(), tm, name, random.randint(1, 20)))
+                rows.append((d.isoformat(), tm, name, random.randint(1, 3)))
     save("불량입력.xlsx", ["일자", "TM-NO", "불량명", "수량"], rows, text_cols=(2,))
 
 
@@ -147,10 +145,10 @@ def gen_defect_direct():
 def gen_outsource():
     rows = []
     for d in weekdays(START, END):
-        if random.random() < 0.35:
+        if random.random() < 0.12:
             tm = random.choice(list(PRODUCTS))
             name = random.choice(["소재크랙", "이물혼입"])
-            qty = random.randint(5, 60)
+            qty = random.randint(3, 15)
             rows.append((d.isoformat(), tm, name, qty))
     # 최근 몇 건은 100EA 이상 (검토 격리 시연)
     for tm, name, qty in [("1545-01", "소재크랙", 240), ("3010-04", "이물혼입", 155),
@@ -163,10 +161,10 @@ def gen_outsource():
 def gen_discard():
     rows = []
     for d in weekdays(START, END):
-        if random.random() < 0.25:
+        if random.random() < 0.10:
             tm = random.choice(list(PRODUCTS))
             name = random.choice(PROC_DEFECTS)
-            rows.append((d.isoformat(), tm, name, random.randint(3, 30)))
+            rows.append((d.isoformat(), tm, name, random.randint(2, 10)))
     save("폐기불량.xlsx", ["일자", "TM-NO", "불량명", "수량"], rows, text_cols=(2,))
 
 
@@ -178,8 +176,8 @@ def gen_svp():
         if (y, m) == (2026, 7):
             continue
         for part in PARTS:
-            base = 250_000 if part == "VMS PART" else 180_000
-            rows.append((f"{y:04d}-{m:02d}", part, int(base * random.uniform(0.9, 1.1))))
+            base = 72_000 if part == "VMS PART" else 68_000   # 월 생산금액과 정합
+            rows.append((f"{y:04d}-{m:02d}", part, int(base * random.uniform(0.92, 1.08))))
     save("SVP.xlsx", ["년월", "파트", "금액(천원)"], rows)
 
 
