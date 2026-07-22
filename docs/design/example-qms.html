@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통합품질관리시스템 — 디자인 예시</title>
+<style>
+  /* ===== Design tokens (from docs/design/johnson-electric.md) ===== */
+  :root {
+    --color-primary-50:#FDE7E9; --color-primary-500:#E30613; --color-primary-600:#C00510; --color-primary-700:#99040D;
+    --color-secondary-500:#33506B;
+    --n-0:#FFFFFF; --n-50:#F6F7F9; --n-100:#ECEEF1; --n-200:#D9DDE3; --n-300:#B4BAC4; --n-400:#8A919E; --n-500:#626A78; --n-600:#454C59; --n-700:#2E333D; --n-900:#0E1116;
+    --success-bg:#E6F5EE; --success-fg:#12805C;
+    --warning-bg:#FDF3E2; --warning-fg:#C77700;
+    --error-bg:#FCEBEC;   --error-fg:#D0021B;
+    --info-bg:#E7F1F9;    --info-fg:#1264A3;
+    --hold-bg:#ECEEF1;    --hold-fg:#626A78;
+    --bg-base:#F6F7F9; --bg-elevated:#FFFFFF; --bg-subtle:#ECEEF1;
+    --text-primary:#0E1116; --text-secondary:#454C59; --text-tertiary:#8A919E;
+    --border-default:#D9DDE3; --border-subtle:#ECEEF1; --border-focus:#E30613;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:8px;
+    --shadow-sm:0 1px 2px rgba(14,17,22,0.06);
+    --shadow-focus:0 0 0 3px rgba(227,6,19,0.20);
+    --mono:'JetBrains Mono','SFMono-Regular',ui-monospace,monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Pretendard, Inter, -apple-system, "Malgun Gothic", sans-serif; background: var(--bg-base); color: var(--text-primary); font-size: 14px; -webkit-font-smoothing: antialiased; }
+
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+  /* ===== Sidebar ===== */
+  .sidebar { background: var(--bg-elevated); border-right: 1px solid var(--border-default); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .sidebar .brand { display: flex; align-items: center; gap: 9px; padding: 18px 20px 16px; font: 700 15px/1.1 inherit; }
+  .sidebar .brand .mark { width: 18px; height: 18px; border-radius: 3px; background: var(--color-primary-500); flex: none; }
+  .sidebar .brand small { display: block; font: 500 10px/1.3 inherit; color: var(--text-tertiary); letter-spacing: 0.02em; }
+  .nav-group { padding: 8px 0; border-top: 1px solid var(--border-subtle); }
+  .nav-group .cap { padding: 6px 20px; font: 700 10px/1.3 inherit; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; font: 500 13.5px/1.2 inherit; color: var(--text-secondary); cursor: pointer; border-left: 3px solid transparent; }
+  .nav-item:hover { background: var(--bg-subtle); color: var(--text-primary); }
+  .nav-item.active { color: var(--color-primary-600); border-left-color: var(--color-primary-500); background: var(--color-primary-50); font-weight: 600; }
+  .nav-item .ic { width: 16px; text-align: center; font-size: 13px; }
+  .nav-item .count { margin-left: auto; font: 700 10px/1 inherit; background: var(--error-bg); color: var(--error-fg); padding: 2px 6px; border-radius: 9999px; }
+
+  /* ===== Topbar ===== */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 28px; background: var(--bg-elevated); border-bottom: 1px solid var(--border-default); position: sticky; top: 0; z-index: 5; }
+  .topbar h1 { margin: 0; font: 700 19px/1.1 inherit; letter-spacing: -0.01em; }
+  .topbar .crumb { font: 500 12px/1 inherit; color: var(--text-tertiary); }
+  .topbar .spacer { margin-left: auto; }
+  .seg { display: inline-flex; background: var(--bg-subtle); border-radius: var(--radius-md); padding: 3px; }
+  .seg button { border: 0; background: transparent; font: 600 12px/1 inherit; color: var(--text-secondary); padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  .seg button.on { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+  .btn-primary { background: var(--color-primary-500); color: #fff; border: 0; border-radius: var(--radius-md); padding: 9px 16px; font: 600 13px/1 inherit; cursor: pointer; }
+  .btn-primary:hover { background: var(--color-primary-600); }
+  .btn-primary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+  .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 9px 14px; font: 600 13px/1 inherit; cursor: pointer; }
+  .btn-secondary:hover { background: var(--bg-subtle); }
+
+  /* ===== Content layout ===== */
+  .content { padding: 24px 28px 48px; max-width: 1440px; width: 100%; }
+  .sec-title { display: flex; align-items: center; gap: 8px; margin: 28px 0 14px; font: 700 15px/1 inherit; }
+  .sec-title::before { content: ""; width: 4px; height: 15px; background: var(--color-primary-500); border-radius: 2px; }
+  .sec-title .sub { font: 500 12px/1 inherit; color: var(--text-tertiary); margin-left: 4px; }
+  .sec-title .right { margin-left: auto; font: 600 12px/1 inherit; color: var(--color-primary-600); cursor: pointer; }
+
+  /* ===== KPI cards ===== */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kpi { background: var(--bg-elevated); border: 1px solid var(--border-default); border-top: 2px solid var(--color-primary-500); border-radius: var(--radius-md); padding: 16px; }
+  .kpi.sec { border-top-color: var(--color-secondary-500); }
+  .kpi .label { font: 600 11px/1.3 inherit; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
+  .kpi .value { font: 700 27px/1.1 inherit; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  .kpi .value .unit { font-size: 13px; color: var(--text-tertiary); font-weight: 500; margin-left: 2px; }
+  .kpi .foot { margin-top: 8px; display: flex; align-items: center; gap: 8px; font: 600 12px/1 inherit; }
+  .up { color: var(--success-fg); } .down { color: var(--error-fg); }
+  .kpi .goal { color: var(--text-tertiary); font-weight: 500; }
+
+  /* ===== Cards / panels ===== */
+  .grid-2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+  .panel { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
+  .panel-head h2 { margin: 0; font: 600 14px/1 inherit; }
+  .panel-head .badge-total { margin-left: auto; font: 700 11px/1 inherit; color: var(--text-secondary); background: var(--bg-subtle); padding: 4px 9px; border-radius: 9999px; }
+
+  /* ===== Table ===== */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font: 600 11px/1.3 inherit; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-tertiary); padding: 10px 18px; border-bottom: 1px solid var(--border-default); background: var(--bg-subtle); white-space: nowrap; }
+  td { padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  td.spec { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+  tbody tr:hover { background: var(--bg-subtle); }
+  tr.is-ng td:first-child { box-shadow: inset 3px 0 0 var(--error-fg); }
+  tfoot td { padding: 10px 18px; font: 700 12px/1 inherit; background: var(--bg-subtle); border-top: 1px solid var(--border-default); }
+
+  /* ===== Badge ===== */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 9999px; font: 700 11px/1.4 inherit; white-space: nowrap; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .b-pass { background: var(--success-bg); color: var(--success-fg); }
+  .b-ng   { background: var(--error-bg);   color: var(--error-fg); }
+  .b-test { background: var(--warning-bg); color: var(--warning-fg); }
+  .b-review{ background: var(--info-bg);   color: var(--info-fg); }
+  .b-hold { background: var(--hold-bg);    color: var(--hold-fg); }
+
+  /* ===== Bar chart (pure CSS) ===== */
+  .bars { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .bar-row { display: grid; grid-template-columns: 92px 1fr 52px; align-items: center; gap: 10px; }
+  .bar-row .name { font: 500 12.5px/1.2 inherit; color: var(--text-secondary); }
+  .bar-track { height: 10px; background: var(--bg-subtle); border-radius: 9999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 9999px; background: var(--color-primary-500); }
+  .bar-fill.sec { background: var(--color-secondary-500); }
+  .bar-fill.warn { background: var(--warning-fg); }
+  .bar-row .val { font: 700 12px/1 var(--mono); text-align: right; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+  /* ===== Pareto legend / donut fake ===== */
+  .scrap-wrap { display: grid; grid-template-columns: 150px 1fr; gap: 18px; padding: 18px; align-items: center; }
+  .donut { width: 150px; height: 150px; border-radius: 50%;
+    background: conic-gradient(var(--color-primary-500) 0 46%, var(--color-secondary-500) 46% 71%, var(--warning-fg) 71% 87%, var(--n-300) 87% 100%);
+    display: grid; place-items: center; }
+  .donut .hole { width: 92px; height: 92px; border-radius: 50%; background: var(--bg-elevated); display: grid; place-content: center; text-align: center; }
+  .donut .hole b { font: 700 22px/1 inherit; font-variant-numeric: tabular-nums; }
+  .donut .hole span { font: 600 10px/1.4 inherit; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+  .legend { display: flex; flex-direction: column; gap: 9px; }
+  .legend .li { display: flex; align-items: center; gap: 9px; font: 500 13px/1 inherit; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .legend .li .amt { margin-left: auto; font: 700 12px/1 var(--mono); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+  .note { margin-top: 32px; padding: 12px 16px; background: var(--info-bg); border: 1px solid #cfe0ef; border-radius: var(--radius-md); font: 500 12.5px/1.5 inherit; color: var(--info-fg); }
+
+  @media (max-width: 1080px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 720px)  { .app { grid-template-columns: 1fr; } .sidebar { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark"></span>
+      <div>통합품질관리<small>Quality Management</small></div>
+    </div>
+    <nav class="nav-group">
+      <div class="cap">개요</div>
+      <div class="nav-item active"><span class="ic">▣</span>대시보드</div>
+      <div class="nav-item"><span class="ic">▦</span>실시간 모니터링</div>
+    </nav>
+    <nav class="nav-group">
+      <div class="cap">불량 관리</div>
+      <div class="nav-item"><span class="ic">⚙</span>공정불량현황</div>
+      <div class="nav-item"><span class="ic">◈</span>셋팅불량현황</div>
+      <div class="nav-item"><span class="ic">▲</span>기타폐기현황</div>
+      <div class="nav-item"><span class="ic">✎</span>부적합 처리<span class="count">6</span></div>
+    </nav>
+    <nav class="nav-group">
+      <div class="cap">검사</div>
+      <div class="nav-item"><span class="ic">✔</span>수입검사 (IQC)</div>
+      <div class="nav-item"><span class="ic">⌗</span>공정검사 (IPQC)</div>
+      <div class="nav-item"><span class="ic">▤</span>출하검사 (OQC)</div>
+    </nav>
+    <nav class="nav-group">
+      <div class="cap">분석</div>
+      <div class="nav-item"><span class="ic">◧</span>KPI 리포트</div>
+      <div class="nav-item"><span class="ic">⤳</span>추이 분석</div>
+    </nav>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <div class="crumb">개요 / 대시보드</div>
+        <h1>품질관리 대시보드</h1>
+      </div>
+      <span class="spacer"></span>
+      <div class="seg">
+        <button>일간</button>
+        <button class="on">주간</button>
+        <button>월간</button>
+      </div>
+      <button class="btn-secondary">⭳ 내보내기</button>
+      <button class="btn-primary">+ 불량 등록</button>
+    </header>
+
+    <div class="content">
+
+      <!-- ===== KPI ===== -->
+      <div class="sec-title">핵심 지표 (KPI)<span class="sub">2026-07-16 ~ 07-22 · A라인</span></div>
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="label">종합 합격률</div>
+          <div class="value">98.6<span class="unit">%</span></div>
+          <div class="foot"><span class="up">▲ 0.4%p</span><span class="goal">목표 99.0%</span></div>
+        </div>
+        <div class="kpi sec">
+          <div class="label">불량 PPM</div>
+          <div class="value">1,412</div>
+          <div class="foot"><span class="down">▲ 180</span><span class="goal">목표 1,000</span></div>
+        </div>
+        <div class="kpi sec">
+          <div class="label">생산 수량</div>
+          <div class="value">86,240<span class="unit">EA</span></div>
+          <div class="foot"><span class="up">▲ 5.2%</span><span class="goal">전주 대비</span></div>
+        </div>
+        <div class="kpi">
+          <div class="label">폐기 손실액</div>
+          <div class="value">₩4.82<span class="unit">M</span></div>
+          <div class="foot"><span class="up">▼ 8.1%</span><span class="goal">전주 대비</span></div>
+        </div>
+      </div>
+
+      <!-- ===== 공정불량 + 셋팅불량 (2-up) ===== -->
+      <div class="sec-title">공정 · 셋팅 불량현황</div>
+      <div class="grid-2">
+
+        <!-- 공정불량현황 : table -->
+        <div class="panel">
+          <div class="panel-head">
+            <h2>⚙ 공정불량현황</h2>
+            <span class="badge-total">총 1,218 EA</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>공정</th><th>불량 유형</th><th class="num">수량</th><th class="num">불량률</th><th>상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="is-ng">
+                <td>권선 (Winding)</td><td>단선</td><td class="num">312</td><td class="num">0.36%</td>
+                <td><span class="badge b-ng">개선필요</span></td>
+              </tr>
+              <tr>
+                <td>사출 (Molding)</td><td>버(Burr) 발생</td><td class="num">268</td><td class="num">0.31%</td>
+                <td><span class="badge b-test">조치중</span></td>
+              </tr>
+              <tr>
+                <td>조립 (Assembly)</td><td>압입 불량</td><td class="num">205</td><td class="num">0.24%</td>
+                <td><span class="badge b-review">검토</span></td>
+              </tr>
+              <tr>
+                <td>착자 (Magnetizing)</td><td>자력 미달</td><td class="num">254</td><td class="num">0.29%</td>
+                <td><span class="badge b-test">조치중</span></td>
+              </tr>
+              <tr>
+                <td>도장 (Coating)</td><td>스크래치</td><td class="num">179</td><td class="num">0.21%</td>
+                <td><span class="badge b-pass">관리중</span></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr><td colspan="2">합계</td><td class="num">1,218</td><td class="num">0.28%</td><td></td></tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- 셋팅불량현황 : bar chart -->
+        <div class="panel">
+          <div class="panel-head">
+            <h2>◈ 셋팅불량현황</h2>
+            <span class="badge-total">총 486 EA</span>
+          </div>
+          <div class="bars">
+            <div class="bar-row"><span class="name">초물 셋팅</span><div class="bar-track"><div class="bar-fill" style="width:82%"></div></div><span class="val">168</span></div>
+            <div class="bar-row"><span class="name">치수 셋팅</span><div class="bar-track"><div class="bar-fill" style="width:64%"></div></div><span class="val">131</span></div>
+            <div class="bar-row"><span class="name">금형 교체</span><div class="bar-track"><div class="bar-fill warn" style="width:47%"></div></div><span class="val">96</span></div>
+            <div class="bar-row"><span class="name">파라미터</span><div class="bar-track"><div class="bar-fill sec" style="width:31%"></div></div><span class="val">63</span></div>
+            <div class="bar-row"><span class="name">지그 정렬</span><div class="bar-track"><div class="bar-fill sec" style="width:14%"></div></div><span class="val">28</span></div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>설비</th><th>최근 셋팅</th><th class="num">불량</th><th>판정</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>사출기 #3</td><td class="spec">10:24</td><td class="num">42</td><td><span class="badge b-ng">불합격</span></td></tr>
+              <tr><td>권선기 #1</td><td class="spec">09:05</td><td class="num">11</td><td><span class="badge b-pass">합격</span></td></tr>
+              <tr><td>조립기 #2</td><td class="spec">08:40</td><td class="num">7</td><td><span class="badge b-pass">합격</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 기타폐기현황 ===== -->
+      <div class="sec-title">기타폐기현황<span class="sub">사유별 폐기 비중</span><span class="right">전체 리포트 →</span></div>
+      <div class="grid-2">
+
+        <!-- Donut -->
+        <div class="panel">
+          <div class="panel-head"><h2>▲ 폐기 사유 구성</h2><span class="badge-total">총 342 EA</span></div>
+          <div class="scrap-wrap">
+            <div class="donut"><div class="hole"><b>342</b><span>총 폐기</span></div></div>
+            <div class="legend">
+              <div class="li"><span class="dot" style="background:var(--color-primary-500)"></span>자재 불량 <span class="amt">158</span></div>
+              <div class="li"><span class="dot" style="background:var(--color-secondary-500)"></span>취급 파손 <span class="amt">85</span></div>
+              <div class="li"><span class="dot" style="background:var(--warning-fg)"></span>유효기간 경과 <span class="amt">55</span></div>
+              <div class="li"><span class="dot" style="background:var(--n-300)"></span>기타 <span class="amt">44</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrap table -->
+        <div class="panel">
+          <div class="panel-head"><h2>폐기 상세 내역</h2><span class="badge-total">₩4.82M</span></div>
+          <table>
+            <thead>
+              <tr><th>일자</th><th>품목</th><th>사유</th><th class="num">수량</th><th class="num">손실액</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="spec">07-22</td><td>커뮤테이터</td><td>자재 불량</td><td class="num">62</td><td class="num">₩1,240K</td></tr>
+              <tr><td class="spec">07-21</td><td>마그넷</td><td>취급 파손</td><td class="num">40</td><td class="num">₩980K</td></tr>
+              <tr><td class="spec">07-20</td><td>베어링</td><td>유효기간 경과</td><td class="num">55</td><td class="num">₩1,100K</td></tr>
+              <tr><td class="spec">07-19</td><td>하우징</td><td>자재 불량</td><td class="num">96</td><td class="num">₩860K</td></tr>
+              <tr><td class="spec">07-18</td><td>기타 부자재</td><td>기타</td><td class="num">89</td><td class="num">₩640K</td></tr>
+            </tbody>
+            <tfoot>
+              <tr><td colspan="3">합계</td><td class="num">342</td><td class="num">₩4,820K</td></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <p class="note">※ 본 화면은 <b>디자인 검토용 목업</b>입니다. 수치·항목은 예시이며 실제 데이터가 연결되어 있지 않습니다. (docs/design/johnson-electric.md 토큰 기준)</p>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
