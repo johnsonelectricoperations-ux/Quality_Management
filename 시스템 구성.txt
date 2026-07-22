@@ -1,0 +1,29 @@
+1. 대시보드에 보여질 항목
+    (1) KPI 항목 : Scrap Cost, Scrap Quantity, COPQ, Customer Incident, Warrenty, 공정불량율, 셋팅불량율
+2. 내부 체계
+    (1) KPI 항목은 VMS Part와 TM Part로 2그룹이 있다.
+    (2) KPI 항목은 모두 2그룹 별도로 집계하며, 통합으로도 집계한다. 단, 공정불량율, 셋팅불량율은 통합하지 않는다.
+
+3. MASTER DATA LIST
+   (1) 제품 MASTER (EXCEL 파일) : TM-NO, 품명, 공정명 순서, 공정별 기준단가
+    (2) 공정명 MASTER (EXCEL 파일) : VMS PART/TM PART , 공정명
+   (3) 불량유형 MASTER (EXCEL 파일) : 구분(공정/셋팅), 공정명, 불량명, 배분기준
+
+3. 불량계산방법 
+    (1) 공정불량은 입력DATA와 외주소재불량, 폐기불량 DATA를 기준으로 산정한다.
+    (2) 공정불량은 이 시스템에 직접 입력할수있는 화면을 만들고, 추가적으로 정해진 규격의 EXCEL에 입력후 UPLOAD하여 D/B화도 가능하도록 한다.
+   (3) 외주소재불량은 EXCEL파일을 불러와서 집계한다. (2차 업데이트는 지정된 폴더에서 정해진 시간에 불러와서 입력할 수 있게)
+    (4) 폐기불량 DATA는 EXCEL 파일을 불러와서 집계한다. (2차 업데이트는 다른 시스템의 d/b에서 불러와서 입력할 수 있게)
+    (5) 불량율 계산을 위한 생산수량은 시스템에서 별도로 입력하는 화면을 만든다. (2차 업데이트는 전용 pc에서 erp를 자동조작해서 데이터를 입력할수있게)
+    (6) 외주소재불량 DATA에서 단일품목(TM-NO)가 단일불량유형으로 100개 이상 등록된 DATA가 있으면 별도화면에서 사용자가 검토/수정할수있도록 한다.
+     (7) 공정불량/셋팅불량은 공정별로도 집계를 한다. 
+   (8) 불량유형별 해당되는 공정을 복수 선택할수 있도록 한다. (EX, 선별공정에서 찍힘 불량이 40개 등록되면 해당ITEM 공정이 성형,소결,정형,선별이면 소결50%, 정형50% 이렇게 배분한다, 단 수량이 소수점으로 나오지 않도록 주의한다)
+     (9) KPI 항목의 Scrap Cost, COPQ는 SVP 는 비용으로 환산하고, 분모는 SVP라는 값을 기준으로 계산한다. SVP도 생산수량과 같이 별도로 입력 관리하는 화면을 만든다.
+         
+4. COPQ는 Scrap cost, Warrenty, 3rd Party Containment, Quality Special Freight, Customer Incident Cost, Unplanned inspection and sorting cost, Variance 항목으로 세분화되며, 모든 금액을 합산하고, SVP가 분모로 하여 %로 계산한다. (단위, 천원)
+
+5. Scrap Cost는 공정별 비용도 산출한다, 
+
+6. Scrap cost, copq는 금액이며, 단위는 천원이다.
+
+7. claim (Warrenty, 3rd Party Containment, Quality Special Freight, Customer Incident Cost, Unplanned inspection and sorting cost, Variance)은 별도 화면에서 필요한 data를 수기로 입력할 수 있도록 화면을 만든다. (2차 업데이트는 전용pc에서 erp를 자동조작해서 데이터를 입력할수있게)
