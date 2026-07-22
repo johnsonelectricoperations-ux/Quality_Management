@@ -1,4 +1,5 @@
-qms.db
-__pycache__/
-venv/
 *.pyc
+__pycache__/
+backups/
+qms.db
+venv/

@@ -4,7 +4,14 @@
 > 상세 작업 목록은 `task.md`.
 
 ## 현재 마일스톤
-- **M1~M6 완료** (백엔드 + 웹 앱 동작·검증). 다음: **M7 배포 가이드** + 입력 화면 직접입력 폼 보강.
+- **M0~M7 완료** (구현 + 배포 가이드). 잔여(선택): 입력 화면 직접입력 폼, 대시보드 지표 선택 토글.
+
+### M7 배포 (2026-07-22 완료)
+- deploy/: setup.bat, run_server.bat, _service.bat, register_tasks.bat(작업 스케줄러),
+  backup_db.py/.bat(온라인 백업·30개 보관), .env.example, DEPLOY.md(전체 가이드)
+- app/setpw.py: 비밀번호 변경·계정 추가 CLI
+- 검증: setpw(변경/추가/목록), backup_db(온라인 백업·복원), python -m app.db/uvicorn 동작
+- .gitignore: qms.db, backups/, venv/, __pycache__
 
 ## 최근 로그
 

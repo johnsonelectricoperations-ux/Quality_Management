@@ -48,6 +48,19 @@ templates/              업로드용 마스터/트랜잭션 양식(.xlsx)
 - **COPQ**: Scrap Cost에서 **성형(COPQ제외) 공정 배분분 제외** + Claim 6항목, 분모 = SVP(없으면 생산금액 추정).
 - **추이 차트**: 최근 7개월 롤링(당월 우측), FY 경계에서 목표선 계단식.
 
+## 배포 (사내 서버 PC · Windows)
+
+상시 구동·백업·업데이트 절차는 **`deploy/DEPLOY.md`** 참고. 요약:
+
+```bat
+deploy\setup.bat            REM venv + 의존성 + 빈 DB
+deploy\register_tasks.bat   REM (관리자) 부팅 자동시작 + 매일 백업  ← 상시 구동
+REM 수동 실행: deploy\run_server.bat  /  백업: deploy\backup_db.bat
+python -m app.setpw admin <새비밀번호>   REM 기본 비밀번호 변경(필수)
+```
+
+방화벽 5003 인바운드 허용 후 사내망에서 `http://<서버IP>:5003` 접속. 기존 서버 프로그램과 독립 venv/포트로 공존.
+
 ## 2차 (예정)
 
 외주소재불량 폴더 자동수집 · 폐기불량 DB연동 · 생산실적/SVP/Claim ERP 자동입력(RPA).
