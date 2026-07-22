@@ -77,7 +77,7 @@
   tbody tr:last-child td { border-bottom:0; }
   tbody tr:hover { background:var(--bg); }
   td.num { font-variant-numeric:tabular-nums; text-align:right; }
-  td.mono { font-family:var(--mono); font-size:12px; color:var(--tx2); }
+  td.mono { font-family:var(--mono); font-size:12px; color:var(--tx2); white-space:nowrap; }
   tfoot td { font:700 12px/1 inherit; background:var(--bg); border-top:1px solid var(--bd); }
   .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:9999px; font:700 10.5px/1.4 inherit; white-space:nowrap; }
   .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
@@ -148,6 +148,16 @@
   .jchart .g-bar { transition:opacity .15s ease; cursor:default; }
   .jchart .g-bar:hover { opacity:.82; }
   .jchart .g-dot { fill:var(--card); stroke-width:2; }
+
+  /* TOP5 defect tables */
+  .toph { display:flex; align-items:center; gap:10px; margin:24px 0 12px; }
+  .toph h2 { margin:0; font:700 15px/1 inherit; display:flex; align-items:center; gap:8px; }
+  .toph h2::before { content:""; width:4px; height:15px; background:var(--p-500); border-radius:2px; }
+  .rank { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:6px; font:700 11px/1 var(--mono); background:var(--track); color:var(--tx2); }
+  .rank.r1 { background:var(--p-500); color:#fff; } .rank.r2 { background:var(--p-300); color:#fff; } .rank.r3 { background:var(--sec); color:#fff; }
+  .dtags { display:flex; flex-wrap:wrap; gap:3px; }
+  .dtag { display:inline-block; font:600 10.5px/1.5 inherit; background:var(--track); color:var(--tx2); padding:2px 7px; border-radius:5px; white-space:nowrap; }
+  .dtag b { color:var(--p-600); font-weight:700; margin-left:4px; font-variant-numeric:tabular-nums; }
 
   .login-wrap { min-height:70vh; display:grid; place-items:center; }
   .login-card { width:360px; background:var(--card); border:1px solid var(--bd); border-top:3px solid var(--p-500); border-radius:10px; padding:30px 28px; }
@@ -237,6 +247,53 @@
       </div>
     </div>
     <div class="hint" style="margin-top:2px;">차트 지표는 선택 가능(COPQ / Scrap Cost / 공정불량율 ppm / 셋팅불량율 ppm …). 목표선(점선)은 [목표 관리]의 값.</div>
+
+    <!-- 공정불량 TOP5 (좌: 당월 월간누적 / 우: 해당주 누적) -->
+    <div class="toph">
+      <h2>공정불량 TOP 5</h2>
+      <div class="seg"><b class="on">VMS PART</b><b>TM PART</b></div>
+      <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">발생 수량 순 · 불량유형별 수량 포함</span>
+    </div>
+    <div class="grid2">
+      <!-- 당월 월간누적 -->
+      <div class="panel">
+        <div class="phead"><h2>당월 월간누적</h2><span class="tot">2026-07 · VMS</span></div>
+        <table>
+          <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th>불량유형별 수량</th></tr></thead>
+          <tbody>
+            <tr><td><span class="rank r1">1</span></td><td class="mono">1545-01</td><td>VVT 스프로킷</td><td class="num">86,240</td><td class="num" style="color:var(--err);font-weight:700;">214</td>
+              <td><div class="dtags"><span class="dtag">찍힘<b>96</b></span><span class="dtag">크랙<b>74</b></span><span class="dtag">치수불량<b>44</b></span></div></td></tr>
+            <tr><td><span class="rank r2">2</span></td><td class="mono">3010-04</td><td>캠 로브</td><td class="num">62,100</td><td class="num" style="color:var(--err);font-weight:700;">188</td>
+              <td><div class="dtags"><span class="dtag">이물혼입<b>88</b></span><span class="dtag">크랙<b>62</b></span><span class="dtag">밀도불량<b>38</b></span></div></td></tr>
+            <tr><td><span class="rank r3">3</span></td><td class="mono">2233-02</td><td>오일펌프 로터</td><td class="num">54,300</td><td class="num" style="color:var(--err);font-weight:700;">152</td>
+              <td><div class="dtags"><span class="dtag">크랙<b>70</b></span><span class="dtag">찍힘<b>50</b></span><span class="dtag">변형<b>32</b></span></div></td></tr>
+            <tr><td><span class="rank">4</span></td><td class="mono">4820-07</td><td>베인</td><td class="num">41,900</td><td class="num" style="font-weight:700;">121</td>
+              <td><div class="dtags"><span class="dtag">치수불량<b>61</b></span><span class="dtag">찍힘<b>40</b></span><span class="dtag">크랙<b>20</b></span></div></td></tr>
+            <tr><td><span class="rank">5</span></td><td class="mono">5501-03</td><td>부싱</td><td class="num">38,400</td><td class="num" style="font-weight:700;">97</td>
+              <td><div class="dtags"><span class="dtag">찍힘<b>45</b></span><span class="dtag">이물혼입<b>32</b></span><span class="dtag">크랙<b>20</b></span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- 해당주 누적 -->
+      <div class="panel">
+        <div class="phead"><h2>해당주 누적</h2><span class="tot">7월 4주차 · VMS</span></div>
+        <table>
+          <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th>불량유형별 수량</th></tr></thead>
+          <tbody>
+            <tr><td><span class="rank r1">1</span></td><td class="mono">1545-01</td><td>VVT 스프로킷</td><td class="num">21,050</td><td class="num" style="color:var(--err);font-weight:700;">58</td>
+              <td><div class="dtags"><span class="dtag">찍힘<b>26</b></span><span class="dtag">크랙<b>20</b></span><span class="dtag">치수불량<b>12</b></span></div></td></tr>
+            <tr><td><span class="rank r2">2</span></td><td class="mono">2233-02</td><td>오일펌프 로터</td><td class="num">13,200</td><td class="num" style="color:var(--err);font-weight:700;">44</td>
+              <td><div class="dtags"><span class="dtag">크랙<b>22</b></span><span class="dtag">찍힘<b>14</b></span><span class="dtag">변형<b>8</b></span></div></td></tr>
+            <tr><td><span class="rank r3">3</span></td><td class="mono">3010-04</td><td>캠 로브</td><td class="num">15,600</td><td class="num" style="color:var(--err);font-weight:700;">41</td>
+              <td><div class="dtags"><span class="dtag">이물혼입<b>20</b></span><span class="dtag">크랙<b>14</b></span><span class="dtag">밀도불량<b>7</b></span></div></td></tr>
+            <tr><td><span class="rank">4</span></td><td class="mono">4820-07</td><td>베인</td><td class="num">10,300</td><td class="num" style="font-weight:700;">33</td>
+              <td><div class="dtags"><span class="dtag">치수불량<b>18</b></span><span class="dtag">찍힘<b>10</b></span><span class="dtag">크랙<b>5</b></span></div></td></tr>
+            <tr><td><span class="rank">5</span></td><td class="mono">5501-03</td><td>부싱</td><td class="num">9,400</td><td class="num" style="font-weight:700;">25</td>
+              <td><div class="dtags"><span class="dtag">찍힘<b>12</b></span><span class="dtag">이물혼입<b>8</b></span><span class="dtag">크랙<b>5</b></span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <!-- ════ 2. 불량 입력 ════ -->
@@ -343,10 +400,12 @@
           <div class="f"><label>생산금액 (천원)</label><input class="in" type="number" placeholder="0"></div>
           <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 등록</button></div>
         </div>
-        <div class="hint">생산금액은 일별/주별 KPI의 분모(추정 SVP)로 사용됩니다. (2차: ERP 자동 입력)</div>
+        <div class="hint" style="margin-bottom:14px;">생산금액은 일별/주별 KPI의 분모(추정 SVP)로 사용됩니다 · TM-NO별로 각각 입력 · Excel 업로드: <b style="color:var(--p-600);cursor:pointer;">양식 다운로드</b> (2차: ERP 자동 입력)</div>
+        <div class="drop">📄 생산실적 Excel(일자·TM-NO·생산수량·생산금액)을 끌어다 놓거나 <b>파일 선택</b></div>
+        <div class="hint" style="margin-top:10px;">TM-NO는 문자로 처리 (날짜 자동변환 방지). 같은 [일자+TM-NO]가 이미 있으면 덮어쓸지 확인합니다.</div>
       </div>
     </div>
-    <div class="panel"><div class="phead"><h2>입력 내역</h2><span class="tot">7월 22일</span></div>
+    <div class="panel"><div class="phead"><h2>입력 내역 (TM-NO별)</h2><span class="tot">7월 22일 · 2건</span></div>
       <table>
         <thead><tr><th>일자</th><th>TM-NO</th><th class="num">생산수량</th><th class="num">생산금액(천원)</th><th>입력자</th><th></th></tr></thead>
         <tbody>
