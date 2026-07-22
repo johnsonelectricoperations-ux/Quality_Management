@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통합품질관리시스템 — 전체 화면 시안</title>
+<style>
+  :root {
+    --p-50:#FFF2E8; --p-500:#F26100; --p-600:#D25400;
+    --sec:#33506B;
+    --n-50:#F6F7F9; --n-100:#ECEEF1; --n-200:#D9DDE3; --n-300:#B4BAC4; --n-400:#8A919E; --n-600:#454C59; --n-900:#0E1116;
+    --ok-bg:#E6F5EE; --ok:#12805C; --warn-bg:#FDF3E2; --warn:#C77700;
+    --err-bg:#FCEBEC; --err:#D0021B; --info-bg:#E7F1F9; --info:#1264A3;
+    --hold-bg:#ECEEF1; --hold:#626A78;
+    --bd:#D9DDE3; --bd2:#ECEEF1;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { font-family:Pretendard,Inter,-apple-system,"Malgun Gothic",sans-serif; background:var(--n-50); color:var(--n-900); font-size:14px; }
+  .app { display:grid; grid-template-columns:250px 1fr; min-height:100vh; }
+
+  /* Sidebar */
+  .sidebar { background:#fff; border-right:1px solid var(--bd); position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .brand { display:flex; align-items:center; gap:9px; padding:18px 20px 14px; font:700 15px/1.15 inherit; }
+  .brand .mark { width:18px; height:18px; border-radius:3px; background:var(--p-500); flex:none; }
+  .brand small { display:block; font:500 10px/1.3 inherit; color:var(--n-400); }
+  .cap { padding:10px 20px 4px; font:700 10px/1.3 inherit; text-transform:uppercase; letter-spacing:.06em; color:var(--n-400); border-top:1px solid var(--bd2); margin-top:6px; }
+  .nav { display:flex; align-items:center; gap:9px; padding:8px 20px; font:500 13.5px/1.2 inherit; color:var(--n-600); cursor:pointer; border-left:3px solid transparent; }
+  .nav:hover { background:var(--n-50); color:var(--n-900); }
+  .nav.on { color:var(--p-600); border-left-color:var(--p-500); background:var(--p-50); font-weight:600; }
+  .nav .cnt { margin-left:auto; font:700 10px/1 inherit; background:var(--err-bg); color:var(--err); padding:2px 6px; border-radius:9999px; }
+  .nav .role { margin-left:auto; font:600 9px/1 inherit; color:var(--n-400); }
+
+  /* Topbar & layout */
+  .main { min-width:0; display:flex; flex-direction:column; }
+  .topbar { display:flex; align-items:center; gap:12px; padding:13px 26px; background:#fff; border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:5; }
+  .topbar .crumb { font:500 11.5px/1.3 inherit; color:var(--n-400); }
+  .topbar h1 { margin:0; font:700 18px/1.15 inherit; letter-spacing:-.01em; }
+  .topbar .sp { margin-left:auto; }
+  .user-chip { display:flex; align-items:center; gap:8px; font:600 12px/1 inherit; color:var(--n-600); }
+  .user-chip .avatar { width:28px; height:28px; border-radius:50%; background:var(--p-50); color:var(--p-600); display:grid; place-items:center; font:700 11px/1 inherit; }
+  .content { padding:22px 26px 60px; max-width:1280px; width:100%; }
+
+  /* Common bits */
+  .seg { display:inline-flex; background:var(--n-100); border-radius:6px; padding:3px; }
+  .seg b { font:600 12px/1 inherit; color:var(--n-600); padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:600; }
+  .seg b.on { background:#fff; color:var(--n-900); box-shadow:0 1px 2px rgba(14,17,22,.08); }
+  .btn { display:inline-flex; align-items:center; gap:7px; font:600 13px/1 inherit; border-radius:6px; padding:9px 15px; cursor:pointer; border:1px solid transparent; }
+  .btn-p { background:var(--p-500); color:#fff; } .btn-p:hover { background:var(--p-600); }
+  .btn-s { background:#fff; color:var(--n-900); border-color:var(--bd); }
+  .btn-sm { padding:5px 10px; font-size:12px; }
+  .btn-ghost { background:transparent; color:var(--n-600); border:0; }
+  .panel { background:#fff; border:1px solid var(--bd); border-radius:8px; overflow:hidden; margin-bottom:18px; }
+  .phead { display:flex; align-items:center; gap:8px; padding:13px 16px; border-bottom:1px solid var(--bd2); }
+  .phead h2 { margin:0; font:600 14px/1 inherit; }
+  .phead .tot { margin-left:auto; font:700 11px/1 inherit; color:var(--n-600); background:var(--n-100); padding:4px 9px; border-radius:9999px; }
+  .pbody { padding:16px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.03em; color:var(--n-400); padding:9px 14px; border-bottom:1px solid var(--bd); background:var(--n-50); white-space:nowrap; }
+  td { padding:10px 14px; border-bottom:1px solid var(--bd2); }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr:hover { background:var(--n-50); }
+  td.num { font-variant-numeric:tabular-nums; text-align:right; }
+  td.mono { font-family:var(--mono); font-size:12px; color:var(--n-600); }
+  tfoot td { font:700 12px/1 inherit; background:var(--n-50); border-top:1px solid var(--bd); }
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:9999px; font:700 10.5px/1.4 inherit; white-space:nowrap; }
+  .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .bg-ok{background:var(--ok-bg);color:var(--ok);} .bg-err{background:var(--err-bg);color:var(--err);}
+  .bg-warn{background:var(--warn-bg);color:var(--warn);} .bg-info{background:var(--info-bg);color:var(--info);}
+  .bg-hold{background:var(--hold-bg);color:var(--hold);}
+
+  /* Forms */
+  .frow { display:grid; gap:12px; margin-bottom:12px; }
+  .f { display:flex; flex-direction:column; gap:5px; }
+  .f label { font:600 11.5px/1.3 inherit; color:var(--n-600); }
+  .in, select.in, textarea.in { background:#fff; border:1px solid var(--bd); border-radius:6px; padding:8px 11px; font:400 13px/1.4 inherit; color:var(--n-900); width:100%; }
+  .in:focus { outline:none; border-color:var(--p-500); box-shadow:0 0 0 3px rgba(242,97,0,.18); }
+  .in[readonly] { background:var(--n-50); color:var(--n-600); }
+  .hint { font:500 11px/1.4 inherit; color:var(--n-400); }
+
+  /* Tabs */
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--bd); padding:0 16px; background:#fff; }
+  .tab { padding:11px 15px; font:600 13.5px/1 inherit; color:var(--n-400); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tab.on { color:var(--p-600); border-bottom-color:var(--p-500); }
+
+  /* Upload dropzone */
+  .drop { border:2px dashed var(--bd); border-radius:8px; padding:26px; text-align:center; color:var(--n-400); font:500 13px/1.6 inherit; background:var(--n-50); }
+  .drop b { color:var(--p-600); cursor:pointer; }
+
+  /* KPI */
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
+  .kpi { background:#fff; border:1px solid var(--bd); border-top:2px solid var(--p-500); border-radius:6px; padding:14px; }
+  .kpi.sec { border-top-color:var(--sec); }
+  .kpi .lb { font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.04em; color:var(--n-400); display:flex; gap:6px; align-items:center; }
+  .kpi .vl { font:700 24px/1.1 inherit; font-variant-numeric:tabular-nums; margin-top:7px; }
+  .kpi .vl small { font-size:12px; color:var(--n-400); font-weight:500; }
+  .kpi .ft { margin-top:6px; font:600 11.5px/1 inherit; display:flex; gap:8px; }
+  .up{color:var(--ok);} .dn{color:var(--err);} .gl{color:var(--n-400);font-weight:500;}
+  .est { font:700 9px/1 inherit; background:var(--warn-bg); color:var(--warn); padding:2px 6px; border-radius:9999px; }
+  .fix { font:700 9px/1 inherit; background:var(--ok-bg); color:var(--ok); padding:2px 6px; border-radius:9999px; }
+
+  .bars { display:flex; flex-direction:column; gap:10px; }
+  .brow { display:grid; grid-template-columns:80px 1fr 60px; gap:10px; align-items:center; }
+  .brow .nm { font:500 12px/1.2 inherit; color:var(--n-600); }
+  .btrack { height:9px; background:var(--n-100); border-radius:9999px; overflow:hidden; }
+  .bfill { height:100%; border-radius:9999px; background:var(--p-500); }
+  .bfill.g { background:var(--sec); }
+  .brow .vv { font:700 11.5px/1 var(--mono); text-align:right; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .note { padding:10px 14px; background:var(--info-bg); border-radius:6px; font:500 12px/1.5 inherit; color:var(--info); margin-bottom:16px; }
+  .view { display:none; }
+  .view.on { display:block; }
+
+  /* login */
+  .login-wrap { min-height:70vh; display:grid; place-items:center; }
+  .login-card { width:360px; background:#fff; border:1px solid var(--bd); border-top:3px solid var(--p-500); border-radius:10px; padding:30px 28px; }
+  .login-card h2 { margin:0 0 4px; font:700 19px/1.2 inherit; }
+  .login-card .sub { font:500 12px/1.4 inherit; color:var(--n-400); margin-bottom:20px; }
+  @media (max-width:1000px){ .kpis{grid-template-columns:repeat(2,1fr);} .grid2{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside class="sidebar">
+  <div class="brand"><span class="mark"></span><div>통합품질관리<small>Quality Management</small></div></div>
+  <div class="cap">개요</div>
+  <div class="nav on" data-v="dash">▣ 대시보드</div>
+  <div class="cap">데이터 입력</div>
+  <div class="nav" data-v="defect">✎ 불량 입력</div>
+  <div class="nav" data-v="oimport">⇪ 외주소재불량 가져오기</div>
+  <div class="nav" data-v="oreview">✔ 외주소재불량 검토<span class="cnt">3</span></div>
+  <div class="nav" data-v="simport">⇪ 폐기불량 가져오기</div>
+  <div class="nav" data-v="prod">▦ 생산실적 입력</div>
+  <div class="nav" data-v="svp">₩ SVP 입력</div>
+  <div class="nav" data-v="claim">▤ Claim 입력</div>
+  <div class="nav" data-v="incident">◎ Customer Incident 관리</div>
+  <div class="cap">집계 / 리포트</div>
+  <div class="nav" data-v="rdefect">⚙ 공정별 불량현황</div>
+  <div class="nav" data-v="rscrap">◧ 공정별 Scrap Cost</div>
+  <div class="nav" data-v="rcopq">Σ COPQ 상세</div>
+  <div class="cap">관리</div>
+  <div class="nav" data-v="users">🔐 사용자 관리<span class="role">관리자</span></div>
+  <div class="nav" data-v="login">→ 로그인 화면 보기</div>
+</aside>
+
+<!-- ══════════ MAIN ══════════ -->
+<div class="main">
+  <header class="topbar">
+    <div><div class="crumb" id="crumb">개요</div><h1 id="title">대시보드</h1></div>
+    <span class="sp"></span>
+    <div class="user-chip"><span class="avatar">이</span>이진용 · 입력자</div>
+  </header>
+
+  <div class="content">
+
+  <!-- ════ 1. 대시보드 ════ -->
+  <section class="view on" id="v-dash">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
+      <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
+      <span class="sp" style="margin-left:auto;font:500 12px/1 inherit;color:var(--n-400);">2026년 7월</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="lb">Scrap Cost</div><div class="vl">4,820<small> 천원</small></div><div class="ft"><span class="up">▼ 8.1%</span><span class="gl">전월 대비</span></div></div>
+      <div class="kpi sec"><div class="lb">Scrap Quantity</div><div class="vl">1,704<small> EA</small></div><div class="ft"><span class="dn">▲ 122</span></div></div>
+      <div class="kpi"><div class="lb">COPQ <span class="fix">SVP확정</span></div><div class="vl">1.42<small> %</small></div><div class="ft"><span class="up">▼ 0.11%p</span><span class="gl">목표 1.20%</span></div></div>
+      <div class="kpi sec"><div class="lb">Customer Incident</div><div class="vl">2<small> 건</small></div><div class="ft"><span class="gl">전월 3건</span></div></div>
+      <div class="kpi sec"><div class="lb">Warranty</div><div class="vl">1,150<small> 천원</small></div><div class="ft"><span class="dn">▲ 210</span></div></div>
+      <div class="kpi"><div class="lb">공정불량율 <span class="est">VMS/TM별</span></div><div class="vl">0.28<small> %</small></div><div class="ft"><span class="gl">통합 탭에서는 숨김</span></div></div>
+      <div class="kpi"><div class="lb">셋팅불량율 <span class="est">VMS/TM별</span></div><div class="vl">0.11<small> %</small></div><div class="ft"><span class="gl">통합 탭에서는 숨김</span></div></div>
+      <div class="kpi sec"><div class="lb">생산수량</div><div class="vl">86,240<small> EA</small></div><div class="ft"><span class="up">▲ 5.2%</span></div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><div class="phead"><h2>COPQ 월 추이</h2></div>
+        <div class="pbody bars">
+          <div class="brow"><span class="nm">3월</span><div class="btrack"><div class="bfill g" style="width:72%"></div></div><span class="vv">1.61%</span></div>
+          <div class="brow"><span class="nm">4월</span><div class="btrack"><div class="bfill g" style="width:66%"></div></div><span class="vv">1.48%</span></div>
+          <div class="brow"><span class="nm">5월</span><div class="btrack"><div class="bfill g" style="width:70%"></div></div><span class="vv">1.55%</span></div>
+          <div class="brow"><span class="nm">6월</span><div class="btrack"><div class="bfill g" style="width:69%"></div></div><span class="vv">1.53%</span></div>
+          <div class="brow"><span class="nm">7월</span><div class="btrack"><div class="bfill" style="width:64%"></div></div><span class="vv">1.42%</span></div>
+        </div>
+      </div>
+      <div class="panel"><div class="phead"><h2>Scrap Cost 파트별</h2><span class="tot">7월</span></div>
+        <div class="pbody bars">
+          <div class="brow"><span class="nm">VMS PART</span><div class="btrack"><div class="bfill" style="width:58%"></div></div><span class="vv">2,796</span></div>
+          <div class="brow"><span class="nm">TM PART</span><div class="btrack"><div class="bfill" style="width:42%"></div></div><span class="vv">2,024</span></div>
+        </div>
+        <div style="padding:0 16px 14px;" class="hint">단위: 천원 · 일별/주별 화면의 COPQ 분모는 생산금액(추정 SVP)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 2. 불량 입력 (공정/셋팅 탭) ════ -->
+  <section class="view" id="v-defect">
+    <div class="panel">
+      <div class="tabs"><span class="tab on">공정불량</span><span class="tab">셋팅불량</span></div>
+      <div class="pbody">
+        <div class="frow" style="grid-template-columns:130px 150px 1fr 1fr 100px auto;">
+          <div class="f"><label>일자</label><input class="in" type="date" value="2026-07-22"></div>
+          <div class="f"><label>TM-NO</label><input class="in" placeholder="TM-10001"></div>
+          <div class="f"><label>공정</label><select class="in"><option>선별</option><option>소결</option><option>정형</option></select></div>
+          <div class="f"><label>불량유형 (공정불량만 표시)</label><select class="in"><option>찍힘</option><option>크랙</option><option>치수불량</option></select></div>
+          <div class="f"><label>수량</label><input class="in" type="number" placeholder="0"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 추가</button></div>
+        </div>
+        <div class="hint" style="margin-bottom:14px;">TM-NO는 문자로 저장됩니다 (날짜 자동변환 방지) · Excel 업로드: <b style="color:var(--p-600);cursor:pointer;">양식 다운로드</b> 후 작성하여 아래에 업로드</div>
+        <div class="drop">📄 정해진 규격의 Excel 파일을 끌어다 놓거나 <b>파일 선택</b></div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>금일 입력 내역</h2><span class="tot">4건</span></div>
+      <table>
+        <thead><tr><th>일자</th><th>TM-NO</th><th>공정</th><th>불량유형</th><th class="num">수량</th><th>입력자</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>선별</td><td>찍힘</td><td class="num">40</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td>소결</td><td>크랙</td><td class="num">12</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>정형</td><td>치수불량</td><td class="num">8</td><td>신동규</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 3. 외주소재불량 가져오기 ════ -->
+  <section class="view" id="v-oimport">
+    <div class="panel"><div class="phead"><h2>Excel 파일 업로드</h2></div>
+      <div class="pbody">
+        <div class="drop" style="margin-bottom:14px;">📄 외주소재불량 Excel 파일을 끌어다 놓거나 <b>파일 선택</b></div>
+        <div class="note">단일 TM-NO × 단일 불량유형이 100EA 이상인 행은 자동 반영되지 않고 <b>검토 대기</b>로 격리됩니다. (2차: 지정 폴더에서 정해진 시간에 자동 수집)</div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>업로드 이력</h2></div>
+      <table>
+        <thead><tr><th>일시</th><th>파일명</th><th class="num">정상 반영</th><th class="num">검토 대기</th><th>결과</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-22 09:12</td><td>외주소재_0722.xlsx</td><td class="num">128</td><td class="num" style="color:var(--err);font-weight:700;">3</td><td><span class="badge bg-warn">일부 검토대기</span></td></tr>
+          <tr><td class="mono">07-21 09:05</td><td>외주소재_0721.xlsx</td><td class="num">141</td><td class="num">0</td><td><span class="badge bg-ok">완료</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 4. 외주소재불량 검토 ════ -->
+  <section class="view" id="v-oreview">
+    <div class="note">100EA 이상으로 격리된 데이터입니다. 수량 확인 후 <b>승인</b>하면 집계에 반영됩니다. (승인/수정: 입력자·관리자)</div>
+    <div class="panel"><div class="phead"><h2>검토 대기 목록</h2><span class="tot">3건</span></div>
+      <table>
+        <thead><tr><th>업로드일</th><th>TM-NO</th><th>불량유형</th><th class="num">수량</th><th>상태</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">240</td><td><span class="badge bg-warn">검토대기</span></td>
+            <td><input class="in" style="width:90px;display:inline-block;" value="240"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">TM-30004</td><td>이물혼입</td><td class="num" style="color:var(--err);font-weight:700;">155</td><td><span class="badge bg-warn">검토대기</span></td>
+            <td><input class="in" style="width:90px;display:inline-block;" value="155"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">108</td><td><span class="badge bg-warn">검토대기</span></td>
+            <td><input class="in" style="width:90px;display:inline-block;" value="108"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel"><div class="phead"><h2>처리 완료</h2></div>
+      <table>
+        <thead><tr><th>처리일</th><th>TM-NO</th><th>불량유형</th><th class="num">수량(수정)</th><th>처리자</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-21</td><td class="mono">TM-10001</td><td>소재 크랙</td><td class="num">120 → 12</td><td>이진용</td><td><span class="badge bg-ok">승인(수정)</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 5. 폐기불량 가져오기 ════ -->
+  <section class="view" id="v-simport">
+    <div class="panel"><div class="phead"><h2>Excel 파일 업로드</h2></div>
+      <div class="pbody">
+        <div class="drop" style="margin-bottom:14px;">📄 폐기불량 Excel 파일을 끌어다 놓거나 <b>파일 선택</b></div>
+        <div class="note">(2차: 타 시스템 DB에서 정해진 시간에 자동 수집)</div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>업로드 이력</h2></div>
+      <table>
+        <thead><tr><th>일시</th><th>파일명</th><th class="num">건수</th><th>결과</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-22 08:50</td><td>폐기불량_0722.xlsx</td><td class="num">61</td><td><span class="badge bg-ok">완료</span></td></tr>
+          <tr><td class="mono">07-21 08:55</td><td>폐기불량_0721.xlsx</td><td class="num">54</td><td><span class="badge bg-ok">완료</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 6. 생산실적 입력 ════ -->
+  <section class="view" id="v-prod">
+    <div class="panel"><div class="phead"><h2>생산실적 등록</h2></div>
+      <div class="pbody">
+        <div class="frow" style="grid-template-columns:130px 160px 130px 150px auto;">
+          <div class="f"><label>일자</label><input class="in" type="date" value="2026-07-22"></div>
+          <div class="f"><label>TM-NO</label><input class="in" placeholder="TM-10001"></div>
+          <div class="f"><label>생산수량 (EA)</label><input class="in" type="number" placeholder="0"></div>
+          <div class="f"><label>생산금액 (천원)</label><input class="in" type="number" placeholder="0"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 등록</button></div>
+        </div>
+        <div class="hint">생산금액은 일별/주별 KPI의 분모(추정 SVP)로 사용됩니다. (2차: ERP 자동 입력)</div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>입력 내역</h2><span class="tot">7월 22일</span></div>
+      <table>
+        <thead><tr><th>일자</th><th>TM-NO</th><th class="num">생산수량</th><th class="num">생산금액(천원)</th><th>입력자</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td class="num">4,200</td><td class="num">1,407</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td class="num">2,850</td><td class="num">650</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 7. SVP 입력 ════ -->
+  <section class="view" id="v-svp">
+    <div class="panel"><div class="phead"><h2>SVP 등록 (월 1회 · 파트별 전체금액)</h2></div>
+      <div class="pbody">
+        <div class="frow" style="grid-template-columns:130px 140px 180px auto;">
+          <div class="f"><label>년월</label><input class="in" type="month" value="2026-07"></div>
+          <div class="f"><label>파트</label><select class="in"><option>VMS PART</option><option>TM PART</option></select></div>
+          <div class="f"><label>SVP 금액 (천원)</label><input class="in" type="number" placeholder="0"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn btn-p">저장</button></div>
+        </div>
+        <div class="hint">SVP 저장 시 해당 월의 월별 KPI가 확정값으로 자동 재계산됩니다. 미입력 월은 생산금액 합계(추정)로 표시.</div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>SVP 입력 현황</h2></div>
+      <table>
+        <thead><tr><th>년월</th><th>파트</th><th class="num">금액(천원)</th><th>상태</th><th>입력자</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">2026-07</td><td>VMS PART</td><td class="num">198,400</td><td><span class="badge bg-ok">확정</span></td><td>이진용</td></tr>
+          <tr><td class="mono">2026-07</td><td>TM PART</td><td class="num">141,200</td><td><span class="badge bg-ok">확정</span></td><td>이진용</td></tr>
+          <tr><td class="mono">2026-08</td><td>VMS PART</td><td class="num">—</td><td><span class="badge bg-warn">추정 사용중</span></td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 8. Claim 입력 ════ -->
+  <section class="view" id="v-claim">
+    <div class="panel"><div class="phead"><h2>Claim 등록 (년월 × 파트 × 7항목 · 천원)</h2></div>
+      <div class="pbody">
+        <div class="frow" style="grid-template-columns:130px 140px;">
+          <div class="f"><label>년월</label><input class="in" type="month" value="2026-07"></div>
+          <div class="f"><label>파트</label><select class="in"><option>VMS PART</option><option>TM PART</option></select></div>
+        </div>
+        <div class="frow" style="grid-template-columns:repeat(4,1fr);">
+          <div class="f"><label>Warranty</label><input class="in" type="number" value="1150"></div>
+          <div class="f"><label>3rd Party Containment</label><input class="in" type="number" value="0"></div>
+          <div class="f"><label>Quality Special Freight</label><input class="in" type="number" value="320"></div>
+          <div class="f"><label>Customer Incident Cost</label><input class="in" type="number" value="480"></div>
+        </div>
+        <div class="frow" style="grid-template-columns:repeat(4,1fr);">
+          <div class="f"><label>Unplanned Inspection &amp; Sorting</label><input class="in" type="number" value="150"></div>
+          <div class="f"><label>Variance</label><input class="in" type="number" value="0"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn btn-p" style="margin-top:auto;">저장</button></div>
+        </div>
+        <div class="hint">(2차: ERP 자동 입력) · Scrap Cost는 시스템이 자동 산출하므로 입력하지 않습니다.</div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>월별 입력 현황</h2></div>
+      <table>
+        <thead><tr><th>년월</th><th>파트</th><th class="num">Warranty</th><th class="num">특송비</th><th class="num">Incident Cost</th><th class="num">기타 합계</th><th>입력자</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">2026-07</td><td>VMS PART</td><td class="num">1,150</td><td class="num">320</td><td class="num">480</td><td class="num">150</td><td>이진용</td></tr>
+          <tr><td class="mono">2026-07</td><td>TM PART</td><td class="num">0</td><td class="num">0</td><td class="num">210</td><td class="num">85</td><td>이진용</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 9. Customer Incident 관리 ════ -->
+  <section class="view" id="v-incident">
+    <div class="panel"><div class="phead"><h2>Incident 등록</h2></div>
+      <div class="pbody">
+        <div class="frow" style="grid-template-columns:130px 140px 180px 1fr auto;">
+          <div class="f"><label>일자</label><input class="in" type="date" value="2026-07-22"></div>
+          <div class="f"><label>파트</label><select class="in"><option>VMS PART</option><option>TM PART</option></select></div>
+          <div class="f"><label>고객</label><input class="in" placeholder="고객사명"></div>
+          <div class="f"><label>내용</label><input class="in" placeholder="발생 내용 요약"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 등록</button></div>
+        </div>
+        <div class="hint">등록 건수가 KPI의 Customer Incident(건)로 집계됩니다. 비용은 Claim 화면의 Customer Incident Cost에 입력하세요.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>등록 내역</h2>
+        <div class="seg" style="margin-left:12px;"><b class="on">전체</b><b>VMS</b><b>TM</b></div>
+        <span class="tot">2026년 7월 · 2건</span>
+      </div>
+      <table>
+        <thead><tr><th>일자</th><th>파트</th><th>고객</th><th>내용</th><th>등록자</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-18</td><td>VMS PART</td><td>H사</td><td>납품 로트 표면 결함 통보</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-09</td><td>TM PART</td><td>K사</td><td>치수 산포 이슈 제기</td><td>신동규</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 10. 공정별 불량현황 ════ -->
+  <section class="view" id="v-rdefect">
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <div class="seg"><b class="on">VMS PART</b><b>TM PART</b></div>
+      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
+      <div class="seg"><b class="on">공정불량</b><b>셋팅불량</b></div>
+    </div>
+    <div class="panel"><div class="phead"><h2>VMS PART · 공정불량 · 2026-07</h2><span class="tot">총 1,218 EA</span></div>
+      <table>
+        <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율</th><th>주요 불량유형</th></tr></thead>
+        <tbody>
+          <tr><td>성형</td><td class="num">312</td><td class="num">86,240</td><td class="num">0.36%</td><td>크랙, 밀도불량</td></tr>
+          <tr><td>소결</td><td class="num">254</td><td class="num">85,920</td><td class="num">0.30%</td><td>크랙, 변형</td></tr>
+          <tr><td>정형</td><td class="num">205</td><td class="num">85,100</td><td class="num">0.24%</td><td>치수불량</td></tr>
+          <tr><td>선별</td><td class="num">447</td><td class="num">84,880</td><td class="num">0.53%</td><td>찍힘, 이물혼입</td></tr>
+        </tbody>
+        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">—</td><td class="num">0.28%</td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ 11. 공정별 Scrap Cost ════ -->
+  <section class="view" id="v-rscrap">
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
+      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><div class="phead"><h2>공정별 구성</h2><span class="tot">4,820 천원</span></div>
+        <div class="pbody bars">
+          <div class="brow"><span class="nm">선별</span><div class="btrack"><div class="bfill" style="width:78%"></div></div><span class="vv">1,842</span></div>
+          <div class="brow"><span class="nm">소결</span><div class="btrack"><div class="bfill" style="width:56%"></div></div><span class="vv">1,320</span></div>
+          <div class="brow"><span class="nm">정형</span><div class="btrack"><div class="bfill" style="width:38%"></div></div><span class="vv">905</span></div>
+          <div class="brow"><span class="nm">성형</span><div class="btrack"><div class="bfill g" style="width:32%"></div></div><span class="vv">753</span></div>
+        </div>
+      </div>
+      <div class="panel"><div class="phead"><h2>상세</h2></div>
+        <table>
+          <thead><tr><th>공정</th><th class="num">수량</th><th class="num">Scrap Cost(천원)</th><th>COPQ 포함</th></tr></thead>
+          <tbody>
+            <tr><td>선별</td><td class="num">447</td><td class="num">1,842</td><td><span class="badge bg-ok">포함</span></td></tr>
+            <tr><td>소결</td><td class="num">254</td><td class="num">1,320</td><td><span class="badge bg-ok">포함</span></td></tr>
+            <tr><td>정형</td><td class="num">205</td><td class="num">905</td><td><span class="badge bg-ok">포함</span></td></tr>
+            <tr><td>성형</td><td class="num">312</td><td class="num">753</td><td><span class="badge bg-hold">COPQ 제외</span></td></tr>
+          </tbody>
+          <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">4,820</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 12. COPQ 상세 ════ -->
+  <section class="view" id="v-rcopq">
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
+      <span style="font:500 12px/1.9 inherit;color:var(--n-400);">2026년 7월 · 분모 SVP 339,600 천원 <span class="fix">확정</span></span>
+    </div>
+    <div class="panel"><div class="phead"><h2>COPQ 구성 항목</h2><span class="tot">COPQ 1.42%</span></div>
+      <table>
+        <thead><tr><th>구성 항목</th><th class="num">금액(천원)</th><th class="num">SVP 대비</th><th>출처</th></tr></thead>
+        <tbody>
+          <tr><td>Scrap Cost (성형공정 제외분)</td><td class="num">4,067</td><td class="num">1.20%</td><td>자동 산출</td></tr>
+          <tr><td>Warranty</td><td class="num">1,150</td><td class="num">0.34%</td><td>Claim 입력</td></tr>
+          <tr><td>3rd Party Containment</td><td class="num">0</td><td class="num">0.00%</td><td>Claim 입력</td></tr>
+          <tr><td>Quality Special Freight</td><td class="num">320</td><td class="num">0.09%</td><td>Claim 입력</td></tr>
+          <tr><td>Customer Incident Cost</td><td class="num">690</td><td class="num">0.20%</td><td>Claim 입력</td></tr>
+          <tr><td>Unplanned Inspection &amp; Sorting</td><td class="num">235</td><td class="num">0.07%</td><td>Claim 입력</td></tr>
+          <tr><td>Variance</td><td class="num">0</td><td class="num">0.00%</td><td>Claim 입력</td></tr>
+        </tbody>
+        <tfoot><tr><td>합계 (COPQ)</td><td class="num">6,462</td><td class="num">1.42%</td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="note">※ 검산용: 이번 달 성형공정 공정불량·셋팅불량 Scrap Cost <b>753 천원은 COPQ에서 제외</b>되었습니다. (KPI 카드의 Scrap Cost 4,820 천원은 전체 포함 금액)</div>
+  </section>
+
+  <!-- ════ 13. 사용자 관리 ════ -->
+  <section class="view" id="v-users">
+    <div class="panel"><div class="phead"><h2>사용자 목록</h2><span class="sp"></span><button class="btn btn-p btn-sm" style="margin-left:auto;">+ 사용자 등록</button></div>
+      <table>
+        <thead><tr><th>아이디</th><th>이름</th><th>권한</th><th>최근 접속</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">admin</td><td>품질관리자</td><td><span class="badge bg-err">관리자</span></td><td class="mono">07-22 08:30</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">jylee</td><td>이진용</td><td><span class="badge bg-info">입력자</span></td><td class="mono">07-22 09:02</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">dgshin</td><td>신동규</td><td><span class="badge bg-info">입력자</span></td><td class="mono">07-21 17:44</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">jichung</td><td>정종일</td><td><span class="badge bg-hold">조회자</span></td><td class="mono">07-22 07:58</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">권한: <b>조회자</b> 대시보드·리포트 조회 / <b>입력자</b> +데이터 입력·업로드·100EA 검토 승인 / <b>관리자</b> +마스터·사용자 관리</div>
+  </section>
+
+  <!-- ════ 14. 로그인 ════ -->
+  <section class="view" id="v-login">
+    <div class="login-wrap">
+      <div class="login-card">
+        <h2>통합품질관리시스템</h2>
+        <div class="sub">Johnson Electric Operations · Quality Management</div>
+        <div class="f" style="margin-bottom:12px;"><label>아이디</label><input class="in" placeholder="아이디"></div>
+        <div class="f" style="margin-bottom:18px;"><label>비밀번호</label><input class="in" type="password" placeholder="••••••••"></div>
+        <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px;">로그인</button>
+        <div class="hint" style="margin-top:14px;text-align:center;">계정 문의: 품질관리팀 관리자</div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+  const meta = {
+    dash:["개요","대시보드"], defect:["데이터 입력","불량 입력"],
+    oimport:["데이터 입력","외주소재불량 가져오기"], oreview:["데이터 입력","외주소재불량 검토"],
+    simport:["데이터 입력","폐기불량 가져오기"], prod:["데이터 입력","생산실적 입력"],
+    svp:["데이터 입력","SVP 입력"], claim:["데이터 입력","Claim 입력"],
+    incident:["데이터 입력","Customer Incident 관리"],
+    rdefect:["집계/리포트","공정별 불량현황"], rscrap:["집계/리포트","공정별 Scrap Cost"],
+    rcopq:["집계/리포트","COPQ 상세"], users:["관리","사용자 관리"], login:["", "로그인"]
+  };
+  document.querySelectorAll(".nav").forEach(n => n.addEventListener("click", () => {
+    document.querySelectorAll(".nav").forEach(x => x.classList.remove("on"));
+    document.querySelectorAll(".view").forEach(x => x.classList.remove("on"));
+    n.classList.add("on");
+    const v = n.dataset.v;
+    document.getElementById("v-"+v).classList.add("on");
+    document.getElementById("crumb").textContent = meta[v][0];
+    document.getElementById("title").textContent = meta[v][1];
+    window.scrollTo(0,0);
+  }));
+</script>
+</body>
+</html>
