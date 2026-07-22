@@ -123,23 +123,37 @@
   .note { padding:10px 14px; background:var(--info-bg); border-radius:6px; font:500 12px/1.5 inherit; color:var(--info); margin-bottom:16px; }
   .view { display:none; } .view.on { display:block; }
 
-  /* Chart (bar + target line) */
-  .chart-legend { display:flex; gap:16px; font:600 11px/1 inherit; color:var(--tx3); padding:0 16px 12px; }
-  .chart-legend .sq { display:inline-block; width:10px; height:10px; background:var(--p-500); border-radius:2px; margin-right:5px; vertical-align:-1px; }
-  .chart-legend .ln { display:inline-block; width:16px; border-top:2px dashed var(--sec); margin-right:5px; vertical-align:3px; }
-  svg .bar { fill:var(--p-500); }
-  svg .bar.cur { fill:var(--p-500); }
-  svg .bar.dim { fill:var(--p-500); opacity:.55; }
-  svg .tline { stroke:var(--sec); stroke-width:2; stroke-dasharray:6 4; fill:none; }
-  svg .ax { font:500 10px Pretendard,sans-serif; fill:var(--tx3); }
-  svg .vlab { font:600 9.5px var(--mono); fill:var(--tx2); }
-  svg .tlab { font:700 9.5px Pretendard,sans-serif; fill:var(--sec); }
+  /* ===== Charts (refined, JS-rendered) ===== */
+  .charts2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .mcard { background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:15px 18px 10px; box-shadow:var(--shadow); }
+  .mcard .mh { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .mcard .mt { font:600 12.5px/1.3 inherit; color:var(--tx2); display:flex; align-items:center; gap:7px; }
+  .mcard .mt .dot { width:9px; height:9px; border-radius:3px; flex:none; }
+  .mcard .mv { font:700 21px/1.1 inherit; font-variant-numeric:tabular-nums; margin-top:5px; letter-spacing:-.01em; }
+  .mcard .mv small { font-size:11.5px; color:var(--tx3); font-weight:500; margin-left:3px; }
+  .mcard .msub { font:500 10.5px/1.3 inherit; color:var(--tx3); margin-top:3px; }
+  .mdelta { font:700 10.5px/1 inherit; padding:4px 9px; border-radius:9999px; white-space:nowrap; }
+  .chip-up { background:var(--ok-bg); color:var(--ok); }
+  .chip-dn { background:var(--err-bg); color:var(--err); }
+  .chip-flat { background:var(--track); color:var(--tx2); }
+  .jchart { width:100%; margin-top:8px; }
+  .jchart svg { width:100%; height:auto; display:block; overflow:visible; }
+  .jchart .g-grid { stroke:var(--bd2); stroke-width:1; }
+  .jchart .g-tline { stroke:var(--tx3); stroke-width:1.4; stroke-dasharray:5 4; opacity:.65; fill:none; }
+  .jchart .g-tlab { font:700 9px Pretendard,sans-serif; fill:var(--tx3); }
+  .jchart .g-ax { font:600 9.5px Pretendard,sans-serif; fill:var(--tx3); }
+  .jchart .g-ax.cur { fill:var(--p-600); }
+  .jchart .g-vlab { font:700 9px var(--mono); fill:var(--tx2); }
+  .jchart .g-tag { font:700 8px Pretendard,sans-serif; fill:var(--hold); }
+  .jchart .g-bar { transition:opacity .15s ease; cursor:default; }
+  .jchart .g-bar:hover { opacity:.82; }
+  .jchart .g-dot { fill:var(--card); stroke-width:2; }
 
   .login-wrap { min-height:70vh; display:grid; place-items:center; }
   .login-card { width:360px; background:var(--card); border:1px solid var(--bd); border-top:3px solid var(--p-500); border-radius:10px; padding:30px 28px; }
   .login-card h2 { margin:0 0 4px; font:700 19px/1.2 inherit; }
   .login-card .sub { font:500 12px/1.4 inherit; color:var(--tx3); margin-bottom:20px; }
-  @media (max-width:1000px){ .kpis{grid-template-columns:repeat(2,1fr);} .grid2{grid-template-columns:1fr;} }
+  @media (max-width:1000px){ .kpis{grid-template-columns:repeat(2,1fr);} .grid2,.charts2{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -160,9 +174,8 @@
   <div class="nav" data-v="claim">▤ Claim 입력</div>
   <div class="nav" data-v="incident">◎ Customer Incident 관리</div>
   <div class="cap">집계 / 리포트</div>
+  <div class="nav" data-v="rkpi">📈 KPI 현황</div>
   <div class="nav" data-v="rdefect">⚙ 공정별 불량현황</div>
-  <div class="nav" data-v="rscrap">◧ 공정별 Scrap Cost</div>
-  <div class="nav" data-v="rcopq">Σ COPQ 상세</div>
   <div class="cap">관리</div>
   <div class="nav" data-v="target">🎯 목표 관리<span class="role">관리자</span></div>
   <div class="nav" data-v="users">🔐 사용자 관리<span class="role">관리자</span></div>
@@ -197,71 +210,33 @@
       <div class="kpi sec2"><div class="lb">생산수량</div><div class="vl">86,240<small> EA</small></div><div class="ft"><span class="up">▲ 5.2%</span></div></div>
     </div>
 
-    <div class="grid2">
-      <!-- 월별 추이: 실적 막대 + 목표 선 -->
-      <div class="panel">
-        <div class="phead"><h2>COPQ 월별 추이</h2><span class="tot">2026년</span></div>
-        <div class="pbody" style="padding-bottom:6px;">
-          <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
-            <text class="ax" x="2" y="35">2.0%</text>
-            <text class="ax" x="2" y="100">1.0%</text>
-            <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
-            <rect class="bar dim" x="43" y="30.8" width="28" height="109.2" rx="3"/>
-            <rect class="bar dim" x="97" y="35.3" width="28" height="104.7" rx="3"/>
-            <rect class="bar dim" x="151" y="39.2" width="28" height="100.8" rx="3"/>
-            <rect class="bar dim" x="205" y="43.8" width="28" height="96.2" rx="3"/>
-            <rect class="bar dim" x="259" y="39.2" width="28" height="100.8" rx="3"/>
-            <rect class="bar dim" x="313" y="40.5" width="28" height="99.5" rx="3"/>
-            <rect class="bar cur" x="367" y="47.7" width="28" height="92.3" rx="3"/>
-            <text class="vlab" x="57"  y="26" text-anchor="middle">1.68</text>
-            <text class="vlab" x="111" y="30" text-anchor="middle">1.61</text>
-            <text class="vlab" x="165" y="34" text-anchor="middle">1.55</text>
-            <text class="vlab" x="219" y="39" text-anchor="middle">1.48</text>
-            <text class="vlab" x="273" y="34" text-anchor="middle">1.55</text>
-            <text class="vlab" x="327" y="36" text-anchor="middle">1.53</text>
-            <text class="vlab" x="381" y="43" text-anchor="middle">1.42</text>
-            <line class="tline" x1="30" y1="62" x2="412" y2="62"/>
-            <text class="tlab" x="411" y="57" text-anchor="end">목표 1.20%</text>
-            <text class="ax" x="57"  y="156" text-anchor="middle">1월</text>
-            <text class="ax" x="111" y="156" text-anchor="middle">2월</text>
-            <text class="ax" x="165" y="156" text-anchor="middle">3월</text>
-            <text class="ax" x="219" y="156" text-anchor="middle">4월</text>
-            <text class="ax" x="273" y="156" text-anchor="middle">5월</text>
-            <text class="ax" x="327" y="156" text-anchor="middle">6월</text>
-            <text class="ax" x="381" y="156" text-anchor="middle" style="font-weight:700;fill:var(--p-600);">7월</text>
-          </svg>
+    <div class="charts2">
+      <div class="mcard">
+        <div class="mh">
+          <div>
+            <div class="mt"><span class="dot" style="background:var(--p-500)"></span>COPQ 월별 추이</div>
+            <div class="mv">1.42<small>%</small></div>
+            <div class="msub">목표 1.20% · 2026년</div>
+          </div>
+          <span class="mdelta chip-up">▼ 0.11%p</span>
         </div>
-        <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
+        <div class="jchart" data-type="area" data-color="--p-500" data-unit="%" data-dec="2" data-target="1.20"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="1.68,1.61,1.55,1.48,1.55,1.53,1.42"></div>
       </div>
-
-      <!-- 당월 주별: 실적 막대 + 목표 선 -->
-      <div class="panel">
-        <div class="phead"><h2>당월(7월) 주별 현황</h2><span class="tot">분모: 추정 SVP <span class="est" style="margin-left:4px;">추정</span></span></div>
-        <div class="pbody" style="padding-bottom:6px;">
-          <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
-            <text class="ax" x="2" y="35">2.0%</text>
-            <text class="ax" x="2" y="100">1.0%</text>
-            <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
-            <rect class="bar dim" x="57"  y="41.8" width="40" height="98.2" rx="3"/>
-            <rect class="bar dim" x="152" y="46.4" width="40" height="93.6" rx="3"/>
-            <rect class="bar dim" x="247" y="50.3" width="40" height="89.7" rx="3"/>
-            <rect class="bar cur" x="342" y="51.6" width="40" height="88.4" rx="3"/>
-            <text class="vlab" x="77"  y="37" text-anchor="middle">1.51</text>
-            <text class="vlab" x="172" y="42" text-anchor="middle">1.44</text>
-            <text class="vlab" x="267" y="46" text-anchor="middle">1.38</text>
-            <text class="vlab" x="362" y="47" text-anchor="middle">1.36</text>
-            <line class="tline" x1="30" y1="62" x2="412" y2="62"/>
-            <text class="tlab" x="411" y="57" text-anchor="end">목표 1.20%</text>
-            <text class="ax" x="77"  y="156" text-anchor="middle">1주</text>
-            <text class="ax" x="172" y="156" text-anchor="middle">2주</text>
-            <text class="ax" x="267" y="156" text-anchor="middle">3주</text>
-            <text class="ax" x="362" y="156" text-anchor="middle" style="font-weight:700;fill:var(--p-600);">4주(진행중)</text>
-          </svg>
+      <div class="mcard">
+        <div class="mh">
+          <div>
+            <div class="mt"><span class="dot" style="background:var(--sec)"></span>당월(7월) 주별 현황 <span class="est" style="margin-left:2px;">추정 SVP</span></div>
+            <div class="mv">1.36<small>%</small></div>
+            <div class="msub">목표 1.20% · 4주 진행중</div>
+          </div>
+          <span class="mdelta chip-up">▼ 0.15%p</span>
         </div>
-        <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
+        <div class="jchart" data-type="bar" data-color="--sec" data-unit="%" data-dec="2" data-target="1.20" data-cur="3"
+             data-labels="1주,2주,3주,4주" data-values="1.51,1.44,1.38,1.36"></div>
       </div>
     </div>
-    <div class="hint" style="margin-top:4px;">차트 지표는 선택 가능(COPQ / Scrap Cost / 공정불량율 ppm / 셋팅불량율 ppm …). 목표선은 [목표 관리]에서 입력한 값.</div>
+    <div class="hint" style="margin-top:2px;">차트 지표는 선택 가능(COPQ / Scrap Cost / 공정불량율 ppm / 셋팅불량율 ppm …). 목표선(점선)은 [목표 관리]의 값.</div>
   </section>
 
   <!-- ════ 2. 불량 입력 ════ -->
@@ -469,129 +444,152 @@
     </div>
   </section>
 
-  <!-- ════ 10. 공정별 불량현황 ════ -->
-  <section class="view" id="v-rdefect">
-    <div style="display:flex;gap:10px;margin-bottom:16px;">
-      <div class="seg"><b class="on">VMS PART</b><b>TM PART</b></div>
-      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
-      <div class="seg"><b class="on">공정불량</b><b>셋팅불량</b></div>
-    </div>
-    <div class="panel">
-      <div class="phead"><h2>공정별 불량율 (ppm)</h2><span class="tot">VMS PART · 2026-07</span></div>
-      <div class="pbody" style="padding-bottom:6px;">
-        <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
-          <text class="ax" x="2" y="17">6,000</text>
-          <text class="ax" x="2" y="78">3,000</text>
-          <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
-          <rect class="bar dim" x="57"  y="61.6" width="40" height="78.4" rx="3"/>
-          <rect class="bar dim" x="152" y="76.0" width="40" height="64.0" rx="3"/>
-          <rect class="bar dim" x="247" y="87.8" width="40" height="52.2" rx="3"/>
-          <rect class="bar cur" x="342" y="25.9" width="40" height="114.1" rx="3"/>
-          <text class="vlab" x="77"  y="57" text-anchor="middle">3,618</text>
-          <text class="vlab" x="172" y="71" text-anchor="middle">2,956</text>
-          <text class="vlab" x="267" y="83" text-anchor="middle">2,409</text>
-          <text class="vlab" x="362" y="21" text-anchor="middle">5,266</text>
-          <line class="tline" x1="30" y1="85.8" x2="412" y2="85.8"/>
-          <text class="tlab" x="411" y="81" text-anchor="end">목표 2,500 ppm</text>
-          <text class="ax" x="77"  y="156" text-anchor="middle">성형</text>
-          <text class="ax" x="172" y="156" text-anchor="middle">소결</text>
-          <text class="ax" x="267" y="156" text-anchor="middle">정형</text>
-          <text class="ax" x="362" y="156" text-anchor="middle">선별</text>
-        </svg>
-      </div>
-      <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
-    </div>
-    <div class="panel"><div class="phead"><h2>상세 데이터</h2><span class="tot">총 1,218 EA</span></div>
-      <table>
-        <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th>주요 불량유형</th></tr></thead>
-        <tbody>
-          <tr><td>성형</td><td class="num">312</td><td class="num">86,240</td><td class="num">3,618</td><td>크랙, 밀도불량</td></tr>
-          <tr><td>소결</td><td class="num">254</td><td class="num">85,920</td><td class="num">2,956</td><td>크랙, 변형</td></tr>
-          <tr><td>정형</td><td class="num">205</td><td class="num">85,100</td><td class="num">2,409</td><td>치수불량</td></tr>
-          <tr><td>선별</td><td class="num">447</td><td class="num">84,880</td><td class="num">5,266</td><td>찍힘, 이물혼입</td></tr>
-        </tbody>
-        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">—</td><td class="num">2,800 ppm</td><td></td></tr></tfoot>
-      </table>
-    </div>
-  </section>
-
-  <!-- ════ 11. 공정별 Scrap Cost ════ -->
-  <section class="view" id="v-rscrap">
-    <div style="display:flex;gap:10px;margin-bottom:16px;">
+  <!-- ════ 10. KPI 현황 ════ -->
+  <section class="view" id="v-rkpi">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
       <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
-      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
+      <div class="seg"><b>2025년</b><b class="on">2026년</b></div>
+      <span style="margin-left:auto;font:500 12px/1.6 inherit;color:var(--tx3);">지표별 월별 추이 · 실적(막대/영역) + 목표(점선)</span>
     </div>
-    <div class="panel">
-      <div class="phead"><h2>공정별 Scrap Cost (천원)</h2><span class="tot">합계 4,820 천원</span></div>
-      <div class="pbody" style="padding-bottom:6px;">
-        <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
-          <text class="ax" x="2" y="17">2,000</text>
-          <text class="ax" x="2" y="78">1,000</text>
-          <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
-          <rect class="bar cur" x="57"  y="20.3" width="40" height="119.7" rx="3"/>
-          <rect class="bar dim" x="152" y="54.2" width="40" height="85.8" rx="3"/>
-          <rect class="bar dim" x="247" y="81.2" width="40" height="58.8" rx="3"/>
-          <rect class="bar dim" x="342" y="91.1" width="40" height="48.9" rx="3" style="fill:var(--sec);opacity:.75;"/>
-          <text class="vlab" x="77"  y="16" text-anchor="middle">1,842</text>
-          <text class="vlab" x="172" y="50" text-anchor="middle">1,320</text>
-          <text class="vlab" x="267" y="77" text-anchor="middle">905</text>
-          <text class="vlab" x="362" y="87" text-anchor="middle">753</text>
-          <text class="ax" x="77"  y="156" text-anchor="middle">선별</text>
-          <text class="ax" x="172" y="156" text-anchor="middle">소결</text>
-          <text class="ax" x="267" y="156" text-anchor="middle">정형</text>
-          <text class="ax" x="362" y="156" text-anchor="middle">성형 (COPQ 제외)</text>
-        </svg>
-      </div>
-      <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="sq" style="background:var(--sec);"></span>성형 (COPQ 제외분)</span></div>
-    </div>
-    <div class="panel"><div class="phead"><h2>상세 데이터</h2></div>
-      <table>
-        <thead><tr><th>공정</th><th class="num">수량</th><th class="num">Scrap Cost(천원)</th><th>COPQ 포함</th></tr></thead>
-        <tbody>
-          <tr><td>선별</td><td class="num">447</td><td class="num">1,842</td><td><span class="badge bg-ok">포함</span></td></tr>
-          <tr><td>소결</td><td class="num">254</td><td class="num">1,320</td><td><span class="badge bg-ok">포함</span></td></tr>
-          <tr><td>정형</td><td class="num">205</td><td class="num">905</td><td><span class="badge bg-ok">포함</span></td></tr>
-          <tr><td>성형</td><td class="num">312</td><td class="num">753</td><td><span class="badge bg-hold">COPQ 제외</span></td></tr>
-        </tbody>
-        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">4,820</td><td></td></tr></tfoot>
-      </table>
-    </div>
-  </section>
 
-  <!-- ════ 12. COPQ 상세 ════ -->
-  <section class="view" id="v-rcopq">
-    <div style="display:flex;gap:10px;margin-bottom:16px;">
-      <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
-      <span style="font:500 12px/1.9 inherit;color:var(--tx3);">2026년 7월 · 분모 SVP 455,070 천원 <span class="fix">확정</span></span>
-    </div>
-    <div class="panel">
-      <div class="phead"><h2>COPQ 구성 (천원)</h2><span class="tot">COPQ 1.42% · 목표 1.20%</span></div>
-      <div class="pbody bars" style="padding-bottom:12px;">
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Scrap Cost (성형 제외분)</span><div class="btrack"><div class="bfill" style="width:100%"></div></div><span class="vv">4,067</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Warranty</span><div class="btrack"><div class="bfill" style="width:28%"></div></div><span class="vv">1,150</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Customer Incident Cost</span><div class="btrack"><div class="bfill" style="width:17%"></div></div><span class="vv">690</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Quality Special Freight</span><div class="btrack"><div class="bfill" style="width:8%"></div></div><span class="vv">320</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Unplanned Insp. &amp; Sorting</span><div class="btrack"><div class="bfill" style="width:6%"></div></div><span class="vv">235</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">3rd Party Containment</span><div class="btrack"><div class="bfill" style="width:0%"></div></div><span class="vv">0</span></div>
-        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Variance</span><div class="btrack"><div class="bfill" style="width:0%"></div></div><span class="vv">0</span></div>
+    <div class="charts2">
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>Scrap Cost</div>
+            <div class="mv">1.06<small>%</small></div><div class="msub">목표 1.00% · 4,820 천원</div></div>
+          <span class="mdelta chip-up">▼ 0.08%p</span>
+        </div>
+        <div class="jchart" data-type="area" data-color="--p-500" data-unit="%" data-dec="2" data-target="1.00"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="1.22,1.18,1.15,1.10,1.12,1.14,1.06"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--sec)"></span>Scrap Quantity</div>
+            <div class="mv">1.98<small>%</small></div><div class="msub">목표 1.50% · 1,704 EA</div></div>
+          <span class="mdelta chip-up">▼ 0.04%p</span>
+        </div>
+        <div class="jchart" data-type="area" data-color="--sec" data-unit="%" data-dec="2" data-target="1.50"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="2.10,2.05,1.95,1.88,1.92,2.02,1.98"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>COPQ</div>
+            <div class="mv">1.42<small>%</small></div><div class="msub">목표 1.20% · 6,462 천원</div></div>
+          <span class="mdelta chip-up">▼ 0.11%p</span>
+        </div>
+        <div class="jchart" data-type="area" data-color="--p-500" data-unit="%" data-dec="2" data-target="1.20"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="1.68,1.61,1.55,1.48,1.55,1.53,1.42"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--sec)"></span>Warranty</div>
+            <div class="mv">1,150<small>천원</small></div><div class="msub">목표 1,000 천원</div></div>
+          <span class="mdelta chip-dn">▲ 210</span>
+        </div>
+        <div class="jchart" data-type="bar" data-color="--sec" data-unit="" data-dec="0" data-target="1000" data-cur="6"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="980,1020,1100,1050,1180,940,1150"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>공정불량율 <span class="est">VMS</span></div>
+            <div class="mv">2,800<small>ppm</small></div><div class="msub">목표 2,500 ppm</div></div>
+          <span class="mdelta chip-dn">▲ 150</span>
+        </div>
+        <div class="jchart" data-type="area" data-color="--p-500" data-unit="" data-dec="0" data-target="2500"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="3100,2950,2880,2700,2760,2650,2800"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--sec)"></span>셋팅불량율 <span class="est">VMS</span></div>
+            <div class="mv">1,100<small>ppm</small></div><div class="msub">목표 1,500 ppm</div></div>
+          <span class="mdelta chip-up">▼ 90</span>
+        </div>
+        <div class="jchart" data-type="area" data-color="--sec" data-unit="" data-dec="0" data-target="1500"
+             data-labels="1월,2월,3월,4월,5월,6월,7월" data-values="1400,1350,1300,1250,1190,1180,1100"></div>
       </div>
     </div>
-    <div class="panel"><div class="phead"><h2>상세 데이터</h2></div>
+
+    <div class="panel"><div class="phead"><h2>COPQ 구성 (2026-07 · 통합)</h2><span class="tot">COPQ 1.42% · SVP 455,070 천원</span></div>
       <table>
         <thead><tr><th>구성 항목</th><th class="num">금액(천원)</th><th class="num">SVP 대비</th><th>출처</th></tr></thead>
         <tbody>
           <tr><td>Scrap Cost (성형공정 제외분)</td><td class="num">4,067</td><td class="num">0.90%</td><td>자동 산출</td></tr>
           <tr><td>Warranty</td><td class="num">1,150</td><td class="num">0.25%</td><td>Claim 입력</td></tr>
-          <tr><td>3rd Party Containment</td><td class="num">0</td><td class="num">0.00%</td><td>Claim 입력</td></tr>
-          <tr><td>Quality Special Freight</td><td class="num">320</td><td class="num">0.07%</td><td>Claim 입력</td></tr>
           <tr><td>Customer Incident Cost</td><td class="num">690</td><td class="num">0.15%</td><td>Claim 입력</td></tr>
+          <tr><td>Quality Special Freight</td><td class="num">320</td><td class="num">0.07%</td><td>Claim 입력</td></tr>
           <tr><td>Unplanned Inspection &amp; Sorting</td><td class="num">235</td><td class="num">0.05%</td><td>Claim 입력</td></tr>
+          <tr><td>3rd Party Containment</td><td class="num">0</td><td class="num">0.00%</td><td>Claim 입력</td></tr>
           <tr><td>Variance</td><td class="num">0</td><td class="num">0.00%</td><td>Claim 입력</td></tr>
         </tbody>
         <tfoot><tr><td>합계 (COPQ)</td><td class="num">6,462</td><td class="num">1.42%</td><td></td></tr></tfoot>
       </table>
     </div>
-    <div class="note">※ 검산용: 이번 달 성형공정 공정불량·셋팅불량 Scrap Cost <b>753 천원은 COPQ에서 제외</b>되었습니다. (KPI 카드의 Scrap Cost 4,820 천원은 전체 포함 금액)</div>
+    <div class="note">※ 성형공정 공정불량·셋팅불량 Scrap Cost <b>753 천원은 COPQ에서 제외</b>됩니다. (KPI의 Scrap Cost 4,820 천원은 전체 포함 금액)</div>
+  </section>
+
+  <!-- ════ 11. 공정별 불량현황 ════ -->
+  <section class="view" id="v-rdefect">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+      <div class="seg"><b class="on">공정불량</b><b>셋팅불량</b></div>
+      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
+      <span style="margin-left:auto;font:500 12px/1.6 inherit;color:var(--tx3);">2026년 7월 · 공정별</span>
+    </div>
+
+    <div class="charts2">
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>공정별 불량율 (ppm) · VMS PART</div>
+            <div class="mv">2,800<small>ppm</small></div><div class="msub">목표 2,500 ppm</div></div>
+        </div>
+        <div class="jchart" data-type="bar" data-color="--p-500" data-unit="" data-dec="0" data-target="2500" data-over="1"
+             data-labels="성형,소결,정형,선별" data-values="3618,2956,2409,5266"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>공정별 불량율 (ppm) · TM PART</div>
+            <div class="mv">2,470<small>ppm</small></div><div class="msub">목표 2,500 ppm</div></div>
+        </div>
+        <div class="jchart" data-type="bar" data-color="--p-500" data-unit="" data-dec="0" data-target="2500" data-over="1"
+             data-labels="성형,소결,정형,선별" data-values="2810,2100,3050,1920"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--sec)"></span>공정별 Scrap Cost (천원) · VMS PART</div>
+            <div class="mv">4,820<small>천원</small></div><div class="msub">성형은 COPQ 제외 (회색)</div></div>
+        </div>
+        <div class="jchart" data-type="bar" data-color="--sec" data-unit="" data-dec="0" data-mark="0"
+             data-labels="성형,소결,정형,선별" data-values="753,1320,905,1842"></div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="mt"><span class="dot" style="background:var(--sec)"></span>공정별 Scrap Cost (천원) · TM PART</div>
+            <div class="mv">3,240<small>천원</small></div><div class="msub">성형은 COPQ 제외 (회색)</div></div>
+        </div>
+        <div class="jchart" data-type="bar" data-color="--sec" data-unit="" data-dec="0" data-mark="0"
+             data-labels="성형,소결,정형,선별" data-values="512,980,760,988"></div>
+      </div>
+    </div>
+
+    <div class="panel"><div class="phead"><h2>상세 데이터 · VMS PART · 공정불량</h2><span class="tot">총 1,218 EA</span></div>
+      <table>
+        <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th class="num">Scrap Cost(천원)</th><th>COPQ</th></tr></thead>
+        <tbody>
+          <tr><td>성형</td><td class="num">312</td><td class="num">86,240</td><td class="num">3,618</td><td class="num">753</td><td><span class="badge bg-hold">제외</span></td></tr>
+          <tr><td>소결</td><td class="num">254</td><td class="num">85,920</td><td class="num">2,956</td><td class="num">1,320</td><td><span class="badge bg-ok">포함</span></td></tr>
+          <tr><td>정형</td><td class="num">205</td><td class="num">85,100</td><td class="num">2,409</td><td class="num">905</td><td><span class="badge bg-ok">포함</span></td></tr>
+          <tr><td>선별</td><td class="num">447</td><td class="num">84,880</td><td class="num">5,266</td><td class="num">1,842</td><td><span class="badge bg-ok">포함</span></td></tr>
+        </tbody>
+        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">—</td><td class="num">2,800 ppm</td><td class="num">4,820</td><td></td></tr></tfoot>
+      </table>
+    </div>
   </section>
 
   <!-- ════ 13. 목표 관리 ════ -->
@@ -653,14 +651,127 @@
 </div><!-- /app -->
 
 <script>
+  /* ===== Refined chart renderer (area + bar, target line, gradient) ===== */
+  (function(){
+    const NS = "http://www.w3.org/2000/svg";
+    let uid = 0;
+    const W = 340, H = 150, pL = 12, pR = 14, pT = 20, pB = 26;
+    const plotW = W - pL - pR, plotH = H - pT - pB, baseY = pT + plotH;
+    const fmt = (v, d) => v.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d});
+
+    function smooth(pts){
+      if (pts.length < 2) return "";
+      let d = `M${pts[0].x},${pts[0].y}`;
+      for (let i = 0; i < pts.length - 1; i++){
+        const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+        const c1x = p1.x + (p2.x - p0.x)/6, c1y = p1.y + (p2.y - p0.y)/6;
+        const c2x = p2.x - (p3.x - p1.x)/6, c2y = p2.y - (p3.y - p1.y)/6;
+        d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+      }
+      return d;
+    }
+
+    function scaleY(vmin, vmax){ return v => pT + plotH * (vmax - v) / (vmax - vmin || 1); }
+
+    function grid(y){ return `<line class="g-grid" x1="${pL}" y1="${y.toFixed(1)}" x2="${pL+plotW}" y2="${y.toFixed(1)}"/>`; }
+
+    function targetLine(yt, label){
+      return `<line class="g-tline" x1="${pL}" y1="${yt.toFixed(1)}" x2="${pL+plotW}" y2="${yt.toFixed(1)}"/>`
+           + `<text class="g-tlab" x="${pL+plotW}" y="${(yt-4).toFixed(1)}" text-anchor="end">목표 ${label}</text>`;
+    }
+
+    function xLabels(labels, cur){
+      const n = labels.length;
+      return labels.map((l,i) => {
+        const x = pL + plotW * i / (n-1 || 1);
+        const c = (cur != null && i === +cur) ? " cur" : "";
+        return `<text class="g-ax${c}" x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle">${l}</text>`;
+      }).join("");
+    }
+
+    function renderArea(cfg){
+      const id = "ga" + (++uid);
+      const vs = cfg.values, n = vs.length;
+      const all = cfg.target != null ? vs.concat([cfg.target]) : vs.slice();
+      let vmax = Math.max(...all), vmin = Math.min(...all);
+      const span = (vmax - vmin) || vmax || 1;
+      vmax += span * 0.22; vmin -= span * 0.22; if (vmin < 0) vmin = 0;
+      const y = scaleY(vmin, vmax);
+      const xs = i => pL + plotW * i / (n-1 || 1);
+      const pts = vs.map((v,i) => ({x: xs(i), y: y(v)}));
+      const line = smooth(pts);
+      const area = line + ` L${xs(n-1).toFixed(1)},${baseY} L${xs(0).toFixed(1)},${baseY} Z`;
+      const dots = pts.map((p,i) => {
+        const last = i === n-1;
+        return `<circle class="g-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${last?4:3}" `
+             + `style="stroke:${cfg.color}${last?';fill:'+cfg.color:''}"/>`;
+      }).join("");
+      const vlabLast = `<text class="g-vlab" x="${xs(n-1).toFixed(1)}" y="${(pts[n-1].y-9).toFixed(1)}" text-anchor="end">${fmt(vs[n-1],cfg.dec)}${cfg.unit}</text>`;
+      return `<svg viewBox="0 0 ${W} ${H}" role="img">`
+        + `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">`
+        + `<stop offset="0" stop-color="${cfg.color}" stop-opacity="0.26"/>`
+        + `<stop offset="1" stop-color="${cfg.color}" stop-opacity="0.02"/></linearGradient></defs>`
+        + grid(pT + plotH*0.33) + grid(pT + plotH*0.66)
+        + `<path d="${area}" fill="url(#${id})"/>`
+        + `<path d="${line}" fill="none" stroke="${cfg.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`
+        + (cfg.target != null ? targetLine(y(cfg.target), fmt(cfg.target,cfg.dec)+cfg.unit) : "")
+        + dots + vlabLast + xLabels(cfg.labels, cfg.cur)
+        + `</svg>`;
+    }
+
+    function renderBar(cfg){
+      const id = "gb" + (++uid);
+      const vs = cfg.values, n = vs.length;
+      const vmax = Math.max(...vs, cfg.target != null ? cfg.target : 0) * 1.18 || 1;
+      const y = scaleY(0, vmax);
+      const slot = plotW / n, bw = Math.min(42, slot * 0.52);
+      const mark = (cfg.mark || "").split(",").filter(s=>s!=="").map(Number);
+      let bars = "";
+      vs.forEach((v,i) => {
+        const cx = pL + slot*i + slot/2, x = cx - bw/2, yt = y(v), h = baseY - yt;
+        const over = cfg.over && cfg.target != null && v > cfg.target;
+        const isMark = mark.includes(i);
+        const fill = isMark ? "var(--hold)" : (over ? "var(--warn)" : `url(#${id})`);
+        bars += `<rect class="g-bar" x="${x.toFixed(1)}" y="${yt.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${fill}"${over?' fill-opacity="0.9"':''}/>`;
+        bars += `<text class="g-vlab" x="${cx.toFixed(1)}" y="${(yt-6).toFixed(1)}" text-anchor="middle">${fmt(v,cfg.dec)}${cfg.unit}</text>`;
+        if (isMark) bars += `<text class="g-tag" x="${cx.toFixed(1)}" y="${baseY+14}" text-anchor="middle">제외</text>`;
+      });
+      return `<svg viewBox="0 0 ${W} ${H}" role="img">`
+        + `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">`
+        + `<stop offset="0" stop-color="${cfg.color}" stop-opacity="1"/>`
+        + `<stop offset="1" stop-color="${cfg.color}" stop-opacity="0.55"/></linearGradient></defs>`
+        + grid(pT + plotH*0.33) + grid(pT + plotH*0.66)
+        + bars
+        + (cfg.target != null ? targetLine(y(cfg.target), fmt(cfg.target,cfg.dec)+cfg.unit) : "")
+        + xLabels(cfg.labels, cfg.cur)
+        + `</svg>`;
+    }
+
+    document.querySelectorAll(".jchart").forEach(node => {
+      const d = node.dataset;
+      const cfg = {
+        values: d.values.split(",").map(Number),
+        labels: d.labels.split(","),
+        target: d.target !== undefined ? Number(d.target) : null,
+        color: `var(${d.color || "--p-500"})`,
+        unit: d.unit || "",
+        dec: d.dec !== undefined ? Number(d.dec) : (d.unit === "%" ? 2 : 0),
+        cur: d.cur,
+        over: d.over === "1",
+        mark: d.mark
+      };
+      node.innerHTML = d.type === "bar" ? renderBar(cfg) : renderArea(cfg);
+    });
+  })();
+
   const meta = {
     dash:["개요","대시보드"], defect:["데이터 입력","불량 입력"],
     oimport:["데이터 입력","외주소재불량 가져오기"], oreview:["데이터 입력","외주소재불량 검토"],
     simport:["데이터 입력","폐기불량 가져오기"], prod:["데이터 입력","생산실적 입력"],
     svp:["데이터 입력","SVP 입력"], claim:["데이터 입력","Claim 입력"],
     incident:["데이터 입력","Customer Incident 관리"],
-    rdefect:["집계/리포트","공정별 불량현황"], rscrap:["집계/리포트","공정별 Scrap Cost"],
-    rcopq:["집계/리포트","COPQ 상세"], target:["관리","목표 관리"],
+    rkpi:["집계/리포트","KPI 현황"], rdefect:["집계/리포트","공정별 불량현황"],
+    target:["관리","목표 관리"],
     users:["관리","사용자 관리"], login:["","로그인"]
   };
   document.querySelectorAll(".nav").forEach(n => n.addEventListener("click", () => {
