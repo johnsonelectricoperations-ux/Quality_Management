@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+  <div class="seg">
+    <a class="segb {{ 'on' if kind=='공정' }}" href="/report/defect?part={{ part }}&kind=공정">공정불량</a>
+    <a class="segb {{ 'on' if kind=='셋팅' }}" href="/report/defect?part={{ part }}&kind=셋팅">셋팅불량</a>
+  </div>
+  <div class="seg">
+    <a class="segb {{ 'on' if part=='VMS PART' }}" href="/report/defect?part=VMS PART&kind={{ kind }}">VMS PART</a>
+    <a class="segb {{ 'on' if part=='TM PART' }}" href="/report/defect?part=TM PART&kind={{ kind }}">TM PART</a>
+  </div>
+  <span style="margin-left:auto;font:500 12px/1.6 inherit;color:var(--tx3);">{{ ym }} · 공정별</span>
+</div>
+
+<div class="charts2">
+{% for ch in charts %}
+  <div class="mcard">
+    <div class="mh"><div><div class="mt"><span class="dot" style="background:var({{ ch.color }})"></span>{{ ch.title }}</div></div></div>
+    <div class="jchart" data-type="bar" data-color="{{ ch.color }}" data-unit="" data-dec="0"
+      {% if ch.get('over') %}data-over="1"{% endif %}{% if ch.get('mark') %} data-mark="{{ ch.mark }}"{% endif %}
+      {% if ch.target is not none %}data-target="{{ ch.target }}"{% endif %}
+      data-labels="{{ ch.labels }}" data-values="{{ ch.vseries }}"></div>
+  </div>
+{% endfor %}
+</div>
+
+<div class="panel"><div class="phead"><h2>상세 데이터 · {{ part }} · {{ kind }}불량</h2></div>
+  <table>
+    <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th class="num">Scrap Cost(천원)</th><th>COPQ</th></tr></thead>
+    <tbody>
+    {% for r in detail %}
+      <tr><td>{{ r.process }}</td><td class="num">{{ r.qty|cf }}</td><td class="num">{{ r.prod|cf }}</td>
+        <td class="num">{{ r.ppm|cf }}</td><td class="num">{{ r.cost|cf }}</td>
+        <td>{% if r.excl %}<span class="badge bg-hold">제외</span>{% else %}<span class="badge bg-ok">포함</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/charts.js"></script>{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="note">단일 TM-NO × 단일 불량유형 <b>100EA 이상</b>으로 격리된 데이터입니다. 수량 확인 후 승인하면 집계에 반영됩니다. (승인/수정: 입력자·관리자)</div>
+<div class="panel"><div class="phead"><h2>검토 대기 목록</h2><span class="tot">{{ rows|length }}건</span></div>
+  <table>
+    <thead><tr><th>업로드 일자</th><th>TM-NO</th><th>불량명</th><th class="num">수량</th><th>처리</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td class="mono">{{ r.d }}</td><td class="mono">{{ r.tm_no }}</td><td>{{ r.defect_name }}</td>
+        <td class="num" style="color:var(--err);font-weight:700;">{{ r.qty }}</td>
+        <td>
+        {% if can_edit %}
+          <form method="post" action="/input/outsource-review/{{ r.id }}" style="display:inline-flex;gap:6px;align-items:center;">
+            <input type="hidden" name="action" value="approve">
+            <input class="in" style="width:90px;" name="qty" value="{{ r.qty }}" type="number">
+            <button class="btn btn-p btn-sm">승인</button>
+          </form>
+          <form method="post" action="/input/outsource-review/{{ r.id }}" style="display:inline;">
+            <input type="hidden" name="action" value="reject"><button class="btn btn-ghost btn-sm">반려</button>
+          </form>
+        {% else %}조회 전용{% endif %}
+        </td></tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--tx3);">검토 대기 건이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

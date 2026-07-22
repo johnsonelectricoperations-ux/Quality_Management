@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+  <div class="seg">
+    <a class="segb {{ 'on' if fy==26 }}" href="/admin/target?fy=26&part={{ part }}">FY26</a>
+    <a class="segb {{ 'on' if fy==27 }}" href="/admin/target?fy=27&part={{ part }}">FY27</a>
+  </div>
+  <div class="seg">
+    {% for p in ['통합','VMS PART','TM PART'] %}
+    <a class="segb {{ 'on' if part==p }}" href="/admin/target?fy={{ fy }}&part={{ p }}">{{ p }}</a>{% endfor %}
+  </div>
+</div>
+<form method="post" action="/admin/target">
+<input type="hidden" name="fy" value="{{ fy }}"><input type="hidden" name="part" value="{{ part }}">
+<div class="panel"><div class="phead"><h2>지표별 목표 (FY{{ fy }} · {{ part }})</h2>
+  {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}</div>
+  <table>
+    <thead><tr><th>지표</th><th>단위</th><th class="num" style="width:200px;">목표값</th><th>비고</th></tr></thead>
+    <tbody>
+    {% for it in items %}
+      {% if not (it.kpi in ['proc_ppm','set_ppm'] and part=='통합') %}
+      <tr><td>{{ it.name }}</td><td>{{ it.unit }}</td>
+        <td class="num"><input class="in" style="text-align:right;" name="t_{{ it.kpi }}" value="{{ it.value }}" {{ 'readonly' if not can_edit }}></td>
+        <td class="mono">{% if it.kpi in ['proc_ppm','set_ppm'] %}파트별{% else %}대시보드 목표선{% endif %}</td></tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+</form>
+<div class="hint">목표는 <b>회계연도(FY, 4월~익년 3월)</b> 단위입니다. 공정/셋팅 불량율은 파트별만(통합 목표 없음).</div>
+{% endblock %}

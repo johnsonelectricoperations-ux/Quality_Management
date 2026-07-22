@@ -722,7 +722,7 @@
     let uid = 0;
     const W = 340, H = 150, pL = 12, pR = 14, pT = 20, pB = 26;
     const plotW = W - pL - pR, plotH = H - pT - pB, baseY = pT + plotH;
-    const fmt = (v, d) => v.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d});
+    const fmt = (v, d) => (v == null ? "" : v.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d}));
 
     function smooth(pts){
       if (pts.length < 2) return "";
@@ -748,6 +748,7 @@
         for (let i = 1; i <= n; i++){ if (i === n || t[i] !== t[start]){ segs.push({a:start, b:i-1, v:t[start]}); start = i; } }
         let d = "", labs = "";
         segs.forEach((s, si) => {
+          if (s.v == null) return;
           const x1 = si === 0 ? pL : (xc(s.a-1) + xc(s.a)) / 2;
           const x2 = si === segs.length-1 ? pL+plotW : (xc(s.b) + xc(s.b+1)) / 2;
           const yv = y(s.v);

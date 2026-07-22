@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel"><div class="phead"><h2>사용자 목록</h2><span class="tot">{{ users|length }}명</span></div>
+  <table><thead><tr><th>아이디</th><th>이름</th><th>권한</th></tr></thead><tbody>
+  {% for r in users %}<tr><td class="mono">{{ r.username }}</td><td>{{ r.name }}</td>
+    <td>{% if r.role=='admin' %}<span class="badge bg-err">관리자</span>{% elif r.role=='editor' %}<span class="badge bg-info">입력자</span>{% else %}<span class="badge bg-hold">조회자</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+<div class="note">권한: <b>조회자</b> 조회 / <b>입력자</b> +입력·업로드·100EA 검토 / <b>관리자</b> +마스터·목표·사용자. 샘플 비밀번호 = 아이디.</div>
+{% endblock %}
