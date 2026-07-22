@@ -6,64 +6,79 @@
 <title>통합품질관리시스템 — 전체 화면 시안</title>
 <style>
   :root {
-    --p-50:#FFF2E8; --p-500:#F26100; --p-600:#D25400;
-    --sec:#33506B;
-    --n-50:#F6F7F9; --n-100:#ECEEF1; --n-200:#D9DDE3; --n-300:#B4BAC4; --n-400:#8A919E; --n-600:#454C59; --n-900:#0E1116;
+    --p-50:#FFF2E8; --p-500:#F26100; --p-600:#D25400; --p-300:#FA9C5C;
+    --sec:#33506B; --sec-lt:#5B6B7D;
+    --bg:#F6F7F9; --card:#FFFFFF; --track:#ECEEF1;
+    --bd:#D9DDE3; --bd2:#ECEEF1;
+    --tx:#0E1116; --tx2:#454C59; --tx3:#8A919E;
     --ok-bg:#E6F5EE; --ok:#12805C; --warn-bg:#FDF3E2; --warn:#C77700;
     --err-bg:#FCEBEC; --err:#D0021B; --info-bg:#E7F1F9; --info:#1264A3;
     --hold-bg:#ECEEF1; --hold:#626A78;
-    --bd:#D9DDE3; --bd2:#ECEEF1;
     --mono:'JetBrains Mono',ui-monospace,monospace;
+    --shadow:0 1px 2px rgba(14,17,22,.08);
+  }
+  [data-theme="dark"] {
+    --p-50:#3A2410; --p-600:#FA9C5C;
+    --sec:#5B6B7D;
+    --bg:#0E1116; --card:#171B21; --track:#2E333D;
+    --bd:#2E333D; --bd2:#1C2027;
+    --tx:#F6F7F9; --tx2:#B4BAC4; --tx3:#8A919E;
+    --ok-bg:#10291F; --ok:#2DC07A; --warn-bg:#2A2010; --warn:#FFB84F;
+    --err-bg:#2A0F12; --err:#FF6B81; --info-bg:#0F2033; --info:#4FA0FF;
+    --hold-bg:#1C2027; --hold:#8A919E;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
   }
   * { box-sizing:border-box; }
   html,body { margin:0; }
-  body { font-family:Pretendard,Inter,-apple-system,"Malgun Gothic",sans-serif; background:var(--n-50); color:var(--n-900); font-size:14px; }
+  body { font-family:Pretendard,Inter,-apple-system,"Malgun Gothic",sans-serif; background:var(--bg); color:var(--tx); font-size:14px; transition:background .2s,color .2s; }
   .app { display:grid; grid-template-columns:250px 1fr; min-height:100vh; }
 
   /* Sidebar */
-  .sidebar { background:#fff; border-right:1px solid var(--bd); position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .sidebar { background:var(--card); border-right:1px solid var(--bd); position:sticky; top:0; height:100vh; overflow-y:auto; }
   .brand { display:flex; align-items:center; gap:9px; padding:18px 20px 14px; font:700 15px/1.15 inherit; }
   .brand .mark { width:18px; height:18px; border-radius:3px; background:var(--p-500); flex:none; }
-  .brand small { display:block; font:500 10px/1.3 inherit; color:var(--n-400); }
-  .cap { padding:10px 20px 4px; font:700 10px/1.3 inherit; text-transform:uppercase; letter-spacing:.06em; color:var(--n-400); border-top:1px solid var(--bd2); margin-top:6px; }
-  .nav { display:flex; align-items:center; gap:9px; padding:8px 20px; font:500 13.5px/1.2 inherit; color:var(--n-600); cursor:pointer; border-left:3px solid transparent; }
-  .nav:hover { background:var(--n-50); color:var(--n-900); }
+  .brand small { display:block; font:500 10px/1.3 inherit; color:var(--tx3); }
+  .cap { padding:10px 20px 4px; font:700 10px/1.3 inherit; text-transform:uppercase; letter-spacing:.06em; color:var(--tx3); border-top:1px solid var(--bd2); margin-top:6px; }
+  .nav { display:flex; align-items:center; gap:9px; padding:8px 20px; font:500 13.5px/1.2 inherit; color:var(--tx2); cursor:pointer; border-left:3px solid transparent; }
+  .nav:hover { background:var(--bg); color:var(--tx); }
   .nav.on { color:var(--p-600); border-left-color:var(--p-500); background:var(--p-50); font-weight:600; }
   .nav .cnt { margin-left:auto; font:700 10px/1 inherit; background:var(--err-bg); color:var(--err); padding:2px 6px; border-radius:9999px; }
-  .nav .role { margin-left:auto; font:600 9px/1 inherit; color:var(--n-400); }
+  .nav .role { margin-left:auto; font:600 9px/1 inherit; color:var(--tx3); }
 
-  /* Topbar & layout */
+  /* Topbar */
   .main { min-width:0; display:flex; flex-direction:column; }
-  .topbar { display:flex; align-items:center; gap:12px; padding:13px 26px; background:#fff; border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:5; }
-  .topbar .crumb { font:500 11.5px/1.3 inherit; color:var(--n-400); }
+  .topbar { display:flex; align-items:center; gap:12px; padding:13px 26px; background:var(--card); border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:5; }
+  .topbar .crumb { font:500 11.5px/1.3 inherit; color:var(--tx3); }
   .topbar h1 { margin:0; font:700 18px/1.15 inherit; letter-spacing:-.01em; }
   .topbar .sp { margin-left:auto; }
-  .user-chip { display:flex; align-items:center; gap:8px; font:600 12px/1 inherit; color:var(--n-600); }
+  .theme-btn { display:inline-flex; align-items:center; gap:6px; background:var(--track); border:1px solid var(--bd); color:var(--tx2); font:600 12px/1 inherit; border-radius:9999px; padding:7px 13px; cursor:pointer; }
+  .theme-btn:hover { color:var(--tx); }
+  .user-chip { display:flex; align-items:center; gap:8px; font:600 12px/1 inherit; color:var(--tx2); }
   .user-chip .avatar { width:28px; height:28px; border-radius:50%; background:var(--p-50); color:var(--p-600); display:grid; place-items:center; font:700 11px/1 inherit; }
   .content { padding:22px 26px 60px; max-width:1280px; width:100%; }
 
-  /* Common bits */
-  .seg { display:inline-flex; background:var(--n-100); border-radius:6px; padding:3px; }
-  .seg b { font:600 12px/1 inherit; color:var(--n-600); padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:600; }
-  .seg b.on { background:#fff; color:var(--n-900); box-shadow:0 1px 2px rgba(14,17,22,.08); }
+  /* Common */
+  .seg { display:inline-flex; background:var(--track); border-radius:6px; padding:3px; }
+  .seg b { font:600 12px/1 inherit; color:var(--tx2); padding:6px 12px; border-radius:4px; cursor:pointer; }
+  .seg b.on { background:var(--card); color:var(--tx); box-shadow:var(--shadow); }
   .btn { display:inline-flex; align-items:center; gap:7px; font:600 13px/1 inherit; border-radius:6px; padding:9px 15px; cursor:pointer; border:1px solid transparent; }
-  .btn-p { background:var(--p-500); color:#fff; } .btn-p:hover { background:var(--p-600); }
-  .btn-s { background:#fff; color:var(--n-900); border-color:var(--bd); }
+  .btn-p { background:var(--p-500); color:#fff; } .btn-p:hover { background:#D25400; }
+  .btn-s { background:var(--card); color:var(--tx); border-color:var(--bd); }
   .btn-sm { padding:5px 10px; font-size:12px; }
-  .btn-ghost { background:transparent; color:var(--n-600); border:0; }
-  .panel { background:#fff; border:1px solid var(--bd); border-radius:8px; overflow:hidden; margin-bottom:18px; }
+  .btn-ghost { background:transparent; color:var(--tx2); border:0; }
+  .panel { background:var(--card); border:1px solid var(--bd); border-radius:8px; overflow:hidden; margin-bottom:18px; }
   .phead { display:flex; align-items:center; gap:8px; padding:13px 16px; border-bottom:1px solid var(--bd2); }
   .phead h2 { margin:0; font:600 14px/1 inherit; }
-  .phead .tot { margin-left:auto; font:700 11px/1 inherit; color:var(--n-600); background:var(--n-100); padding:4px 9px; border-radius:9999px; }
+  .phead .tot { margin-left:auto; font:700 11px/1 inherit; color:var(--tx2); background:var(--track); padding:4px 9px; border-radius:9999px; }
   .pbody { padding:16px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.03em; color:var(--n-400); padding:9px 14px; border-bottom:1px solid var(--bd); background:var(--n-50); white-space:nowrap; }
+  th { text-align:left; font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.03em; color:var(--tx3); padding:9px 14px; border-bottom:1px solid var(--bd); background:var(--bg); white-space:nowrap; }
   td { padding:10px 14px; border-bottom:1px solid var(--bd2); }
   tbody tr:last-child td { border-bottom:0; }
-  tbody tr:hover { background:var(--n-50); }
+  tbody tr:hover { background:var(--bg); }
   td.num { font-variant-numeric:tabular-nums; text-align:right; }
-  td.mono { font-family:var(--mono); font-size:12px; color:var(--n-600); }
-  tfoot td { font:700 12px/1 inherit; background:var(--n-50); border-top:1px solid var(--bd); }
+  td.mono { font-family:var(--mono); font-size:12px; color:var(--tx2); }
+  tfoot td { font:700 12px/1 inherit; background:var(--bg); border-top:1px solid var(--bd); }
   .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:9999px; font:700 10.5px/1.4 inherit; white-space:nowrap; }
   .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
   .bg-ok{background:var(--ok-bg);color:var(--ok);} .bg-err{background:var(--err-bg);color:var(--err);}
@@ -73,50 +88,55 @@
   /* Forms */
   .frow { display:grid; gap:12px; margin-bottom:12px; }
   .f { display:flex; flex-direction:column; gap:5px; }
-  .f label { font:600 11.5px/1.3 inherit; color:var(--n-600); }
-  .in, select.in, textarea.in { background:#fff; border:1px solid var(--bd); border-radius:6px; padding:8px 11px; font:400 13px/1.4 inherit; color:var(--n-900); width:100%; }
+  .f label { font:600 11.5px/1.3 inherit; color:var(--tx2); }
+  .in, select.in { background:var(--card); border:1px solid var(--bd); border-radius:6px; padding:8px 11px; font:400 13px/1.4 inherit; color:var(--tx); width:100%; }
   .in:focus { outline:none; border-color:var(--p-500); box-shadow:0 0 0 3px rgba(242,97,0,.18); }
-  .in[readonly] { background:var(--n-50); color:var(--n-600); }
-  .hint { font:500 11px/1.4 inherit; color:var(--n-400); }
-
-  /* Tabs */
-  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--bd); padding:0 16px; background:#fff; }
-  .tab { padding:11px 15px; font:600 13.5px/1 inherit; color:var(--n-400); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .hint { font:500 11px/1.4 inherit; color:var(--tx3); }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--bd); padding:0 16px; background:var(--card); }
+  .tab { padding:11px 15px; font:600 13.5px/1 inherit; color:var(--tx3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
   .tab.on { color:var(--p-600); border-bottom-color:var(--p-500); }
-
-  /* Upload dropzone */
-  .drop { border:2px dashed var(--bd); border-radius:8px; padding:26px; text-align:center; color:var(--n-400); font:500 13px/1.6 inherit; background:var(--n-50); }
+  .drop { border:2px dashed var(--bd); border-radius:8px; padding:26px; text-align:center; color:var(--tx3); font:500 13px/1.6 inherit; background:var(--bg); }
   .drop b { color:var(--p-600); cursor:pointer; }
 
   /* KPI */
   .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
-  .kpi { background:#fff; border:1px solid var(--bd); border-top:2px solid var(--p-500); border-radius:6px; padding:14px; }
-  .kpi.sec { border-top-color:var(--sec); }
-  .kpi .lb { font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.04em; color:var(--n-400); display:flex; gap:6px; align-items:center; }
+  .kpi { background:var(--card); border:1px solid var(--bd); border-top:2px solid var(--p-500); border-radius:6px; padding:14px; }
+  .kpi.sec2 { border-top-color:var(--sec); }
+  .kpi .lb { font:600 10.5px/1.3 inherit; text-transform:uppercase; letter-spacing:.04em; color:var(--tx3); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   .kpi .vl { font:700 24px/1.1 inherit; font-variant-numeric:tabular-nums; margin-top:7px; }
-  .kpi .vl small { font-size:12px; color:var(--n-400); font-weight:500; }
-  .kpi .ft { margin-top:6px; font:600 11.5px/1 inherit; display:flex; gap:8px; }
-  .up{color:var(--ok);} .dn{color:var(--err);} .gl{color:var(--n-400);font-weight:500;}
+  .kpi .vl small { font-size:12px; color:var(--tx3); font-weight:500; }
+  .kpi .ft { margin-top:6px; font:600 11.5px/1 inherit; display:flex; gap:8px; flex-wrap:wrap; }
+  .up{color:var(--ok);} .dn{color:var(--err);} .gl{color:var(--tx3);font-weight:500;}
   .est { font:700 9px/1 inherit; background:var(--warn-bg); color:var(--warn); padding:2px 6px; border-radius:9999px; }
   .fix { font:700 9px/1 inherit; background:var(--ok-bg); color:var(--ok); padding:2px 6px; border-radius:9999px; }
 
   .bars { display:flex; flex-direction:column; gap:10px; }
   .brow { display:grid; grid-template-columns:80px 1fr 60px; gap:10px; align-items:center; }
-  .brow .nm { font:500 12px/1.2 inherit; color:var(--n-600); }
-  .btrack { height:9px; background:var(--n-100); border-radius:9999px; overflow:hidden; }
+  .brow .nm { font:500 12px/1.2 inherit; color:var(--tx2); }
+  .btrack { height:9px; background:var(--track); border-radius:9999px; overflow:hidden; }
   .bfill { height:100%; border-radius:9999px; background:var(--p-500); }
   .bfill.g { background:var(--sec); }
   .brow .vv { font:700 11.5px/1 var(--mono); text-align:right; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .note { padding:10px 14px; background:var(--info-bg); border-radius:6px; font:500 12px/1.5 inherit; color:var(--info); margin-bottom:16px; }
-  .view { display:none; }
-  .view.on { display:block; }
+  .view { display:none; } .view.on { display:block; }
 
-  /* login */
+  /* Chart (bar + target line) */
+  .chart-legend { display:flex; gap:16px; font:600 11px/1 inherit; color:var(--tx3); padding:0 16px 12px; }
+  .chart-legend .sq { display:inline-block; width:10px; height:10px; background:var(--p-500); border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .chart-legend .ln { display:inline-block; width:16px; border-top:2px dashed var(--sec); margin-right:5px; vertical-align:3px; }
+  svg .bar { fill:var(--p-500); }
+  svg .bar.cur { fill:var(--p-500); }
+  svg .bar.dim { fill:var(--p-500); opacity:.55; }
+  svg .tline { stroke:var(--sec); stroke-width:2; stroke-dasharray:6 4; fill:none; }
+  svg .ax { font:500 10px Pretendard,sans-serif; fill:var(--tx3); }
+  svg .vlab { font:600 9.5px var(--mono); fill:var(--tx2); }
+  svg .tlab { font:700 9.5px Pretendard,sans-serif; fill:var(--sec); }
+
   .login-wrap { min-height:70vh; display:grid; place-items:center; }
-  .login-card { width:360px; background:#fff; border:1px solid var(--bd); border-top:3px solid var(--p-500); border-radius:10px; padding:30px 28px; }
+  .login-card { width:360px; background:var(--card); border:1px solid var(--bd); border-top:3px solid var(--p-500); border-radius:10px; padding:30px 28px; }
   .login-card h2 { margin:0 0 4px; font:700 19px/1.2 inherit; }
-  .login-card .sub { font:500 12px/1.4 inherit; color:var(--n-400); margin-bottom:20px; }
+  .login-card .sub { font:500 12px/1.4 inherit; color:var(--tx3); margin-bottom:20px; }
   @media (max-width:1000px){ .kpis{grid-template-columns:repeat(2,1fr);} .grid2{grid-template-columns:1fr;} }
 </style>
 </head>
@@ -142,6 +162,7 @@
   <div class="nav" data-v="rscrap">◧ 공정별 Scrap Cost</div>
   <div class="nav" data-v="rcopq">Σ COPQ 상세</div>
   <div class="cap">관리</div>
+  <div class="nav" data-v="target">🎯 목표 관리<span class="role">관리자</span></div>
   <div class="nav" data-v="users">🔐 사용자 관리<span class="role">관리자</span></div>
   <div class="nav" data-v="login">→ 로그인 화면 보기</div>
 </aside>
@@ -151,6 +172,7 @@
   <header class="topbar">
     <div><div class="crumb" id="crumb">개요</div><h1 id="title">대시보드</h1></div>
     <span class="sp"></span>
+    <button class="theme-btn" id="themeBtn">🌙 다크</button>
     <div class="user-chip"><span class="avatar">이</span>이진용 · 입력자</div>
   </header>
 
@@ -159,64 +181,111 @@
   <!-- ════ 1. 대시보드 ════ -->
   <section class="view on" id="v-dash">
     <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
-      <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
       <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
-      <span class="sp" style="margin-left:auto;font:500 12px/1 inherit;color:var(--n-400);">2026년 7월</span>
+      <span class="sp" style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">2026년 7월 (당월)</span>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="lb">Scrap Cost</div><div class="vl">4,820<small> 천원</small></div><div class="ft"><span class="up">▼ 8.1%</span><span class="gl">전월 대비</span></div></div>
-      <div class="kpi sec"><div class="lb">Scrap Quantity</div><div class="vl">1,704<small> EA</small></div><div class="ft"><span class="dn">▲ 122</span></div></div>
+      <div class="kpi"><div class="lb">Scrap Cost</div><div class="vl">4,820<small> 천원</small></div><div class="ft"><span class="up">▼ 8.1%</span><span class="gl">목표 4,500</span></div></div>
+      <div class="kpi sec2"><div class="lb">Scrap Quantity</div><div class="vl">1,704<small> EA</small></div><div class="ft"><span class="dn">▲ 122</span><span class="gl">목표 1,500</span></div></div>
       <div class="kpi"><div class="lb">COPQ <span class="fix">SVP확정</span></div><div class="vl">1.42<small> %</small></div><div class="ft"><span class="up">▼ 0.11%p</span><span class="gl">목표 1.20%</span></div></div>
-      <div class="kpi sec"><div class="lb">Customer Incident</div><div class="vl">2<small> 건</small></div><div class="ft"><span class="gl">전월 3건</span></div></div>
-      <div class="kpi sec"><div class="lb">Warranty</div><div class="vl">1,150<small> 천원</small></div><div class="ft"><span class="dn">▲ 210</span></div></div>
-      <div class="kpi"><div class="lb">공정불량율 <span class="est">VMS/TM별</span></div><div class="vl">0.28<small> %</small></div><div class="ft"><span class="gl">통합 탭에서는 숨김</span></div></div>
-      <div class="kpi"><div class="lb">셋팅불량율 <span class="est">VMS/TM별</span></div><div class="vl">0.11<small> %</small></div><div class="ft"><span class="gl">통합 탭에서는 숨김</span></div></div>
-      <div class="kpi sec"><div class="lb">생산수량</div><div class="vl">86,240<small> EA</small></div><div class="ft"><span class="up">▲ 5.2%</span></div></div>
+      <div class="kpi sec2"><div class="lb">Customer Incident</div><div class="vl">2<small> 건</small></div><div class="ft"><span class="gl">목표 0건 · 전월 3건</span></div></div>
+      <div class="kpi sec2"><div class="lb">Warranty</div><div class="vl">1,150<small> 천원</small></div><div class="ft"><span class="dn">▲ 210</span><span class="gl">목표 1,000</span></div></div>
+      <div class="kpi"><div class="lb">공정불량율 <span class="est">VMS/TM별</span></div><div class="vl">2,800<small> ppm</small></div><div class="ft"><span class="dn">▲ 150</span><span class="gl">목표 2,500 ppm</span></div></div>
+      <div class="kpi"><div class="lb">셋팅불량율 <span class="est">VMS/TM별</span></div><div class="vl">1,100<small> ppm</small></div><div class="ft"><span class="up">▼ 90</span><span class="gl">목표 1,500 ppm</span></div></div>
+      <div class="kpi sec2"><div class="lb">생산수량</div><div class="vl">86,240<small> EA</small></div><div class="ft"><span class="up">▲ 5.2%</span></div></div>
     </div>
+
     <div class="grid2">
-      <div class="panel"><div class="phead"><h2>COPQ 월 추이</h2></div>
-        <div class="pbody bars">
-          <div class="brow"><span class="nm">3월</span><div class="btrack"><div class="bfill g" style="width:72%"></div></div><span class="vv">1.61%</span></div>
-          <div class="brow"><span class="nm">4월</span><div class="btrack"><div class="bfill g" style="width:66%"></div></div><span class="vv">1.48%</span></div>
-          <div class="brow"><span class="nm">5월</span><div class="btrack"><div class="bfill g" style="width:70%"></div></div><span class="vv">1.55%</span></div>
-          <div class="brow"><span class="nm">6월</span><div class="btrack"><div class="bfill g" style="width:69%"></div></div><span class="vv">1.53%</span></div>
-          <div class="brow"><span class="nm">7월</span><div class="btrack"><div class="bfill" style="width:64%"></div></div><span class="vv">1.42%</span></div>
+      <!-- 월별 추이: 실적 막대 + 목표 선 -->
+      <div class="panel">
+        <div class="phead"><h2>COPQ 월별 추이</h2><span class="tot">2026년</span></div>
+        <div class="pbody" style="padding-bottom:6px;">
+          <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
+            <text class="ax" x="2" y="35">2.0%</text>
+            <text class="ax" x="2" y="100">1.0%</text>
+            <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
+            <rect class="bar dim" x="43" y="30.8" width="28" height="109.2" rx="3"/>
+            <rect class="bar dim" x="97" y="35.3" width="28" height="104.7" rx="3"/>
+            <rect class="bar dim" x="151" y="39.2" width="28" height="100.8" rx="3"/>
+            <rect class="bar dim" x="205" y="43.8" width="28" height="96.2" rx="3"/>
+            <rect class="bar dim" x="259" y="39.2" width="28" height="100.8" rx="3"/>
+            <rect class="bar dim" x="313" y="40.5" width="28" height="99.5" rx="3"/>
+            <rect class="bar cur" x="367" y="47.7" width="28" height="92.3" rx="3"/>
+            <text class="vlab" x="57"  y="26" text-anchor="middle">1.68</text>
+            <text class="vlab" x="111" y="30" text-anchor="middle">1.61</text>
+            <text class="vlab" x="165" y="34" text-anchor="middle">1.55</text>
+            <text class="vlab" x="219" y="39" text-anchor="middle">1.48</text>
+            <text class="vlab" x="273" y="34" text-anchor="middle">1.55</text>
+            <text class="vlab" x="327" y="36" text-anchor="middle">1.53</text>
+            <text class="vlab" x="381" y="43" text-anchor="middle">1.42</text>
+            <line class="tline" x1="30" y1="62" x2="412" y2="62"/>
+            <text class="tlab" x="411" y="57" text-anchor="end">목표 1.20%</text>
+            <text class="ax" x="57"  y="156" text-anchor="middle">1월</text>
+            <text class="ax" x="111" y="156" text-anchor="middle">2월</text>
+            <text class="ax" x="165" y="156" text-anchor="middle">3월</text>
+            <text class="ax" x="219" y="156" text-anchor="middle">4월</text>
+            <text class="ax" x="273" y="156" text-anchor="middle">5월</text>
+            <text class="ax" x="327" y="156" text-anchor="middle">6월</text>
+            <text class="ax" x="381" y="156" text-anchor="middle" style="font-weight:700;fill:var(--p-600);">7월</text>
+          </svg>
         </div>
+        <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
       </div>
-      <div class="panel"><div class="phead"><h2>Scrap Cost 파트별</h2><span class="tot">7월</span></div>
-        <div class="pbody bars">
-          <div class="brow"><span class="nm">VMS PART</span><div class="btrack"><div class="bfill" style="width:58%"></div></div><span class="vv">2,796</span></div>
-          <div class="brow"><span class="nm">TM PART</span><div class="btrack"><div class="bfill" style="width:42%"></div></div><span class="vv">2,024</span></div>
+
+      <!-- 당월 주별: 실적 막대 + 목표 선 -->
+      <div class="panel">
+        <div class="phead"><h2>당월(7월) 주별 현황</h2><span class="tot">분모: 추정 SVP <span class="est" style="margin-left:4px;">추정</span></span></div>
+        <div class="pbody" style="padding-bottom:6px;">
+          <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
+            <text class="ax" x="2" y="35">2.0%</text>
+            <text class="ax" x="2" y="100">1.0%</text>
+            <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
+            <rect class="bar dim" x="57"  y="41.8" width="40" height="98.2" rx="3"/>
+            <rect class="bar dim" x="152" y="46.4" width="40" height="93.6" rx="3"/>
+            <rect class="bar dim" x="247" y="50.3" width="40" height="89.7" rx="3"/>
+            <rect class="bar cur" x="342" y="51.6" width="40" height="88.4" rx="3"/>
+            <text class="vlab" x="77"  y="37" text-anchor="middle">1.51</text>
+            <text class="vlab" x="172" y="42" text-anchor="middle">1.44</text>
+            <text class="vlab" x="267" y="46" text-anchor="middle">1.38</text>
+            <text class="vlab" x="362" y="47" text-anchor="middle">1.36</text>
+            <line class="tline" x1="30" y1="62" x2="412" y2="62"/>
+            <text class="tlab" x="411" y="57" text-anchor="end">목표 1.20%</text>
+            <text class="ax" x="77"  y="156" text-anchor="middle">1주</text>
+            <text class="ax" x="172" y="156" text-anchor="middle">2주</text>
+            <text class="ax" x="267" y="156" text-anchor="middle">3주</text>
+            <text class="ax" x="362" y="156" text-anchor="middle" style="font-weight:700;fill:var(--p-600);">4주(진행중)</text>
+          </svg>
         </div>
-        <div style="padding:0 16px 14px;" class="hint">단위: 천원 · 일별/주별 화면의 COPQ 분모는 생산금액(추정 SVP)</div>
+        <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
       </div>
     </div>
+    <div class="hint" style="margin-top:4px;">차트 지표는 선택 가능(COPQ / Scrap Cost / 공정불량율 ppm / 셋팅불량율 ppm …). 목표선은 [목표 관리]에서 입력한 값.</div>
   </section>
 
-  <!-- ════ 2. 불량 입력 (공정/셋팅 탭) ════ -->
+  <!-- ════ 2. 불량 입력 ════ -->
   <section class="view" id="v-defect">
     <div class="panel">
       <div class="tabs"><span class="tab on">공정불량</span><span class="tab">셋팅불량</span></div>
       <div class="pbody">
         <div class="frow" style="grid-template-columns:130px 150px 1fr 1fr 100px auto;">
           <div class="f"><label>일자</label><input class="in" type="date" value="2026-07-22"></div>
-          <div class="f"><label>TM-NO</label><input class="in" placeholder="TM-10001"></div>
+          <div class="f"><label>TM-NO</label><input class="in" placeholder="1545-01"></div>
           <div class="f"><label>공정</label><select class="in"><option>선별</option><option>소결</option><option>정형</option></select></div>
           <div class="f"><label>불량유형 (공정불량만 표시)</label><select class="in"><option>찍힘</option><option>크랙</option><option>치수불량</option></select></div>
           <div class="f"><label>수량</label><input class="in" type="number" placeholder="0"></div>
           <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 추가</button></div>
         </div>
-        <div class="hint" style="margin-bottom:14px;">TM-NO는 문자로 저장됩니다 (날짜 자동변환 방지) · Excel 업로드: <b style="color:var(--p-600);cursor:pointer;">양식 다운로드</b> 후 작성하여 아래에 업로드</div>
+        <div class="hint" style="margin-bottom:14px;">TM-NO는 "TM" 제외하고 입력 (예: 1545-01) · 문자로 저장되어 날짜 자동변환이 방지됩니다 · Excel 업로드: <b style="color:var(--p-600);cursor:pointer;">양식 다운로드</b></div>
         <div class="drop">📄 정해진 규격의 Excel 파일을 끌어다 놓거나 <b>파일 선택</b></div>
       </div>
     </div>
-    <div class="panel"><div class="phead"><h2>금일 입력 내역</h2><span class="tot">4건</span></div>
+    <div class="panel"><div class="phead"><h2>금일 입력 내역</h2><span class="tot">3건</span></div>
       <table>
         <thead><tr><th>일자</th><th>TM-NO</th><th>공정</th><th>불량유형</th><th class="num">수량</th><th>입력자</th><th></th></tr></thead>
         <tbody>
-          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>선별</td><td>찍힘</td><td class="num">40</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
-          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td>소결</td><td>크랙</td><td class="num">12</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
-          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>정형</td><td>치수불량</td><td class="num">8</td><td>신동규</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">1545-01</td><td>선별</td><td>찍힘</td><td class="num">40</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">2233-02</td><td>소결</td><td>크랙</td><td class="num">12</td><td>이진용</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">1545-01</td><td>정형</td><td>치수불량</td><td class="num">8</td><td>신동규</td><td><button class="btn btn-s btn-sm">수정</button> <button class="btn btn-ghost btn-sm">삭제</button></td></tr>
         </tbody>
       </table>
     </div>
@@ -227,7 +296,7 @@
     <div class="panel"><div class="phead"><h2>Excel 파일 업로드</h2></div>
       <div class="pbody">
         <div class="drop" style="margin-bottom:14px;">📄 외주소재불량 Excel 파일을 끌어다 놓거나 <b>파일 선택</b></div>
-        <div class="note">단일 TM-NO × 단일 불량유형이 100EA 이상인 행은 자동 반영되지 않고 <b>검토 대기</b>로 격리됩니다. (2차: 지정 폴더에서 정해진 시간에 자동 수집)</div>
+        <div class="note">단일 TM-NO × 단일 불량유형이 100EA 이상인 행은 자동 반영되지 않고 <b>검토 대기</b>로 격리됩니다. (2차: 지정 폴더 자동 수집)</div>
       </div>
     </div>
     <div class="panel"><div class="phead"><h2>업로드 이력</h2></div>
@@ -248,11 +317,11 @@
       <table>
         <thead><tr><th>업로드일</th><th>TM-NO</th><th>불량유형</th><th class="num">수량</th><th>상태</th><th></th></tr></thead>
         <tbody>
-          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">240</td><td><span class="badge bg-warn">검토대기</span></td>
+          <tr><td class="mono">07-22</td><td class="mono">1545-01</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">240</td><td><span class="badge bg-warn">검토대기</span></td>
             <td><input class="in" style="width:90px;display:inline-block;" value="240"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
-          <tr><td class="mono">07-22</td><td class="mono">TM-30004</td><td>이물혼입</td><td class="num" style="color:var(--err);font-weight:700;">155</td><td><span class="badge bg-warn">검토대기</span></td>
+          <tr><td class="mono">07-22</td><td class="mono">3010-04</td><td>이물혼입</td><td class="num" style="color:var(--err);font-weight:700;">155</td><td><span class="badge bg-warn">검토대기</span></td>
             <td><input class="in" style="width:90px;display:inline-block;" value="155"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
-          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">108</td><td><span class="badge bg-warn">검토대기</span></td>
+          <tr><td class="mono">07-22</td><td class="mono">2233-02</td><td>소재 크랙</td><td class="num" style="color:var(--err);font-weight:700;">108</td><td><span class="badge bg-warn">검토대기</span></td>
             <td><input class="in" style="width:90px;display:inline-block;" value="108"> <button class="btn btn-p btn-sm">승인</button> <button class="btn btn-ghost btn-sm">반려</button></td></tr>
         </tbody>
       </table>
@@ -261,7 +330,7 @@
       <table>
         <thead><tr><th>처리일</th><th>TM-NO</th><th>불량유형</th><th class="num">수량(수정)</th><th>처리자</th><th>상태</th></tr></thead>
         <tbody>
-          <tr><td class="mono">07-21</td><td class="mono">TM-10001</td><td>소재 크랙</td><td class="num">120 → 12</td><td>이진용</td><td><span class="badge bg-ok">승인(수정)</span></td></tr>
+          <tr><td class="mono">07-21</td><td class="mono">1545-01</td><td>소재 크랙</td><td class="num">120 → 12</td><td>이진용</td><td><span class="badge bg-ok">승인(수정)</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -292,7 +361,7 @@
       <div class="pbody">
         <div class="frow" style="grid-template-columns:130px 160px 130px 150px auto;">
           <div class="f"><label>일자</label><input class="in" type="date" value="2026-07-22"></div>
-          <div class="f"><label>TM-NO</label><input class="in" placeholder="TM-10001"></div>
+          <div class="f"><label>TM-NO</label><input class="in" placeholder="1545-01"></div>
           <div class="f"><label>생산수량 (EA)</label><input class="in" type="number" placeholder="0"></div>
           <div class="f"><label>생산금액 (천원)</label><input class="in" type="number" placeholder="0"></div>
           <div class="f"><label>&nbsp;</label><button class="btn btn-p">+ 등록</button></div>
@@ -304,8 +373,8 @@
       <table>
         <thead><tr><th>일자</th><th>TM-NO</th><th class="num">생산수량</th><th class="num">생산금액(천원)</th><th>입력자</th><th></th></tr></thead>
         <tbody>
-          <tr><td class="mono">07-22</td><td class="mono">TM-10001</td><td class="num">4,200</td><td class="num">1,407</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
-          <tr><td class="mono">07-22</td><td class="mono">TM-20002</td><td class="num">2,850</td><td class="num">650</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">1545-01</td><td class="num">4,200</td><td class="num">1,407</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
+          <tr><td class="mono">07-22</td><td class="mono">2233-02</td><td class="num">2,850</td><td class="num">650</td><td>정종일</td><td><button class="btn btn-s btn-sm">수정</button></td></tr>
         </tbody>
       </table>
     </div>
@@ -405,16 +474,41 @@
       <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
       <div class="seg"><b class="on">공정불량</b><b>셋팅불량</b></div>
     </div>
-    <div class="panel"><div class="phead"><h2>VMS PART · 공정불량 · 2026-07</h2><span class="tot">총 1,218 EA</span></div>
+    <div class="panel">
+      <div class="phead"><h2>공정별 불량율 (ppm)</h2><span class="tot">VMS PART · 2026-07</span></div>
+      <div class="pbody" style="padding-bottom:6px;">
+        <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
+          <text class="ax" x="2" y="17">6,000</text>
+          <text class="ax" x="2" y="78">3,000</text>
+          <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
+          <rect class="bar dim" x="57"  y="61.6" width="40" height="78.4" rx="3"/>
+          <rect class="bar dim" x="152" y="76.0" width="40" height="64.0" rx="3"/>
+          <rect class="bar dim" x="247" y="87.8" width="40" height="52.2" rx="3"/>
+          <rect class="bar cur" x="342" y="25.9" width="40" height="114.1" rx="3"/>
+          <text class="vlab" x="77"  y="57" text-anchor="middle">3,618</text>
+          <text class="vlab" x="172" y="71" text-anchor="middle">2,956</text>
+          <text class="vlab" x="267" y="83" text-anchor="middle">2,409</text>
+          <text class="vlab" x="362" y="21" text-anchor="middle">5,266</text>
+          <line class="tline" x1="30" y1="85.8" x2="412" y2="85.8"/>
+          <text class="tlab" x="411" y="81" text-anchor="end">목표 2,500 ppm</text>
+          <text class="ax" x="77"  y="156" text-anchor="middle">성형</text>
+          <text class="ax" x="172" y="156" text-anchor="middle">소결</text>
+          <text class="ax" x="267" y="156" text-anchor="middle">정형</text>
+          <text class="ax" x="362" y="156" text-anchor="middle">선별</text>
+        </svg>
+      </div>
+      <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="ln"></span>목표</span></div>
+    </div>
+    <div class="panel"><div class="phead"><h2>상세 데이터</h2><span class="tot">총 1,218 EA</span></div>
       <table>
-        <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율</th><th>주요 불량유형</th></tr></thead>
+        <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th>주요 불량유형</th></tr></thead>
         <tbody>
-          <tr><td>성형</td><td class="num">312</td><td class="num">86,240</td><td class="num">0.36%</td><td>크랙, 밀도불량</td></tr>
-          <tr><td>소결</td><td class="num">254</td><td class="num">85,920</td><td class="num">0.30%</td><td>크랙, 변형</td></tr>
-          <tr><td>정형</td><td class="num">205</td><td class="num">85,100</td><td class="num">0.24%</td><td>치수불량</td></tr>
-          <tr><td>선별</td><td class="num">447</td><td class="num">84,880</td><td class="num">0.53%</td><td>찍힘, 이물혼입</td></tr>
+          <tr><td>성형</td><td class="num">312</td><td class="num">86,240</td><td class="num">3,618</td><td>크랙, 밀도불량</td></tr>
+          <tr><td>소결</td><td class="num">254</td><td class="num">85,920</td><td class="num">2,956</td><td>크랙, 변형</td></tr>
+          <tr><td>정형</td><td class="num">205</td><td class="num">85,100</td><td class="num">2,409</td><td>치수불량</td></tr>
+          <tr><td>선별</td><td class="num">447</td><td class="num">84,880</td><td class="num">5,266</td><td>찍힘, 이물혼입</td></tr>
         </tbody>
-        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">—</td><td class="num">0.28%</td><td></td></tr></tfoot>
+        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">—</td><td class="num">2,800 ppm</td><td></td></tr></tfoot>
       </table>
     </div>
   </section>
@@ -425,27 +519,40 @@
       <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
       <div class="seg"><b>일별</b><b>주별</b><b class="on">월별</b></div>
     </div>
-    <div class="grid2">
-      <div class="panel"><div class="phead"><h2>공정별 구성</h2><span class="tot">4,820 천원</span></div>
-        <div class="pbody bars">
-          <div class="brow"><span class="nm">선별</span><div class="btrack"><div class="bfill" style="width:78%"></div></div><span class="vv">1,842</span></div>
-          <div class="brow"><span class="nm">소결</span><div class="btrack"><div class="bfill" style="width:56%"></div></div><span class="vv">1,320</span></div>
-          <div class="brow"><span class="nm">정형</span><div class="btrack"><div class="bfill" style="width:38%"></div></div><span class="vv">905</span></div>
-          <div class="brow"><span class="nm">성형</span><div class="btrack"><div class="bfill g" style="width:32%"></div></div><span class="vv">753</span></div>
-        </div>
+    <div class="panel">
+      <div class="phead"><h2>공정별 Scrap Cost (천원)</h2><span class="tot">합계 4,820 천원</span></div>
+      <div class="pbody" style="padding-bottom:6px;">
+        <svg viewBox="0 0 420 172" style="width:100%;height:auto;">
+          <text class="ax" x="2" y="17">2,000</text>
+          <text class="ax" x="2" y="78">1,000</text>
+          <line x1="30" y1="140" x2="412" y2="140" stroke="var(--bd)" stroke-width="1"/>
+          <rect class="bar cur" x="57"  y="20.3" width="40" height="119.7" rx="3"/>
+          <rect class="bar dim" x="152" y="54.2" width="40" height="85.8" rx="3"/>
+          <rect class="bar dim" x="247" y="81.2" width="40" height="58.8" rx="3"/>
+          <rect class="bar dim" x="342" y="91.1" width="40" height="48.9" rx="3" style="fill:var(--sec);opacity:.75;"/>
+          <text class="vlab" x="77"  y="16" text-anchor="middle">1,842</text>
+          <text class="vlab" x="172" y="50" text-anchor="middle">1,320</text>
+          <text class="vlab" x="267" y="77" text-anchor="middle">905</text>
+          <text class="vlab" x="362" y="87" text-anchor="middle">753</text>
+          <text class="ax" x="77"  y="156" text-anchor="middle">선별</text>
+          <text class="ax" x="172" y="156" text-anchor="middle">소결</text>
+          <text class="ax" x="267" y="156" text-anchor="middle">정형</text>
+          <text class="ax" x="362" y="156" text-anchor="middle">성형 (COPQ 제외)</text>
+        </svg>
       </div>
-      <div class="panel"><div class="phead"><h2>상세</h2></div>
-        <table>
-          <thead><tr><th>공정</th><th class="num">수량</th><th class="num">Scrap Cost(천원)</th><th>COPQ 포함</th></tr></thead>
-          <tbody>
-            <tr><td>선별</td><td class="num">447</td><td class="num">1,842</td><td><span class="badge bg-ok">포함</span></td></tr>
-            <tr><td>소결</td><td class="num">254</td><td class="num">1,320</td><td><span class="badge bg-ok">포함</span></td></tr>
-            <tr><td>정형</td><td class="num">205</td><td class="num">905</td><td><span class="badge bg-ok">포함</span></td></tr>
-            <tr><td>성형</td><td class="num">312</td><td class="num">753</td><td><span class="badge bg-hold">COPQ 제외</span></td></tr>
-          </tbody>
-          <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">4,820</td><td></td></tr></tfoot>
-        </table>
-      </div>
+      <div class="chart-legend"><span><span class="sq"></span>실적</span><span><span class="sq" style="background:var(--sec);"></span>성형 (COPQ 제외분)</span></div>
+    </div>
+    <div class="panel"><div class="phead"><h2>상세 데이터</h2></div>
+      <table>
+        <thead><tr><th>공정</th><th class="num">수량</th><th class="num">Scrap Cost(천원)</th><th>COPQ 포함</th></tr></thead>
+        <tbody>
+          <tr><td>선별</td><td class="num">447</td><td class="num">1,842</td><td><span class="badge bg-ok">포함</span></td></tr>
+          <tr><td>소결</td><td class="num">254</td><td class="num">1,320</td><td><span class="badge bg-ok">포함</span></td></tr>
+          <tr><td>정형</td><td class="num">205</td><td class="num">905</td><td><span class="badge bg-ok">포함</span></td></tr>
+          <tr><td>성형</td><td class="num">312</td><td class="num">753</td><td><span class="badge bg-hold">COPQ 제외</span></td></tr>
+        </tbody>
+        <tfoot><tr><td>합계</td><td class="num">1,218</td><td class="num">4,820</td><td></td></tr></tfoot>
+      </table>
     </div>
   </section>
 
@@ -453,9 +560,21 @@
   <section class="view" id="v-rcopq">
     <div style="display:flex;gap:10px;margin-bottom:16px;">
       <div class="seg"><b class="on">통합</b><b>VMS</b><b>TM</b></div>
-      <span style="font:500 12px/1.9 inherit;color:var(--n-400);">2026년 7월 · 분모 SVP 339,600 천원 <span class="fix">확정</span></span>
+      <span style="font:500 12px/1.9 inherit;color:var(--tx3);">2026년 7월 · 분모 SVP 339,600 천원 <span class="fix">확정</span></span>
     </div>
-    <div class="panel"><div class="phead"><h2>COPQ 구성 항목</h2><span class="tot">COPQ 1.42%</span></div>
+    <div class="panel">
+      <div class="phead"><h2>COPQ 구성 (천원)</h2><span class="tot">COPQ 1.42% · 목표 1.20%</span></div>
+      <div class="pbody bars" style="padding-bottom:12px;">
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Scrap Cost (성형 제외분)</span><div class="btrack"><div class="bfill" style="width:100%"></div></div><span class="vv">4,067</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Warranty</span><div class="btrack"><div class="bfill" style="width:28%"></div></div><span class="vv">1,150</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Customer Incident Cost</span><div class="btrack"><div class="bfill" style="width:17%"></div></div><span class="vv">690</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Quality Special Freight</span><div class="btrack"><div class="bfill" style="width:8%"></div></div><span class="vv">320</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Unplanned Insp. &amp; Sorting</span><div class="btrack"><div class="bfill" style="width:6%"></div></div><span class="vv">235</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">3rd Party Containment</span><div class="btrack"><div class="bfill" style="width:0%"></div></div><span class="vv">0</span></div>
+        <div class="brow" style="grid-template-columns:190px 1fr 60px;"><span class="nm">Variance</span><div class="btrack"><div class="bfill" style="width:0%"></div></div><span class="vv">0</span></div>
+      </div>
+    </div>
+    <div class="panel"><div class="phead"><h2>상세 데이터</h2></div>
       <table>
         <thead><tr><th>구성 항목</th><th class="num">금액(천원)</th><th class="num">SVP 대비</th><th>출처</th></tr></thead>
         <tbody>
@@ -473,7 +592,31 @@
     <div class="note">※ 검산용: 이번 달 성형공정 공정불량·셋팅불량 Scrap Cost <b>753 천원은 COPQ에서 제외</b>되었습니다. (KPI 카드의 Scrap Cost 4,820 천원은 전체 포함 금액)</div>
   </section>
 
-  <!-- ════ 13. 사용자 관리 ════ -->
+  <!-- ════ 13. 목표 관리 ════ -->
+  <section class="view" id="v-target">
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+      <div class="seg"><b>2025년</b><b class="on">2026년</b></div>
+      <div class="seg"><b class="on">통합</b><b>VMS PART</b><b>TM PART</b></div>
+      <span style="margin-left:auto;"><button class="btn btn-p">전체 저장</button></span>
+    </div>
+    <div class="panel"><div class="phead"><h2>지표별 목표 (2026년 · 통합)</h2></div>
+      <table>
+        <thead><tr><th>지표</th><th>단위</th><th class="num" style="width:180px;">목표값</th><th>적용</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>Scrap Cost</td><td>천원/월</td><td class="num"><input class="in" style="text-align:right;" value="4,500"></td><td><span class="badge bg-info">월 동일</span></td><td class="mono">대시보드 목표선</td></tr>
+          <tr><td>Scrap Quantity</td><td>EA/월</td><td class="num"><input class="in" style="text-align:right;" value="1,500"></td><td><span class="badge bg-info">월 동일</span></td><td></td></tr>
+          <tr><td>COPQ</td><td>%</td><td class="num"><input class="in" style="text-align:right;" value="1.20"></td><td><span class="badge bg-info">월 동일</span></td><td class="mono">대시보드 목표선</td></tr>
+          <tr><td>Customer Incident</td><td>건/월</td><td class="num"><input class="in" style="text-align:right;" value="0"></td><td><span class="badge bg-info">월 동일</span></td><td></td></tr>
+          <tr><td>Warranty</td><td>천원/월</td><td class="num"><input class="in" style="text-align:right;" value="1,000"></td><td><span class="badge bg-info">월 동일</span></td><td></td></tr>
+          <tr><td>공정불량율</td><td>ppm</td><td class="num"><input class="in" style="text-align:right;" value="2,500"></td><td><span class="badge bg-warn">파트별 입력</span></td><td class="mono">통합 목표 없음</td></tr>
+          <tr><td>셋팅불량율</td><td>ppm</td><td class="num"><input class="in" style="text-align:right;" value="1,500"></td><td><span class="badge bg-warn">파트별 입력</span></td><td class="mono">통합 목표 없음</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="hint">목표값은 대시보드 KPI 카드의 "목표 ○○" 표기와 추이 차트의 목표선(점선)에 사용됩니다. 년도·파트 탭을 바꿔 각각 입력합니다. (권한: 관리자)</div>
+  </section>
+
+  <!-- ════ 14. 사용자 관리 ════ -->
   <section class="view" id="v-users">
     <div class="panel"><div class="phead"><h2>사용자 목록</h2><span class="sp"></span><button class="btn btn-p btn-sm" style="margin-left:auto;">+ 사용자 등록</button></div>
       <table>
@@ -486,10 +629,10 @@
         </tbody>
       </table>
     </div>
-    <div class="note">권한: <b>조회자</b> 대시보드·리포트 조회 / <b>입력자</b> +데이터 입력·업로드·100EA 검토 승인 / <b>관리자</b> +마스터·사용자 관리</div>
+    <div class="note">권한: <b>조회자</b> 대시보드·리포트 조회 / <b>입력자</b> +데이터 입력·업로드·100EA 검토 승인 / <b>관리자</b> +마스터·목표·사용자 관리</div>
   </section>
 
-  <!-- ════ 14. 로그인 ════ -->
+  <!-- ════ 15. 로그인 ════ -->
   <section class="view" id="v-login">
     <div class="login-wrap">
       <div class="login-card">
@@ -515,7 +658,8 @@
     svp:["데이터 입력","SVP 입력"], claim:["데이터 입력","Claim 입력"],
     incident:["데이터 입력","Customer Incident 관리"],
     rdefect:["집계/리포트","공정별 불량현황"], rscrap:["집계/리포트","공정별 Scrap Cost"],
-    rcopq:["집계/리포트","COPQ 상세"], users:["관리","사용자 관리"], login:["", "로그인"]
+    rcopq:["집계/리포트","COPQ 상세"], target:["관리","목표 관리"],
+    users:["관리","사용자 관리"], login:["","로그인"]
   };
   document.querySelectorAll(".nav").forEach(n => n.addEventListener("click", () => {
     document.querySelectorAll(".nav").forEach(x => x.classList.remove("on"));
@@ -527,6 +671,18 @@
     document.getElementById("title").textContent = meta[v][1];
     window.scrollTo(0,0);
   }));
+
+  // 다크모드 토글 (모든 화면 공통 · 상단바 로그인 정보 왼쪽)
+  const btn = document.getElementById("themeBtn");
+  const root = document.documentElement;
+  function setTheme(t) {
+    if (t === "dark") { root.setAttribute("data-theme","dark"); btn.textContent = "☀ 라이트"; }
+    else { root.removeAttribute("data-theme"); btn.textContent = "🌙 다크"; }
+    try { localStorage.setItem("qms-theme", t); } catch(e) {}
+  }
+  btn.addEventListener("click", () =>
+    setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark"));
+  try { setTheme(localStorage.getItem("qms-theme") || "light"); } catch(e) {}
 </script>
 </body>
 </html>
