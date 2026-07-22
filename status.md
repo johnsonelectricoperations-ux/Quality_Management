@@ -4,32 +4,30 @@
 > 상세 작업 목록은 `task.md`.
 
 ## 현재 마일스톤
-- **M0: 프로젝트 골격 + 샘플 데이터** (진행 중)
+- **M1~M6 완료** (백엔드 + 웹 앱 동작·검증). 다음: **M7 배포 가이드** + 입력 화면 직접입력 폼 보강.
 
 ## 최근 로그
 
 ### 2026-07-22
-- 목표: 시스템 실제 구현 착수. task.md/status.md로 진행 관리 시작.
+- 목표: 시스템 실제 구현 (Excel 샘플 → DB → 계산 → 웹).
 - 완료:
-  - task.md / status.md 생성
-- 진행 중:
-  - 프로젝트 골격, 샘플 Excel 데이터 생성기
+  - M0 골격 + 샘플 Excel 생성기 (scripts/gen_sample.py, sample_data/)
+  - M1 DB 스키마(app/db.py) + Excel 적재/검증(app/ingest.py) + 로그인/3권한
+  - M3 배분 계산엔진(app/calc.py) — 정수 배분(찍힘40→소결20/정형20 검증)
+  - M4 KPI 집계 — FY 매핑, Scrap Cost/Qty%·COPQ%·불량율 ppm, 분모 SVP/추정
+  - M5 대시보드 — KPI 카드·롤링7개월(FY계단목표)·주별·TOP5 (실데이터)
+  - M6 리포트(KPI현황·공정별) + 목표관리 + 사용자관리 + 데이터입력 업로드
+  - Playwright 검증: 로그인→전화면 200, 차트 실데이터 렌더, JS 오류 0
 - 다음 할 일:
-  - M0 마무리 → M1(DB 스키마 + 마스터 업로드 + 로그인)
+  - M7: 포트 5003 상시구동(Windows) 가이드 + DB 백업 스크립트
+  - 입력 화면에 '직접입력 폼'(현재는 Excel 업로드 위주) 추가
+  - 대시보드 지표 선택 토글(현재 COPQ 고정) 등 UX
 - 주의:
-  - TM-NO는 전 구간 문자열 처리(날짜 변환 금지)
-  - COPQ는 성형공정 배분분 제외 (공정 마스터 COPQ제외여부 플래그)
-  - 목표·집계는 FY(4월~익년3월) 기준, 추이 차트는 최근 7개월 롤링
-
-## 실행 방법 (예정)
-```
-python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python scripts/gen_sample.py         # 샘플 Excel 생성
-python -m app.seed                   # 샘플 → DB 적재 (개발용)
-uvicorn app.main:app --port 5003     # http://localhost:5003
-```
+  - 실행: python scripts/gen_sample.py → python -m app.seed → uvicorn app.main:app --port 5003
+  - 샘플 COPQ가 다소 높음(Claim 샘플값 큼) — 실데이터로 조정됨. 디자인/로직은 정상.
+  - 목표 FY는 2자리(26/27) 저장, calc.fy_of는 4자리(2027) → target_val에서 %100 정규화.
 
 ## 열려있는 결정/확인 대기
-- 마스터 기준단가 단위: '원' 가정 (집계 시 천원 환산) — 실제 단위 확인 필요
-- TOP5 불량유형 표기: 상위 3개 태그 (전체/접기 여부 확인 필요)
+- 마스터 기준단가 단위: '원' 가정 (집계 천원 환산)
+- TOP5 불량유형: 상위 3개 태그
+- 대시보드 '지표 선택'(COPQ 외) 필요 여부
