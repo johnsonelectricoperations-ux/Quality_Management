@@ -1,0 +1,14 @@
+# Windows batch files: store verbatim (CRLF preserved) so ZIP downloads keep CRLF
+# and git never applies EOL conversion. Content is pure ASCII.
+*.bat -text
+
+# Keep Unix line endings for these.
+*.py text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+
+# Excel templates/samples are binary.
+*.xlsx binary
