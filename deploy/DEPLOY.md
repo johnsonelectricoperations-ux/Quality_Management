@@ -34,6 +34,11 @@ pip install -r requirements.txt
 python -m app.db            REM 빈 DB + 기본 계정(admin/editor/viewer)
 ```
 
+> **PowerShell에서 `activate` 오류가 나면**(ExecutionPolicy 차단): 활성화하지 말고
+> venv의 python을 직접 호출하세요 — `venv\Scripts\python.exe scripts\gen_sample.py` 처럼.
+> 또는 `cmd`를 쓰거나, 이번 세션만 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` 후 활성화.
+> `.bat` 파일들은 PowerShell 정책과 무관하게 실행됩니다(`.\deploy\run_server.bat`).
+
 ### 1-1. 데이터 채우기
 - **데모로 먼저 보고 싶다면**:
   ```bat
