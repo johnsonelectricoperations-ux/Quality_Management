@@ -410,6 +410,57 @@ def ingest_scrap_db(conn, path):
     return len(rows), {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped}
 
 
+_OUTSOURCE_PART = {"1part": "VMS PART", "2part": "TM PART"}
+# 외주 합계 컬럼(헤더명) → 집계공정. 파일이 VBA로 미리 계산한 값을 그대로 사용.
+_OUTSOURCE_SUMS = [("성형불량 합계", "성형"), ("소결불량 합계", "소결"), ("기타 합계", "기타")]
+
+
+def ingest_outsource_xlsm(conn, path, quarantine_100=False):
+    """외주소재불량 xlsm(Sheet1) 적재. 파일이 계산한 성형/소결/기타 합계를 그대로
+    집계공정 공정불량 수량으로 반영(별도 외주불량율 없음). 공정불량(kind='공정').
+    단일 TM×단일 공정합계 ≥100 → pending(검토 대기).
+    전체 재스캔 idempotent(source='outsource' 삭제 후 재적재).
+    반환: (건수, pending수, errors)."""
+    wb = load_workbook(path, data_only=True)
+    ws = wb["Sheet1"] if "Sheet1" in wb.sheetnames else wb.worksheets[0]
+    headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    idx = {h: j + 1 for j, h in enumerate(headers)}
+    need = ["반입예정일자", "TM-NO", "Part"] + [h for h, _ in _OUTSOURCE_SUMS]
+    miss = [h for h in need if h not in idx]
+    if miss:
+        return 0, 0, [f"Sheet1 헤더 누락: {', '.join(miss)}"]
+
+    rows, pend = [], 0
+    for r in range(2, ws.max_row + 1):
+        dv = ws.cell(row=r, column=idx["반입예정일자"]).value
+        if dv in (None, ""):
+            continue
+        d = _d(dv)
+        part = _OUTSOURCE_PART.get(str(ws.cell(row=r, column=idx["Part"]).value or "").strip().lower(), "")
+        if not part:
+            continue
+        tmv = ws.cell(row=r, column=idx["TM-NO"]).value
+        if isinstance(tmv, (datetime.date, datetime.datetime)):
+            tm = ""                                   # TM-NO 날짜변환 → 제품 미지정(파트집계)
+        else:
+            tm = base_tmno(tmv)                       # 없으면 '' → 폐기처럼 파트 단위 집계
+        for hdr, proc in _OUTSOURCE_SUMS:
+            qty = _int(ws.cell(row=r, column=idx[hdr]).value)
+            if qty <= 0:
+                continue
+            status = "pending" if (quarantine_100 and qty >= 100) else "confirmed"
+            if status == "pending":
+                pend += 1
+            rows.append((d, tm, f"외주 {proc}불량", qty, part, proc, "공정",
+                         "outsource", status, ""))
+    conn.execute("DELETE FROM defect_entry WHERE source='outsource'")
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    return len(rows), pend, []
+
+
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)
 
 
