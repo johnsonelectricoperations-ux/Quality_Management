@@ -37,9 +37,12 @@ CREATE TABLE IF NOT EXISTS defect_type (
 CREATE TABLE IF NOT EXISTS defect_entry (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
   defect_name TEXT NOT NULL, qty INTEGER NOT NULL,
-  source TEXT NOT NULL DEFAULT 'direct',   -- direct|outsource|discard
+  process TEXT NOT NULL DEFAULT '',         -- 집계공정(사내/외주/폐기는 명시, 공란=배분 폴백)
+  kind TEXT NOT NULL DEFAULT '',            -- 공정|셋팅 (공란=불량유형 마스터에서 유추)
+  source TEXT NOT NULL DEFAULT 'direct',    -- direct|outsource|discard
   status TEXT NOT NULL DEFAULT 'confirmed', -- confirmed|pending
-  reg_user TEXT DEFAULT ''
+  reg_user TEXT DEFAULT '',
+  batch_key TEXT DEFAULT ''                 -- 폴더 재적재 idempotent 키(파트|공정|구분|일자)
 );
 CREATE TABLE IF NOT EXISTS production (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
@@ -135,6 +138,9 @@ def init_db():
     _add_col(conn, "process", "ord", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "product", "weight", "REAL NOT NULL DEFAULT 0")
     _add_col(conn, "product_route", "op_code", "TEXT DEFAULT ''")
+    _add_col(conn, "defect_entry", "process", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "defect_entry", "kind", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "defect_entry", "batch_key", "TEXT DEFAULT ''")
     _migrate_defect_type(conn)
     conn.commit()
     _ensure_default_admin(conn)

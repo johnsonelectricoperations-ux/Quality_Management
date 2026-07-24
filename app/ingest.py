@@ -219,6 +219,112 @@ def ingest_defect_master(conn, path):
     return len(data), []
 
 
+# ── 사내불량 일일 양식(폴더 스캔) ──────────────────────
+import os
+import re
+
+# 파일명: {PART}_{공정}_{구분}불량_{YYYYMMDD}.xlsx
+_DAILY_RE = re.compile(r"^(1PART|2PART)_(.+?)_(공정|셋팅)불량_(\d{8})$")
+_PART_TOKEN = {"1PART": "VMS PART", "2PART": "TM PART"}
+_DAILY_PROCS = {
+    "VMS PART": {"성형", "소결", "정형", "가공", "압입", "밴딩", "선별공정"},
+    "TM PART": {"성형", "소결", "정형", "가공", "선별공정"},
+}
+
+
+def parse_daily_filename(fname):
+    """'1PART_성형_공정불량_20260724.xlsx' → (part, proc, kind, date, batch_key) 또는 None."""
+    stem = os.path.splitext(os.path.basename(fname))[0]
+    mo = _DAILY_RE.match(stem)
+    if not mo:
+        return None
+    part = _PART_TOKEN[mo.group(1)]
+    proc, kind, ymd = mo.group(2), mo.group(3), mo.group(4)
+    d = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}"
+    return part, proc, kind, d, f"{part}|{proc}|{kind}|{d}"
+
+
+def _find_header_row(ws, key="TM-NO"):
+    for r in range(1, min(ws.max_row, 15) + 1):
+        for c in range(1, min(ws.max_column, 10) + 1):
+            if str(ws.cell(row=r, column=c).value or "").strip() == key:
+                return r
+    return None
+
+
+def ingest_daily_defect_file(conn, path, user=""):
+    """사내불량 일일 양식 1개 적재. 행=TM-NO, 열=불량유형, 셀=수량.
+    발생공정이 지정된 유형은 그 공정, 공란이면 파일의 공정(시트)에 귀속.
+    같은 batch_key(파트|공정|구분|일자)는 삭제 후 재적재(idempotent).
+    반환: (적재건수, errors[list])."""
+    parsed = parse_daily_filename(path)
+    if not parsed:
+        return 0, [f"파일명 형식 오류: {os.path.basename(path)} "
+                   f"(예: 1PART_성형_공정불량_20260724.xlsx)"]
+    part, sheet_proc, kind, d, batch_key = parsed
+    if sheet_proc not in _DAILY_PROCS.get(part, set()):
+        return 0, [f"{os.path.basename(path)}: '{sheet_proc}'은 {part}의 공정이 아님"]
+
+    # 마스터: (part,kind,name) → 발생공정
+    dmap = {(r["part"], r["kind"], r["name"]): (r["process"] or "").strip()
+            for r in conn.execute("SELECT part,kind,name,process FROM defect_type")}
+
+    wb = load_workbook(path, data_only=True)
+    ws = wb["DATA"] if "DATA" in wb.sheetnames else wb.worksheets[0]
+    hr = _find_header_row(ws)
+    if hr is None:
+        return 0, [f"{os.path.basename(path)}: 헤더행(TM-NO)을 찾을 수 없음"]
+    headers = [str(ws.cell(row=hr, column=c).value or "").strip()
+               for c in range(1, ws.max_column + 1)]
+    tm_col = headers.index("TM-NO") + 1
+    # 불량유형 열 = TM-NO/품명/No 이후의 헤더
+    fixed = {"No", "TM-NO", "품명", ""}
+    dcols = [(c + 1, headers[c]) for c in range(len(headers)) if headers[c] not in fixed]
+
+    rows, errors = [], []
+    for r in range(hr + 1, ws.max_row + 1):
+        tmv = ws.cell(row=r, column=tm_col).value
+        if isinstance(tmv, (datetime.date, datetime.datetime)):
+            errors.append(f"{os.path.basename(path)} {r}행: TM-NO가 날짜로 변환됨({tmv})")
+            continue
+        tmno = base_tmno(tmv)
+        if not tmno or tmno == "합계":
+            continue
+        for c, name in dcols:
+            qty = _int(ws.cell(row=r, column=c).value)
+            if qty <= 0:
+                continue
+            key = (part, kind, name)
+            if key not in dmap:
+                errors.append(f"{os.path.basename(path)}: 불량유형 '{name}'이 {part} {kind} 마스터에 없음")
+                continue
+            proc = dmap[key] or sheet_proc          # 발생공정 지정 우선, 없으면 시트 공정
+            rows.append((d, tmno, name, qty, proc, kind, "direct", user, batch_key))
+    if errors:
+        return 0, errors
+    conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,process,kind,source,status,reg_user,batch_key) "
+        "VALUES(?,?,?,?,?,?,?, 'confirmed', ?,?)", rows)
+    conn.commit()
+    return len(rows), []
+
+
+def ingest_daily_defect_folder(conn, folder, user=""):
+    """폴더 내 사내불량 일일 양식 전체 스캔 적재. 반환: (파일수, 총건수, 상세[list])."""
+    detail, files, total = [], 0, 0
+    for fn in sorted(os.listdir(folder)):
+        if not fn.lower().endswith((".xlsx", ".xlsm")):
+            continue
+        if not _DAILY_RE.match(os.path.splitext(fn)[0]):
+            continue
+        n, errs = ingest_daily_defect_file(conn, os.path.join(folder, fn), user)
+        files += 1
+        total += n
+        detail.append((fn, n, errs))
+    return files, total, detail
+
+
 # ── 트랜잭션 ───────────────────────────────────────────
 def ingest_defect_entries(conn, path, source="direct", user="", quarantine_100=False):
     """불량입력/외주소재불량/폐기불량. quarantine_100: 단일TM×단일불량 ≥100 → pending."""

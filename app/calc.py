@@ -11,6 +11,8 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
+from . import db
+
 
 def base_tmno(tm):
     """TM-NO 정규화: 접미 알파벳 제거해 base로 통일.
@@ -135,6 +137,18 @@ class Masters:
         dt = self.defect.get(defect_name)
         return dt[0] if dt else "공정"
 
+    def resolve(self, tm_no, defect_name, qty, stored_process="", stored_kind=""):
+        """→ (kind, [(집계공정, qty)]).
+        저장된 공정·구분(사내/외주/폐기)이 있으면 그대로 집계공정 버킷에 100%,
+        없으면 기존 배분(allocate)+kind_of 폴백. 결과 공정은 항상 집계버킷으로 정규화."""
+        sp = (stored_process or "").strip()
+        sk = (stored_kind or "").strip()
+        kind = sk or self.kind_of(defect_name)
+        if sp:
+            return kind, [(db.bucket_of(sp), qty)]
+        allocs = [(db.bucket_of(p), q) for p, q in self.allocate(tm_no, defect_name, qty)]
+        return kind, allocs
+
 
 # ── 일 단위 집계 (배분·비용 포함) ───────────────────────
 def compute_daily(conn, m: Masters):
@@ -145,19 +159,21 @@ def compute_daily(conn, m: Masters):
     }))
     pdetail = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})  # (part,proc) 누적(전체기간)
 
-    for r in conn.execute("SELECT d,tm_no,defect_name,qty FROM defect_entry WHERE status='confirmed'"):
+    for r in conn.execute(
+            "SELECT d,tm_no,defect_name,qty,process,kind FROM defect_entry WHERE status='confirmed'"):
         prod = m.product.get(r["tm_no"])
         if not prod:
             continue
         part = prod[1]
-        kind = m.kind_of(r["defect_name"])
+        kind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
+                                 r["process"], r["kind"])
         cell = daily[r["d"]][part]
         cell["scrap_qty"] += r["qty"]
         if kind == "셋팅":
             cell["set_qty"] += r["qty"]
         else:
             cell["proc_qty"] += r["qty"]
-        for proc, q in m.allocate(r["tm_no"], r["defect_name"], r["qty"]):
+        for proc, q in allocs:
             price = m.price.get((r["tm_no"], proc), 0)
             cost = q * price / 1000.0                      # 원 → 천원
             cell["scrap_cost"] += cost
@@ -274,15 +290,18 @@ def process_breakdown(conn, m, y, mth, part, kind):
     parts = _parts_for(part)
     dates = set(_dates_in_month(y, mth))
     per = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})
-    for r in conn.execute("SELECT d,tm_no,defect_name,qty FROM defect_entry WHERE status='confirmed'"):
+    for r in conn.execute(
+            "SELECT d,tm_no,defect_name,qty,process,kind FROM defect_entry WHERE status='confirmed'"):
         if r["d"] not in dates:
             continue
         prod = m.product.get(r["tm_no"])
         if not prod or prod[1] not in parts:
             continue
-        if m.kind_of(r["defect_name"]) != kind:
+        rkind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
+                                  r["process"], r["kind"])
+        if rkind != kind:
             continue
-        for proc, q in m.allocate(r["tm_no"], r["defect_name"], r["qty"]):
+        for proc, q in allocs:
             price = m.price.get((r["tm_no"], proc), 0)
             per[proc]["qty"] += q
             per[proc]["cost"] += q * price / 1000.0

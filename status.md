@@ -60,6 +60,23 @@
 - **구현 대기(다음)**: defect_type에 part 컬럼, 배분기준 형식D 파서, 마스터 업로드 2시트 처리,
   '기타' 공정 신설, 사내 공정/셋팅불량 직접입력 화면(공정 선택→100%).
 
+### 2026-07-24 코딩 시작 — stage①③ 구현·검증 완료
+- **확정 모델**: 집계공정=성형·소결·정형·가공·**기타**(=후처리=압입+밴딩+선별). 물리공정→기타 버킷.
+  불량유형 공정귀속: 발생공정 **지정**=그 공정 고정 / **공란**=입력 시트의 공정.
+- **stage① 마스터 개편(커밋 414b982)**:
+  · db: CANON_PROCESSES=집계공정 5종, PHYS_TO_BUCKET/bucket_of(), defect_type part 컬럼+UNIQUE(part,kind,name) 재생성 마이그레이션
+  · ingest_defect_master: DATA_1PART/2PART 2시트, 발생공정 공란 허용, calc.parse_alloc_rule이 '입력공정 100%'=빈배분
+  · 검증: 실제 마스터 85건(VMS42/TM43) 오류0
+- **stage③ 사내불량 폴더 적재**:
+  · db: defect_entry에 process·kind·batch_key 컬럼(마이그레이션)
+  · calc: Masters.resolve() — 저장 공정/구분 우선, 없으면 배분 폴백. compute_daily·process_breakdown이 이를 사용
+  · ingest_daily_defect_file/_folder: 파일명 파싱(PART_공정_구분_YYYYMMDD), wide→long,
+    발생공정 지정 유형은 그 공정·공란은 시트 공정, batch_key로 삭제후재적재(멱등)
+  · 검증: 찍힘(공란)→성형, 산화불량(발생공정=소결)→소결, 눌림(압입)→기타, 셋팅 구분,
+    재적재 멱등(4건 유지). proc_ppm 220·set_ppm 30·성형10/소결5/기타7 정상
+- **다음**: ④ 생산 xlsx ingest(C/I/J·파일명) → ⑤ 폐기 db('해당') → ⑥ 외주 xlsm(성형/소결/기타)
+  → ⑦ 기준단가 초기세팅(집계공정 키) → ⑧ 폴더적재 화면·대시보드 재검증.
+
 ### 2026-07-24 사내 불량 일일 입력 양식 생성 (양식만, 적재코드 별도)
 - 요구: 사내 공정/셋팅 불량을 **하루 단위 별도 파일**로 입력.
   · 파일 = 파트 × 공정 × 구분(공정/셋팅) × 날짜. 파일명 `1PART_성형_공정불량_20260724.xlsx`.
