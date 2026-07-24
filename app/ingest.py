@@ -11,7 +11,7 @@ import datetime
 import io
 from openpyxl import load_workbook
 
-from .calc import parse_alloc_rule
+from .calc import parse_alloc_rule, base_tmno
 from . import db
 
 # CSV 제품목록의 공정 컬럼 (좌→우 = 공정 순서)
@@ -129,7 +129,7 @@ def ingest_product_csv(conn, path, part):
     for r in rows[1:]:
         if not r or not str(r[idx["TM-NO"]]).strip():
             continue
-        tm = str(r[idx["TM-NO"]]).strip()
+        tm = base_tmno(r[idx["TM-NO"]])       # 변형(598-10A)→base(598-10) 합침
         name = str(r[idx["품명"]]).strip() if idx.get("품명", -1) < len(r) else ""
         weight = 0.0
         if "중량" in idx and idx["중량"] < len(r):

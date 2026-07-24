@@ -522,7 +522,7 @@ async def product_save(request: Request):
     if u is None or u["role"] != "admin":
         return RedirectResponse("/admin/products", status_code=303)
     form = await request.form()
-    tm = (form.get("tm_no") or "").strip()
+    tm = calc.base_tmno(form.get("tm_no") or "")   # 변형 접미 알파벳 제거(base로 합침)
     name = (form.get("name") or "").strip()
     part = form.get("part") or "VMS PART"
     orig = form.get("orig_tm") or ""
