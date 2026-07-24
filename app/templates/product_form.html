@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post" action="/admin/products/save">
+{% if mode=='edit' %}<input type="hidden" name="orig_tm" value="{{ p.tm_no }}">{% endif %}
+<div class="panel"><div class="phead"><h2>{{ '제품 등록' if mode=='new' else '제품 수정' }}</h2>
+  <a class="btn btn-s btn-sm" href="/admin/products" style="margin-left:auto;text-decoration:none;">← 목록</a></div>
+  <div class="pbody">
+    <div class="frow" style="grid-template-columns:180px 1fr 150px 120px;">
+      <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ p.tm_no }}" placeholder="예: 1545-01" required></div>
+      <div class="f"><label>품명</label><input class="in" name="name" value="{{ p.name }}"></div>
+      <div class="f"><label>파트</label><select class="in" name="part">
+        <option value="VMS PART" {{ 'selected' if p.part=='VMS PART' }}>VMS PART</option>
+        <option value="TM PART" {{ 'selected' if p.part=='TM PART' }}>TM PART</option></select></div>
+      <div class="f"><label>중량</label><input class="in" name="weight" value="{{ p.weight or '' }}"></div>
+    </div>
+    <div class="hint">TM-NO는 "TM" 접두어 없이 입력(예: 1545-01). 저장 시 문자로 처리되어 날짜 변환이 방지됩니다.</div>
+  </div>
+</div>
+
+<div class="panel"><div class="phead"><h2>공정 라우팅</h2>
+  <span class="tot">체크한 공정이 표준 순서대로 라우팅됩니다</span></div>
+  <table>
+    <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th>COPQ</th><th class="num" style="width:160px;">기준단가(원, 누적)</th><th style="width:140px;">원본 코드</th></tr></thead>
+    <tbody>
+    {% for pr in procs %}
+      {% set r = route.get(pr.name) %}
+      <tr>
+        <td><input type="checkbox" name="use_{{ pr.name }}" value="1" {{ 'checked' if r }}></td>
+        <td>{{ loop.index }}. {{ pr.name }}</td>
+        <td>{% if pr.excl %}<span class="badge bg-hold">제외</span>{% else %}포함{% endif %}</td>
+        <td class="num"><input class="in" style="text-align:right;" name="price_{{ pr.name }}" value="{{ r.unit_price if r and r.unit_price else '' }}"></td>
+        <td class="mono"><input class="in" name="code_{{ pr.name }}" value="{{ r.op_code if r else '' }}" style="font-size:12px;"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="pbody"><button class="btn btn-p">저장</button>
+    <span class="hint" style="margin-left:10px;">기준단가는 아직 미확정(다른 파일에서 확정 예정)이면 비워두어도 됩니다.</span></div>
+</div>
+</form>
+{% endblock %}

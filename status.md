@@ -4,7 +4,24 @@
 > 상세 작업 목록은 `task.md`.
 
 ## 현재 마일스톤
-- **M0~M7 완료** (구현 + 배포 가이드). 잔여(선택): 입력 화면 직접입력 폼, 대시보드 지표 선택 토글.
+- **M0~M7 완료** + **실데이터 반영 착수**. 사용자 실제 파일(templates/)을 하나씩 반영 중.
+
+### 2026-07-24 실데이터 반영 (1) 제품 목록 CSV
+- 입력 파일: `templates/TM-NO_List_VMS Part.CSV`(2,675품목), `TM-NO_List_TM Part.CSV`(84품목)
+  - 인코딩 CP949, wide 형식. 컬럼: TM-NO·품명·중량·[성형·소결·정형·가공·압입·밴딩·후처리]
+  - 파트=파일명, 공정 칸에 값(코드) 있으면 라우팅 포함(좌→우 순서)
+- **실제 공정 7종**: 성형·소결·정형·가공·압입·밴딩·후처리 (성형=COPQ 제외 기본)
+- 반영:
+  - db: product.weight, product_route.op_code, process.ord 컬럼 추가(+마이그레이션),
+    db.ensure_processes()/CANON_PROCESSES(7공정)
+  - ingest.ingest_product_csv(cp949 wide 파서)
+  - 화면 신설: **제품 마스터**(/admin/products: CSV 가져오기·검색·페이징·등록/수정/삭제),
+    **공정 관리**(/admin/processes), 메뉴 추가(관리 그룹)
+  - calc.process_breakdown → 공정 순서 DB(ord) 기반 동적화
+  - 검증: 실제 CSV 2,759품목 import, 화면 렌더(라우팅/코드/중량/COPQ) 정상
+- **미확정(다음 파일에서)**: 공정별 **기준단가**(현재 0, Scrap Cost 계산에 필요) —
+  공정 칸 코드가 단가인지/작업번호인지 확인 필요. xlsx/xlsm/scrap_data.db 설명 대기.
+- 주의: 데모 seed(gen_sample.py)는 아직 옛 4공정 기준 — 실운영은 실제 CSV import 사용.
 
 ### M7 배포 (2026-07-22 완료)
 - deploy/: setup.bat, run_server.bat, _service.bat, register_tasks.bat(작업 스케줄러),

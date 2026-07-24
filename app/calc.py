@@ -282,9 +282,15 @@ def process_breakdown(conn, m, y, mth, part, kind):
         pr = m.product.get(r["tm_no"])
         if pr and pr[1] in parts:
             prod_qty += r["s"]
+    # 공정 순서는 process 마스터(ord) 기준
+    proc_order = [r["name"] for r in conn.execute(
+        "SELECT name FROM process WHERE part=? ORDER BY ord, name", (parts[0],))]
+    if not proc_order:
+        proc_order = sorted(per.keys())
     rows = []
-    for proc in ["성형", "소결", "정형", "선별"]:
-        d = per.get(proc, {"qty": 0, "cost": 0.0, "excl": proc in {"성형"}})
+    for proc in proc_order:
+        excl_default = any((p, proc) in m.exclude for p in parts)
+        d = per.get(proc, {"qty": 0, "cost": 0.0, "excl": excl_default})
         ppm = round(d["qty"] / prod_qty * 1_000_000) if prod_qty else 0
         rows.append({"process": proc, "qty": d["qty"], "prod": prod_qty,
                      "ppm": ppm, "cost": round(d["cost"]), "excl": d["excl"]})

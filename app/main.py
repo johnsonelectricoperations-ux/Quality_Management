@@ -373,15 +373,16 @@ def masters(request: Request):
     if g:
         return g
     conn = db.connect()
-    proc = [dict(r) for r in conn.execute("SELECT * FROM process ORDER BY part,name")]
+    proc = [dict(r) for r in conn.execute("SELECT * FROM process ORDER BY part,ord,name")]
+    prod_total = conn.execute("SELECT COUNT(*) c FROM product").fetchone()["c"]
     prod = [dict(r) for r in conn.execute(
         "SELECT p.tm_no,p.name,p.part,COUNT(r.id) steps FROM product p "
-        "LEFT JOIN product_route r ON r.tm_no=p.tm_no GROUP BY p.tm_no ORDER BY p.tm_no")]
+        "LEFT JOIN product_route r ON r.tm_no=p.tm_no GROUP BY p.tm_no ORDER BY p.tm_no LIMIT 20")]
     dtypes = [dict(r) for r in conn.execute("SELECT * FROM defect_type ORDER BY kind,name")]
     conn.close()
-    return render(request, "masters.html", u, active=None, heading="마스터 관리",
-                  crumb="관리", pending=pending_count(), proc=proc, prod=prod, dtypes=dtypes,
-                  can_edit=(u["role"] == "admin"))
+    return render(request, "masters.html", u, active="masters", heading="마스터 업로드",
+                  crumb="관리", pending=pending_count(), proc=proc, prod=prod, prod_total=prod_total,
+                  dtypes=dtypes, can_edit=(u["role"] == "admin"))
 
 
 @app.post("/masters/upload")
@@ -414,6 +415,210 @@ async def masters_upload(request: Request, kind: str = Form(...), file: UploadFi
         os.remove(path)
     q = ("?msg=" + msg) if msg else ("?err=" + err)
     return RedirectResponse("/masters" + q, status_code=303)
+
+
+# ── 제품 마스터 관리 (CSV 가져오기 + 등록/수정/삭제) ────
+PAGE_SIZE = 50
+
+
+def _proc_options(conn):
+    """라우팅 체크박스용: 공정명(고유) 순서·COPQ제외."""
+    return [dict(r) for r in conn.execute(
+        "SELECT name, MIN(ord) o, MAX(copq_exclude) excl FROM process GROUP BY name ORDER BY o, name")]
+
+
+@app.get("/admin/products", response_class=HTMLResponse)
+def products_list(request: Request, q: str = "", part: str = "", page: int = 1, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    where, args = [], []
+    if q:
+        where.append("(p.tm_no LIKE ? OR p.name LIKE ?)"); args += [f"%{q}%", f"%{q}%"]
+    if part in ("VMS PART", "TM PART"):
+        where.append("p.part=?"); args.append(part)
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    total = conn.execute(f"SELECT COUNT(*) c FROM product p {wsql}", args).fetchone()["c"]
+    page = max(1, page)
+    off = (page - 1) * PAGE_SIZE
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT p.tm_no,p.name,p.part,p.weight, "
+        f"(SELECT GROUP_CONCAT(process,'→') FROM (SELECT process FROM product_route "
+        f" WHERE tm_no=p.tm_no ORDER BY seq)) route "
+        f"FROM product p {wsql} ORDER BY p.part,p.tm_no LIMIT ? OFFSET ?", args + [PAGE_SIZE, off])]
+    conn.close()
+    pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    return render(request, "products.html", u, active="products", heading="제품 마스터",
+                  crumb="관리", pending=pending_count(), rows=rows, total=total,
+                  q=q, part=part, page=page, pages=pages,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+
+
+@app.post("/admin/products/import")
+async def products_import(request: Request, part: str = Form(...), file: UploadFile = File(...)):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/products", status_code=303)
+    path = os.path.join("/tmp", "qms_csv_" + secrets.token_hex(4))
+    with open(path, "wb") as f:
+        f.write(await file.read())
+    conn = db.connect()
+    msg = err = ""
+    try:
+        n, new = ingest.ingest_product_csv(conn, path, part)
+        msg = f"{part} 제품 {n}건 반영 (신규 {new})"
+    except Exception as e:
+        err = f"가져오기 실패: {e}"
+    finally:
+        conn.close()
+        os.remove(path)
+    return RedirectResponse(f"/admin/products?{'msg='+msg if msg else 'err='+err}", status_code=303)
+
+
+@app.get("/admin/products/new", response_class=HTMLResponse)
+def product_new(request: Request):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/products", status_code=303)
+    conn = db.connect()
+    procs = _proc_options(conn)
+    conn.close()
+    return render(request, "product_form.html", u, active="products", heading="제품 등록",
+                  crumb="관리 / 제품 마스터", pending=pending_count(), mode="new",
+                  p={"tm_no": "", "name": "", "part": "VMS PART", "weight": 0},
+                  procs=procs, route={})
+
+
+@app.get("/admin/products/{tm}/edit", response_class=HTMLResponse)
+def product_edit(request: Request, tm: str):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/products", status_code=303)
+    conn = db.connect()
+    p = conn.execute("SELECT * FROM product WHERE tm_no=?", (tm,)).fetchone()
+    if not p:
+        conn.close()
+        return RedirectResponse("/admin/products?err=제품 없음", status_code=303)
+    route = {r["process"]: dict(r) for r in conn.execute(
+        "SELECT process,unit_price,op_code FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
+    procs = _proc_options(conn)
+    conn.close()
+    return render(request, "product_form.html", u, active="products", heading="제품 수정",
+                  crumb="관리 / 제품 마스터", pending=pending_count(), mode="edit",
+                  p=dict(p), procs=procs, route=route)
+
+
+@app.post("/admin/products/save")
+async def product_save(request: Request):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/products", status_code=303)
+    form = await request.form()
+    tm = (form.get("tm_no") or "").strip()
+    name = (form.get("name") or "").strip()
+    part = form.get("part") or "VMS PART"
+    orig = form.get("orig_tm") or ""
+    if not tm:
+        return RedirectResponse("/admin/products?err=TM-NO 필수", status_code=303)
+    try:
+        weight = float(form.get("weight") or 0)
+    except ValueError:
+        weight = 0.0
+    conn = db.connect()
+    procs = _proc_options(conn)
+    if orig and orig != tm:
+        conn.execute("DELETE FROM product WHERE tm_no=?", (orig,))
+        conn.execute("DELETE FROM product_route WHERE tm_no=?", (orig,))
+    conn.execute("INSERT INTO product(tm_no,name,part,weight) VALUES(?,?,?,?) "
+                 "ON CONFLICT(tm_no) DO UPDATE SET name=excluded.name, part=excluded.part, "
+                 "weight=excluded.weight", (tm, name, part, weight))
+    conn.execute("DELETE FROM product_route WHERE tm_no=?", (tm,))
+    seq = 0
+    for pr in procs:                          # 표준 공정 순서대로
+        if form.get("use_" + pr["name"]):
+            seq += 1
+            try:
+                price = float((form.get("price_" + pr["name"]) or "0").replace(",", ""))
+            except ValueError:
+                price = 0.0
+            conn.execute("INSERT INTO product_route(tm_no,seq,process,unit_price,op_code) "
+                         "VALUES(?,?,?,?,?)", (tm, seq, pr["name"], price,
+                                              (form.get("code_" + pr["name"]) or "").strip()))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/admin/products?msg=저장됨: {tm}", status_code=303)
+
+
+@app.post("/admin/products/{tm}/delete")
+def product_delete(request: Request, tm: str):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/products", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM product WHERE tm_no=?", (tm,))
+    conn.execute("DELETE FROM product_route WHERE tm_no=?", (tm,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/products?msg=삭제됨", status_code=303)
+
+
+# ── 공정 관리 ───────────────────────────────────────────
+@app.get("/admin/processes", response_class=HTMLResponse)
+def processes_list(request: Request, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM process ORDER BY part,ord,name")]
+    conn.close()
+    return render(request, "processes.html", u, active="processes", heading="공정 관리",
+                  crumb="관리", pending=pending_count(), rows=rows,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+
+
+@app.post("/admin/processes/save")
+async def processes_save(request: Request):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/processes", status_code=303)
+    form = await request.form()
+    part = (form.get("part") or "").strip()
+    name = (form.get("name") or "").strip()
+    if not part or not name:
+        return RedirectResponse("/admin/processes?err=파트/공정명 필수", status_code=303)
+    try:
+        ordn = int(form.get("ord") or 0)
+    except ValueError:
+        ordn = 0
+    excl = 1 if form.get("copq_exclude") else 0
+    conn = db.connect()
+    conn.execute("INSERT INTO process(part,name,copq_exclude,ord) VALUES(?,?,?,?) "
+                 "ON CONFLICT(part,name) DO UPDATE SET copq_exclude=excluded.copq_exclude, "
+                 "ord=excluded.ord", (part, name, excl, ordn))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/processes?msg=저장됨", status_code=303)
+
+
+@app.post("/admin/processes/{pid}/delete")
+def processes_delete(request: Request, pid: int):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/processes", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM process WHERE id=?", (pid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/processes?msg=삭제됨", status_code=303)
 
 
 # ── 목표 관리 ───────────────────────────────────────────

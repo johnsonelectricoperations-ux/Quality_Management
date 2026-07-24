@@ -22,10 +22,11 @@
   </tbody></table>
 </div>
 
-<div class="panel"><div class="phead"><h2>제품 마스터</h2><span class="tot">{{ prod|length }}품목</span></div>
+<div class="panel"><div class="phead"><h2>제품 마스터 (미리보기)</h2><span class="tot">총 {{ prod_total|cf }}품목</span></div>
   <table><thead><tr><th>TM-NO</th><th>품명</th><th>파트</th><th class="num">공정 수</th></tr></thead><tbody>
   {% for r in prod %}<tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part }}</td><td class="num">{{ r.steps }}</td></tr>{% endfor %}
   </tbody></table>
+  <div class="pbody"><a class="btn btn-p btn-sm" href="/admin/products" style="text-decoration:none;">제품 마스터 관리(등록·수정·CSV 가져오기) →</a></div>
 </div>
 
 <div class="panel"><div class="phead"><h2>불량유형 마스터</h2><span class="tot">{{ dtypes|length }}건</span></div>

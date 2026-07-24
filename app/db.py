@@ -15,14 +15,17 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS process (
   id INTEGER PRIMARY KEY, part TEXT NOT NULL, name TEXT NOT NULL,
   copq_exclude INTEGER NOT NULL DEFAULT 0,
+  ord INTEGER NOT NULL DEFAULT 0,          -- 공정 순서(성형1..후처리7)
   UNIQUE(part, name)
 );
 CREATE TABLE IF NOT EXISTS product (
-  tm_no TEXT PRIMARY KEY, name TEXT NOT NULL, part TEXT NOT NULL
+  tm_no TEXT PRIMARY KEY, name TEXT NOT NULL, part TEXT NOT NULL,
+  weight REAL NOT NULL DEFAULT 0           -- 중량
 );
 CREATE TABLE IF NOT EXISTS product_route (
   id INTEGER PRIMARY KEY, tm_no TEXT NOT NULL, seq INTEGER NOT NULL,
-  process TEXT NOT NULL, unit_price REAL NOT NULL,
+  process TEXT NOT NULL, unit_price REAL NOT NULL DEFAULT 0,
+  op_code TEXT DEFAULT '',                 -- CSV 공정 칸의 원본 코드 보존
   UNIQUE(tm_no, seq)
 );
 CREATE TABLE IF NOT EXISTS defect_type (
@@ -81,12 +84,39 @@ def connect():
     return conn
 
 
+# 실제 공정 7종 (순서 고정). copq_exclude 기본: 성형=제외
+CANON_PROCESSES = [
+    ("성형", 1, 1), ("소결", 2, 0), ("정형", 3, 0), ("가공", 4, 0),
+    ("압입", 5, 0), ("밴딩", 6, 0), ("후처리", 7, 0),
+]
+
+
+def _add_col(conn, table, col, decl):
+    cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
+    if col not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA)
+    # 기존 DB 마이그레이션 (컬럼 추가)
+    _add_col(conn, "process", "ord", "INTEGER NOT NULL DEFAULT 0")
+    _add_col(conn, "product", "weight", "REAL NOT NULL DEFAULT 0")
+    _add_col(conn, "product_route", "op_code", "TEXT DEFAULT ''")
     conn.commit()
     _ensure_default_admin(conn)
     conn.close()
+
+
+def ensure_processes(conn, part):
+    """해당 파트에 표준 공정 7종이 없으면 생성 (CSV 가져오기 시 사용)."""
+    for name, ordn, excl in CANON_PROCESSES:
+        conn.execute(
+            "INSERT INTO process(part,name,copq_exclude,ord) VALUES(?,?,?,?) "
+            "ON CONFLICT(part,name) DO UPDATE SET ord=excluded.ord",
+            (part, name, excl, ordn))
+    conn.commit()
 
 
 def hash_pw(pw: str) -> str:

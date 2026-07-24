@@ -6,10 +6,16 @@
 - TM-NO는 문자열로만 취급. 셀이 날짜(datetime)로 변환되어 있으면 오류로 거부.
 - 마스터는 전체 교체(idempotent). 트랜잭션은 삽입(UNIQUE는 UPSERT).
 """
+import csv
 import datetime
+import io
 from openpyxl import load_workbook
 
 from .calc import parse_alloc_rule
+from . import db
+
+# CSV 제품목록의 공정 컬럼 (좌→우 = 공정 순서)
+CSV_PROC_COLS = ["성형", "소결", "정형", "가공", "압입", "밴딩", "후처리"]
 
 
 class IngestError(Exception):
@@ -93,6 +99,62 @@ def ingest_product_master(conn, path):
     conn.executemany("INSERT INTO product_route(tm_no,seq,process,unit_price) VALUES(?,?,?,?)", routes)
     conn.commit()
     return len(prods)
+
+
+def ingest_product_csv(conn, path, part):
+    """제품목록 CSV(wide, cp949) 적재. part = 'VMS PART' | 'TM PART'.
+    컬럼: TM-NO, 품명, 중량, 성형, 소결, 정형, 가공, 압입, 밴딩, 후처리
+    공정 칸에 값이 있으면 라우팅에 포함(좌→우 순서), 값은 op_code로 보존.
+    반환: (제품수, 신규수)."""
+    raw = open(path, "rb").read()
+    text = None
+    for enc in ("cp949", "euc-kr", "utf-8-sig", "utf-8"):
+        try:
+            text = raw.decode(enc); break
+        except Exception:
+            continue
+    if text is None:
+        raise IngestError("CSV 인코딩을 인식할 수 없습니다 (cp949/utf-8).")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        raise IngestError("빈 CSV 파일")
+    header = [h.strip() for h in rows[0]]
+    idx = {h: i for i, h in enumerate(header)}
+    if "TM-NO" not in idx or "품명" not in idx:
+        raise IngestError("헤더에 TM-NO / 품명 이 필요합니다.")
+    db.ensure_processes(conn, part)
+
+    existing = {r["tm_no"] for r in conn.execute("SELECT tm_no FROM product WHERE part=?", (part,))}
+    n = new = 0
+    for r in rows[1:]:
+        if not r or not str(r[idx["TM-NO"]]).strip():
+            continue
+        tm = str(r[idx["TM-NO"]]).strip()
+        name = str(r[idx["품명"]]).strip() if idx.get("품명", -1) < len(r) else ""
+        weight = 0.0
+        if "중량" in idx and idx["중량"] < len(r):
+            try:
+                weight = float(str(r[idx["중량"]]).strip() or 0)
+            except ValueError:
+                weight = 0.0
+        route = []
+        for proc in CSV_PROC_COLS:
+            if proc in idx and idx[proc] < len(r):
+                code = str(r[idx[proc]]).strip()
+                if code:
+                    route.append((proc, code))
+        conn.execute("INSERT INTO product(tm_no,name,part,weight) VALUES(?,?,?,?) "
+                     "ON CONFLICT(tm_no) DO UPDATE SET name=excluded.name, part=excluded.part, "
+                     "weight=excluded.weight", (tm, name, part, weight))
+        conn.execute("DELETE FROM product_route WHERE tm_no=?", (tm,))
+        for seq, (proc, code) in enumerate(route, start=1):
+            conn.execute("INSERT INTO product_route(tm_no,seq,process,unit_price,op_code) "
+                         "VALUES(?,?,?,?,?)", (tm, seq, proc, 0, code))
+        n += 1
+        if tm not in existing:
+            new += 1
+    conn.commit()
+    return n, new
 
 
 def ingest_defect_master(conn, path):
