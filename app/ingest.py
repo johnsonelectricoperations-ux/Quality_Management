@@ -361,6 +361,61 @@ def ingest_production(conn, path):
     return n
 
 
+_PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)
+
+
+def ingest_production_xlsx(conn, path):
+    """생산수량 xlsx(ERP 제품창고재고금액조회) 적재.
+    파일명 {1part|2part}_{시작}_{종료}.xlsx → 파트·일자(시작일 기준).
+    C열=규격=TM-NO, I열=입고수량=생산수량, J열=입고금액(원)→÷1000=천원.
+    변형 TM-NO는 base로 합산. 반환: (건수, errors)."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    mo = _PROD_RE.match(stem)
+    if not mo:
+        return 0, [f"파일명 형식 오류: {os.path.basename(path)} (예: 1part_20260723_20260723.xlsx)"]
+    part = "VMS PART" if mo.group(1).lower() == "1part" else "TM PART"
+    d = f"{mo.group(2)[:4]}-{mo.group(2)[4:6]}-{mo.group(2)[6:8]}"
+
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+    # 헤더행 탐색(규격·입고수량·입고금액 포함)
+    hr = None
+    for r in range(1, min(ws.max_row, 8) + 1):
+        vals = [str(ws.cell(row=r, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        if "규격" in vals and "입고수량" in vals:
+            hr = r; headers = vals; break
+    if hr is None:
+        return 0, [f"{os.path.basename(path)}: 헤더행(규격/입고수량)을 찾을 수 없음"]
+    c_tm = headers.index("규격") + 1
+    c_qty = headers.index("입고수량") + 1
+    c_amt = headers.index("입고금액") + 1
+
+    agg = {}  # base_tm -> [qty, amt천원]
+    for r in range(hr + 1, ws.max_row + 1):
+        first = str(ws.cell(row=r, column=1).value or "").strip()
+        if first == "TOTAL":
+            continue
+        raw = ws.cell(row=r, column=c_tm).value
+        if isinstance(raw, (datetime.date, datetime.datetime)):
+            continue  # 규격이 날짜면 TM-NO 아님 → 스킵
+        tm = base_tmno(raw)
+        if not tm:
+            continue
+        qty = _int(ws.cell(row=r, column=c_qty).value)
+        if qty <= 0:
+            continue
+        amt = float(ws.cell(row=r, column=c_amt).value or 0) / 1000.0  # 원 → 천원
+        cur = agg.setdefault(tm, [0, 0.0])
+        cur[0] += qty; cur[1] += amt
+    for tm, (qty, amt) in agg.items():
+        conn.execute(
+            "INSERT INTO production(d,tm_no,qty,amount,part) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(d,tm_no) DO UPDATE SET qty=excluded.qty, amount=excluded.amount, part=excluded.part",
+            (d, tm, qty, amt, part))
+    conn.commit()
+    return len(agg), []
+
+
 def ingest_svp(conn, path):
     _, rows = _rows(path)
     n = 0

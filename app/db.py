@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS defect_entry (
 CREATE TABLE IF NOT EXISTS production (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
   qty INTEGER NOT NULL, amount REAL NOT NULL DEFAULT 0,  -- 생산금액(천원)
+  part TEXT NOT NULL DEFAULT '',                         -- 파일명 파트(마스터 미등록 대비)
   UNIQUE(d, tm_no)
 );
 CREATE TABLE IF NOT EXISTS svp (
@@ -141,6 +142,7 @@ def init_db():
     _add_col(conn, "defect_entry", "process", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "kind", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "batch_key", "TEXT DEFAULT ''")
+    _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
     conn.commit()
     _ensure_default_admin(conn)
