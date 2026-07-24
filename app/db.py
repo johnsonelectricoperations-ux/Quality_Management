@@ -29,9 +29,10 @@ CREATE TABLE IF NOT EXISTS product_route (
   UNIQUE(tm_no, seq)
 );
 CREATE TABLE IF NOT EXISTS defect_type (
-  id INTEGER PRIMARY KEY, kind TEXT NOT NULL, process TEXT NOT NULL,
+  id INTEGER PRIMARY KEY, part TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL, process TEXT NOT NULL DEFAULT '',   -- 발생공정(공란 허용=입력공정 귀속)
   name TEXT NOT NULL, alloc_rule TEXT DEFAULT '',
-  UNIQUE(name)
+  UNIQUE(part, kind, name)
 );
 CREATE TABLE IF NOT EXISTS defect_entry (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
@@ -84,17 +85,47 @@ def connect():
     return conn
 
 
-# 실제 공정 7종 (순서 고정). copq_exclude 기본: 성형=제외
+# 불량율 집계공정 5종 (순서 고정). copq_exclude 기본: 성형=제외.
+# 기타 = 후처리 = 압입·밴딩·선별공정을 묶은 버킷.
 CANON_PROCESSES = [
-    ("성형", 1, 1), ("소결", 2, 0), ("정형", 3, 0), ("가공", 4, 0),
-    ("압입", 5, 0), ("밴딩", 6, 0), ("후처리", 7, 0),
+    ("성형", 1, 1), ("소결", 2, 0), ("정형", 3, 0), ("가공", 4, 0), ("기타", 5, 0),
 ]
+AGG_PROCESSES = [name for name, _o, _e in CANON_PROCESSES]     # 집계공정 이름
+
+# 물리공정(제품 라우팅·일일시트 공정) → 집계버킷 매핑.
+# 성형·소결·정형·가공은 그대로, 나머지 후처리 계열은 전부 '기타'.
+PHYS_TO_BUCKET = {
+    "성형": "성형", "소결": "소결", "정형": "정형", "가공": "가공",
+    "압입": "기타", "밴딩": "기타", "선별공정": "기타", "선별": "기타",
+    "후처리": "기타", "기타": "기타",
+}
+
+
+def bucket_of(proc):
+    """물리공정명 → 집계공정(버킷). 미정의는 그대로 반환."""
+    return PHYS_TO_BUCKET.get(str(proc).strip(), str(proc).strip())
 
 
 def _add_col(conn, table, col, decl):
     cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
     if col not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
+def _migrate_defect_type(conn):
+    """defect_type UNIQUE(name) → UNIQUE(part,kind,name) 로 변경.
+    ALTER로 UNIQUE를 못 바꾸므로 part 컬럼이 없으면 테이블을 재생성한다.
+    (defect_type은 마스터 Excel에서 재적재되는 데이터라 삭제 안전)."""
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(defect_type)")]
+    if cols and "part" not in cols:
+        conn.execute("DROP TABLE defect_type")
+        conn.executescript("""
+        CREATE TABLE defect_type (
+          id INTEGER PRIMARY KEY, part TEXT NOT NULL DEFAULT '',
+          kind TEXT NOT NULL, process TEXT NOT NULL DEFAULT '',
+          name TEXT NOT NULL, alloc_rule TEXT DEFAULT '',
+          UNIQUE(part, kind, name)
+        );""")
 
 
 def init_db():
@@ -104,6 +135,7 @@ def init_db():
     _add_col(conn, "process", "ord", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "product", "weight", "REAL NOT NULL DEFAULT 0")
     _add_col(conn, "product_route", "op_code", "TEXT DEFAULT ''")
+    _migrate_defect_type(conn)
     conn.commit()
     _ensure_default_admin(conn)
     conn.close()

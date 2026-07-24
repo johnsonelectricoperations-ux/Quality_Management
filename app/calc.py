@@ -60,11 +60,15 @@ def iso_week_of_month(dstr):
 
 
 # ── 배분기준 파싱 ───────────────────────────────────────
+# 배분기준 형식 D: 배분을 마스터에 고정하지 않고 입력 시트의 공정에 100% 귀속.
+INPUT_PROCESS_RULE = "입력공정 100%"
+
+
 def parse_alloc_rule(rule):
     """'소결,정형' → [(소결,1),(정형,1)] · '정형:70,성형:30' → [(정형,70),(성형,30)]
-       '' → [] (발생공정 100%)."""
+       '' 또는 '입력공정 100%' → [] (발생공정/입력공정 귀속)."""
     rule = (rule or "").strip()
-    if not rule:
+    if not rule or rule.replace(" ", "") == INPUT_PROCESS_RULE.replace(" ", ""):
         return []
     out = []
     for tok in rule.split(","):

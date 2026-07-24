@@ -157,32 +157,64 @@ def ingest_product_csv(conn, path, part):
     return n, new
 
 
+def _clean_name(v):
+    """헤더/불량명 정규화: 개행 제거·공백 정리."""
+    return " ".join(str(v or "").replace("\n", " ").split())
+
+
+# 불량유형 마스터 시트 → 파트 매핑
+DEFECT_MASTER_SHEETS = {"DATA_1PART": "VMS PART", "DATA_2PART": "TM PART"}
+
+
 def ingest_defect_master(conn, path):
-    """반환: (건수, errors[list]).  errors 있으면 반영하지 않음."""
-    _, rows = _rows(path)
-    proc_names = {r["name"] for r in conn.execute("SELECT name FROM process")}
-    data, errors = [], []
-    seen = set()
-    for i, r in rows:
-        kind = str(r.get("구분", "")).strip()
-        proc = str(r.get("공정명(발생공정)", "")).strip()
-        name = str(r.get("불량명", "")).strip()
-        rule = str(r.get("배분기준", "") or "").strip()
-        if kind not in ("공정", "셋팅"):
-            errors.append(f"{i}행: 구분은 공정/셋팅만 ('{kind}')")
-        if name in seen:
-            errors.append(f"{i}행: 불량명 중복 ('{name}')")
-        seen.add(name)
-        if proc_names and proc not in proc_names:
-            errors.append(f"{i}행: 발생공정 '{proc}'이 공정명 마스터에 없음")
-        for p, _rt in parse_alloc_rule(rule):
-            if proc_names and p not in proc_names:
-                errors.append(f"{i}행: 배분기준 공정 '{p}'이 공정명 마스터에 없음")
-        data.append((kind, proc, name, rule))
+    """불량유형 마스터(DATA_1PART/DATA_2PART 2시트) 적재.
+    - 구분(공정/셋팅), 발생공정(공란 허용=입력공정 귀속), 불량명, 배분기준.
+    - 발생공정 지정 시 집계공정(성형·소결·정형·가공·기타)만 허용.
+    반환: (건수, errors[list]). errors 있으면 반영하지 않음."""
+    wb = load_workbook(path, data_only=True)
+    agg = set(db.AGG_PROCESSES)
+    data, errors, seen = [], [], set()
+    sheets = [s for s in DEFECT_MASTER_SHEETS if s in wb.sheetnames]
+    if not sheets:
+        return 0, ["DATA_1PART/DATA_2PART 시트를 찾을 수 없습니다."]
+    for sheet in sheets:
+        part = DEFECT_MASTER_SHEETS[sheet]
+        ws = wb[sheet]
+        it = ws.iter_rows(values_only=True)
+        headers = [_clean_name(h) for h in next(it)]
+        idx = {h: j for j, h in enumerate(headers)}
+        need = ["구분", "공정명(발생공정)", "불량명", "배분기준"]
+        miss = [h for h in need if h not in idx]
+        if miss:
+            errors.append(f"[{sheet}] 헤더 누락: {', '.join(miss)}")
+            continue
+        for i, raw in enumerate(it, start=2):
+            if all(c is None or str(c).strip() == "" for c in raw):
+                continue
+            kind = str(raw[idx["구분"]] or "").strip()
+            proc = _clean_name(raw[idx["공정명(발생공정)"]])
+            name = _clean_name(raw[idx["불량명"]])
+            rule = str(raw[idx["배분기준"]] or "").strip()
+            if kind not in ("공정", "셋팅"):
+                errors.append(f"[{sheet}] {i}행: 구분은 공정/셋팅만 ('{kind}')")
+            if not name:
+                errors.append(f"[{sheet}] {i}행: 불량명 필수")
+                continue
+            key = (part, kind, name)
+            if key in seen:
+                errors.append(f"[{sheet}] {i}행: 불량명 중복 ('{name}')")
+            seen.add(key)
+            if proc and proc not in agg:
+                errors.append(f"[{sheet}] {i}행: 발생공정 '{proc}'은 집계공정(성형·소결·정형·가공·기타)만 허용")
+            for p, _rt in parse_alloc_rule(rule):
+                if p not in agg:
+                    errors.append(f"[{sheet}] {i}행: 배분기준 공정 '{p}'은 집계공정만 허용")
+            data.append((part, kind, proc, name, rule))
     if errors:
         return 0, errors
     conn.execute("DELETE FROM defect_type")
-    conn.executemany("INSERT INTO defect_type(kind,process,name,alloc_rule) VALUES(?,?,?,?)", data)
+    conn.executemany(
+        "INSERT INTO defect_type(part,kind,process,name,alloc_rule) VALUES(?,?,?,?,?)", data)
     conn.commit()
     return len(data), []
 
