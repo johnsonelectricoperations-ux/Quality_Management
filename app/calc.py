@@ -7,8 +7,16 @@
 - COPQ의 Scrap Cost는 '성형' 등 COPQ제외 공정 배분분을 제외.
 - 분모(SVP): 월별은 SVP 입력값, 없으면 생산금액 합(추정).
 """
+import re
 from collections import defaultdict
 from datetime import date, timedelta
+
+
+def base_tmno(tm):
+    """TM-NO 정규화: 접미 알파벳 제거해 base로 통일.
+    598-10A / 598-10B → 598-10, 6017-01AJ → 6017-01, 014-00P → 014-00.
+    여러 파일의 데이터를 base TM-NO 기준으로 합치는 데 사용."""
+    return re.sub(r"[A-Za-z]+$", "", str(tm or "").strip())
 
 CLAIM_COPQ_ITEMS = ["Warranty", "3rd Party Containment", "Quality Special Freight",
                     "Customer Incident Cost", "Unplanned Inspection & Sorting", "Variance"]
