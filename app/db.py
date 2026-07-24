@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS defect_type (
 CREATE TABLE IF NOT EXISTS defect_entry (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
   defect_name TEXT NOT NULL, qty INTEGER NOT NULL,
+  part TEXT NOT NULL DEFAULT '',            -- 파트(제품 미지정 폐기 등, 제품 있으면 제품 파트 우선)
   process TEXT NOT NULL DEFAULT '',         -- 집계공정(사내/외주/폐기는 명시, 공란=배분 폴백)
   kind TEXT NOT NULL DEFAULT '',            -- 공정|셋팅 (공란=불량유형 마스터에서 유추)
   source TEXT NOT NULL DEFAULT 'direct',    -- direct|outsource|discard
@@ -142,6 +143,7 @@ def init_db():
     _add_col(conn, "defect_entry", "process", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "kind", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "batch_key", "TEXT DEFAULT ''")
+    _add_col(conn, "defect_entry", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
     conn.commit()

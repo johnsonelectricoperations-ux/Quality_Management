@@ -299,13 +299,13 @@ def ingest_daily_defect_file(conn, path, user=""):
                 errors.append(f"{os.path.basename(path)}: 불량유형 '{name}'이 {part} {kind} 마스터에 없음")
                 continue
             proc = dmap[key] or sheet_proc          # 발생공정 지정 우선, 없으면 시트 공정
-            rows.append((d, tmno, name, qty, proc, kind, "direct", user, batch_key))
+            rows.append((d, tmno, name, qty, part, proc, kind, "direct", user, batch_key))
     if errors:
         return 0, errors
     conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
     conn.executemany(
-        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,process,kind,source,status,reg_user,batch_key) "
-        "VALUES(?,?,?,?,?,?,?, 'confirmed', ?,?)", rows)
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user,batch_key) "
+        "VALUES(?,?,?,?,?,?,?,?, 'confirmed', ?,?)", rows)
     conn.commit()
     return len(rows), []
 
@@ -359,6 +359,55 @@ def ingest_production(conn, path):
         n += 1
     conn.commit()
     return n
+
+
+import sqlite3
+
+# 폐기 defect_process 중 집계버킷이 명확한 물리공정
+_SCRAP_KNOWN_PROC = set(db.PHYS_TO_BUCKET)
+
+
+_SCRAP_PART = {"1part": "VMS PART", "2part": "TM PART"}
+
+
+def ingest_scrap_db(conn, path):
+    """폐기 scrap_data.db 적재. defect_category='해당' 만, defect_process→집계공정(수량 합산).
+    폐기는 공정불량(kind='공정'). TM-NO 없는 공정단위 폐기(소결로_산화 등)는 part만으로 집계.
+    전체 재스캔이므로 기존 source='discard' 삭제 후 재적재(idempotent).
+    반환: (건수, note[dict])."""
+    src = sqlite3.connect(path)
+    src.row_factory = sqlite3.Row
+    rows, unmapped = [], {}
+    skip_noqty = skip_nopart = 0
+    for r in src.execute("SELECT date,part,tmno,scrap_reason,quantity,defect_process "
+                         "FROM scrap_data WHERE defect_category='해당'"):
+        part = _SCRAP_PART.get(str(r["part"] or "").strip().lower(), "")
+        if not part:
+            skip_nopart += 1
+            continue
+        qty = _int(r["quantity"])
+        if qty <= 0:
+            skip_noqty += 1                                 # 수량 없이 무게만 있는 폐기 → 스킵
+            continue
+        d = str(r["date"] or "")[:10]
+        if not d:
+            continue
+        tmv = str(r["tmno"] or "").strip()
+        tm = "" if tmv in ("", "-") else base_tmno(tmv)     # 제품 미지정 폐기는 tm 공란(파트로만 집계)
+        raw_proc = str(r["defect_process"] or "").strip()
+        proc = db.bucket_of(raw_proc)
+        if raw_proc not in _SCRAP_KNOWN_PROC:
+            unmapped[raw_proc] = unmapped.get(raw_proc, 0) + 1
+            proc = "기타"                                   # 비표준 공정은 기타로(경고)
+        name = str(r["scrap_reason"] or "").strip() or "기타"
+        rows.append((d, tm, name, qty, part, proc, "공정", "discard", ""))
+    src.close()
+    conn.execute("DELETE FROM defect_entry WHERE source='discard'")
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
+        "VALUES(?,?,?,?,?,?,?,?, 'confirmed', ?)", rows)
+    conn.commit()
+    return len(rows), {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped}
 
 
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)

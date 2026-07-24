@@ -160,11 +160,11 @@ def compute_daily(conn, m: Masters):
     pdetail = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})  # (part,proc) 누적(전체기간)
 
     for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,process,kind FROM defect_entry WHERE status='confirmed'"):
+            "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry WHERE status='confirmed'"):
         prod = m.product.get(r["tm_no"])
-        if not prod:
+        part = prod[1] if prod else (r["part"] or "")   # 제품 파트 우선, 없으면 저장된 파트(제품 미지정 폐기)
+        if not part:
             continue
-        part = prod[1]
         kind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
                                  r["process"], r["kind"])
         cell = daily[r["d"]][part]
@@ -291,11 +291,12 @@ def process_breakdown(conn, m, y, mth, part, kind):
     dates = set(_dates_in_month(y, mth))
     per = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})
     for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,process,kind FROM defect_entry WHERE status='confirmed'"):
+            "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry WHERE status='confirmed'"):
         if r["d"] not in dates:
             continue
         prod = m.product.get(r["tm_no"])
-        if not prod or prod[1] not in parts:
+        part = prod[1] if prod else (r["part"] or "")
+        if part not in parts:
             continue
         rkind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
                                   r["process"], r["kind"])
