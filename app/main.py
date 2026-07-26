@@ -570,6 +570,149 @@ def product_delete(request: Request, tm: str):
     return RedirectResponse("/admin/products?msg=삭제됨", status_code=303)
 
 
+# ── 공정별 단가 ─────────────────────────────────────────
+def _price_map(conn, tm):
+    """{집계공정: 단가|None}"""
+    cur = {r["process"]: r["unit_price"]
+           for r in conn.execute("SELECT process,unit_price FROM product_price WHERE tm_no=?", (tm,))}
+    return {p: cur.get(p) for p in db.AGG_PROCESSES}
+
+
+@app.get("/admin/prices", response_class=HTMLResponse)
+def prices_list(request: Request, q: str = "", part: str = "", miss: str = "",
+                page: int = 1, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    # 제품 마스터 ∪ 단가 보유 TM (단가만 있고 제품 미등록인 품목도 보이도록)
+    base_sql = ("SELECT tm_no FROM product UNION SELECT tm_no FROM product_price")
+    where, args = [], []
+    if q:
+        where.append("(p.tm_no LIKE ? OR IFNULL(pr.name,'') LIKE ?)"); args += [f"%{q}%", f"%{q}%"]
+    if part in ("VMS PART", "TM PART"):
+        where.append("pr.part=?"); args.append(part)
+    if miss:
+        where.append("NOT EXISTS(SELECT 1 FROM product_price pp WHERE pp.tm_no=p.tm_no)")
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    from_sql = f"FROM ({base_sql}) p LEFT JOIN product pr ON pr.tm_no=p.tm_no {wsql}"
+    total = conn.execute(f"SELECT COUNT(*) c {from_sql}", args).fetchone()["c"]
+    page = max(1, page)
+    off = (page - 1) * PAGE_SIZE
+    rows = []
+    for r in conn.execute(
+            f"SELECT p.tm_no, IFNULL(pr.name,'') name, IFNULL(pr.part,'') part, "
+            f"(SELECT GROUP_CONCAT(process,'→') FROM (SELECT process FROM product_route "
+            f" WHERE tm_no=p.tm_no ORDER BY seq)) route "
+            f"{from_sql} ORDER BY p.tm_no LIMIT ? OFFSET ?", args + [PAGE_SIZE, off]):
+        d = dict(r)
+        d["price"] = _price_map(conn, r["tm_no"])
+        rows.append(d)
+    conn.close()
+    pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    return render(request, "prices.html", u, active="prices", heading="공정별 단가",
+                  crumb="관리", pending=pending_count(), rows=rows, total=total,
+                  procs=db.AGG_PROCESSES, q=q, part=part, miss=miss, page=page, pages=pages,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+
+
+@app.post("/admin/prices/import")
+async def prices_import(request: Request, file: UploadFile = File(...)):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/prices", status_code=303)
+    path = os.path.join("/tmp", "qms_price_" + secrets.token_hex(4) + ".xlsx")
+    with open(path, "wb") as f:
+        f.write(await file.read())
+    conn = db.connect()
+    msg = err = ""
+    try:
+        n, note = ingest.ingest_price_master(conn, path)
+        if note.get("error"):
+            err = note["error"]
+        else:
+            msg = (f"단가 {n}품목 반영 (정형없음→완제품단가 {note['정형없음(완제품단가)']}건, "
+                   f"스킵 {note['완제품단가없어_스킵']}건)")
+    except Exception as e:
+        err = f"가져오기 실패: {e}"
+    finally:
+        conn.close()
+        os.remove(path)
+    return RedirectResponse(f"/admin/prices?{'msg='+msg if msg else 'err='+err}", status_code=303)
+
+
+@app.get("/admin/prices/new", response_class=HTMLResponse)
+def price_new(request: Request):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/prices", status_code=303)
+    return render(request, "price_form.html", u, active="prices", heading="단가 등록",
+                  crumb="관리 / 공정별 단가", pending=pending_count(), mode="new",
+                  p={"tm_no": "", "name": "", "price": {p: None for p in db.AGG_PROCESSES}},
+                  procs=db.AGG_PROCESSES)
+
+
+@app.get("/admin/prices/{tm}/edit", response_class=HTMLResponse)
+def price_edit(request: Request, tm: str):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/prices", status_code=303)
+    conn = db.connect()
+    prow = conn.execute("SELECT tm_no,name FROM product WHERE tm_no=?", (tm,)).fetchone()
+    p = {"tm_no": tm, "name": prow["name"] if prow else "", "price": _price_map(conn, tm)}
+    conn.close()
+    return render(request, "price_form.html", u, active="prices", heading="단가 수정",
+                  crumb="관리 / 공정별 단가", pending=pending_count(), mode="edit",
+                  p=p, procs=db.AGG_PROCESSES)
+
+
+@app.post("/admin/prices/save")
+async def price_save(request: Request):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/prices", status_code=303)
+    form = await request.form()
+    tm = calc.base_tmno(str(form.get("tm_no", "")))
+    if not tm:
+        return RedirectResponse("/admin/prices?err=TM-NO 필수", status_code=303)
+    conn = db.connect()
+    for i, proc in enumerate(db.AGG_PROCESSES):
+        raw = str(form.get(f"price_{i}", "")).strip()
+        if raw == "":
+            conn.execute("DELETE FROM product_price WHERE tm_no=? AND process=?", (tm, proc))
+            continue
+        try:
+            v = float(raw)
+        except ValueError:
+            conn.close()
+            return RedirectResponse(f"/admin/prices?err={proc} 단가가 숫자가 아님", status_code=303)
+        conn.execute("INSERT INTO product_price(tm_no,process,unit_price) VALUES(?,?,?) "
+                     "ON CONFLICT(tm_no,process) DO UPDATE SET unit_price=excluded.unit_price",
+                     (tm, proc, v))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/admin/prices?msg=저장됨: {tm}&q={tm}", status_code=303)
+
+
+@app.post("/admin/prices/{tm}/delete")
+def price_delete(request: Request, tm: str):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/prices", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM product_price WHERE tm_no=?", (tm,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/prices?msg=단가 삭제됨", status_code=303)
+
+
 # ── 공정 관리 ───────────────────────────────────────────
 @app.get("/admin/processes", response_class=HTMLResponse)
 def processes_list(request: Request, msg: str = "", err: str = ""):

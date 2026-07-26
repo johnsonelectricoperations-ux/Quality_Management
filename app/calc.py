@@ -111,6 +111,10 @@ class Masters:
             self.product[r["tm_no"]] = (r["name"], r["part"])
         for r in conn.execute("SELECT * FROM product_route ORDER BY tm_no, seq"):
             self.route.setdefault(r["tm_no"], []).append(r["process"])
+            if r["unit_price"]:
+                self.price[(r["tm_no"], db.bucket_of(r["process"]))] = r["unit_price"]
+        # 단가 마스터(집계공정 기준)가 있으면 우선 적용
+        for r in conn.execute("SELECT tm_no,process,unit_price FROM product_price"):
             self.price[(r["tm_no"], r["process"])] = r["unit_price"]
         for r in conn.execute("SELECT * FROM defect_type"):
             self.defect[r["name"]] = (r["kind"], r["process"], parse_alloc_rule(r["alloc_rule"]))

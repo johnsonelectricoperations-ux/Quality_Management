@@ -410,6 +410,67 @@ def ingest_scrap_db(conn, path):
     return len(rows), {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped}
 
 
+# 제품별 단가 Master(단가산출 시트) 블록: (블록명, TM열, 단가열)
+_PRICE_BLOCKS = [("성형", 2, 4), ("소결", 6, 8), ("정형", 10, 12), ("완제품", 14, 16)]
+_PRICE_SHEET = "단가산출"
+_PRICE_HEADER_ROWS = 3          # 1~3행 헤더, 4행부터 데이터
+
+
+def ingest_price_master(conn, path):
+    """제품별 단가 Master 적재 → product_price(집계공정 5종 누적단가).
+
+    규칙(사용자 확정):
+      · 성형/소결/정형 = 각 블록 단가(누적)
+      · 가공·기타 = **완제품 단가**
+      · 정형이 'O'(정형공정 없음)이면 정형도 **완제품 단가** 적용
+    반환: (품목수, note[dict])."""
+    wb = load_workbook(path, data_only=True)
+    if _PRICE_SHEET not in wb.sheetnames:
+        return 0, {"error": f"'{_PRICE_SHEET}' 시트를 찾을 수 없음"}
+    ws = wb[_PRICE_SHEET]
+
+    block = {name: {} for name, _t, _p in _PRICE_BLOCKS}
+    no_jeonghyeong = set()          # 정형 'O' = 정형공정 없음
+    bad = 0
+    for name, c_tm, c_pr in _PRICE_BLOCKS:
+        for r in range(_PRICE_HEADER_ROWS + 1, ws.max_row + 1):
+            tmv = ws.cell(row=r, column=c_tm).value
+            if tmv in (None, ""):
+                continue
+            tm = base_tmno(tmv)
+            if not tm:
+                continue
+            pv = ws.cell(row=r, column=c_pr).value
+            if isinstance(pv, (int, float)):
+                block[name][tm] = float(pv)
+            elif name == "정형" and str(pv or "").strip().upper() == "O":
+                no_jeonghyeong.add(tm)
+            else:
+                bad += 1            # #N/A 등
+
+    tms = set(block["완제품"]) | set(block["성형"]) | set(block["소결"])
+    rows, skipped = [], 0
+    for tm in tms:
+        final = block["완제품"].get(tm)
+        if final is None:
+            skipped += 1            # 완제품 단가 없으면 가공·기타를 정할 수 없음
+            continue
+        j = block["정형"].get(tm)
+        if tm in no_jeonghyeong or j is None:
+            j = final               # 정형공정 없음 → 이후는 완제품 단가
+        for proc, price in (("성형", block["성형"].get(tm)), ("소결", block["소결"].get(tm)),
+                            ("정형", j), ("가공", final), ("기타", final)):
+            if price is None:
+                continue
+            rows.append((tm, proc, price))
+    conn.executemany(
+        "INSERT INTO product_price(tm_no,process,unit_price) VALUES(?,?,?) "
+        "ON CONFLICT(tm_no,process) DO UPDATE SET unit_price=excluded.unit_price", rows)
+    conn.commit()
+    return len(tms) - skipped, {"정형없음(완제품단가)": len(no_jeonghyeong),
+                                "완제품단가없어_스킵": skipped, "비수치_무시": bad}
+
+
 _OUTSOURCE_PART = {"1part": "VMS PART", "2part": "TM PART"}
 # 외주 합계 컬럼(헤더명) → 집계공정. 파일이 VBA로 미리 계산한 값을 그대로 사용.
 _OUTSOURCE_SUMS = [("성형불량 합계", "성형"), ("소결불량 합계", "소결"), ("기타 합계", "기타")]

@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS product_route (
   op_code TEXT DEFAULT '',                 -- CSV 공정 칸의 원본 코드 보존
   UNIQUE(tm_no, seq)
 );
+CREATE TABLE IF NOT EXISTS product_price (
+  id INTEGER PRIMARY KEY, tm_no TEXT NOT NULL,
+  process TEXT NOT NULL,                   -- 집계공정(성형·소결·정형·가공·기타)
+  unit_price REAL NOT NULL DEFAULT 0,      -- 누적단가(원)
+  UNIQUE(tm_no, process)
+);
 CREATE TABLE IF NOT EXISTS defect_type (
   id INTEGER PRIMARY KEY, part TEXT NOT NULL DEFAULT '',
   kind TEXT NOT NULL, process TEXT NOT NULL DEFAULT '',   -- 발생공정(공란 허용=입력공정 귀속)
