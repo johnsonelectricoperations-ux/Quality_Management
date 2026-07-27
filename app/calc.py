@@ -303,12 +303,14 @@ def month_kpi(conn, m, daily, y, mth, part):
         return round(a / b * 100, 2) if b else 0.0
     def ppm(a, b):
         return round(a / b * 1_000_000) if b else 0
+    # Scrap Quantity = 공정불량 + 셋팅불량, 분모는 입고수량(생산수량).
+    scrap_qty = agg["proc_qty"] + agg["set_qty"]
     out = {
         "ym": ym,
         "scrap_cost": round(agg["scrap_cost"]),
         "scrap_cost_pct": pct(agg["scrap_cost"], denom),
-        "scrap_qty": agg["scrap_qty"],
-        "scrap_qty_pct": pct(agg["scrap_qty"], agg["prod_qty"]),
+        "scrap_qty": scrap_qty,
+        "scrap_qty_pct": pct(scrap_qty, agg["prod_qty"]),
         "copq_cost": round(copq_cost),
         "copq_pct": pct(copq_cost, denom),
         "warranty": round(warranty),

@@ -337,8 +337,9 @@ FY 내 월 순서 = [4,5,6,7,8,9,10,11,12,1,2,3]
 
 ### 5.4 KPI 산식
 ```
-Scrap Quantity = Σ 불량수량                                      [파트/통합 × 일/주/월]
-Scrap Qty(%)   = Scrap Quantity ÷ 생산수량 × 100
+Scrap Quantity = 공정불량수량 + 셋팅불량수량                       [파트/통합 × 일/주/월]
+Scrap Qty(%)   = Scrap Quantity ÷ **입고수량(생산수량)** × 100
+  · 셋팅불량은 별도 지표(셋팅불량율 ppm)로도 계속 관리하며, 여기에도 합산된다.
 Scrap Cost     = Σ scrap_cost (천원)                             [파트/통합/공정별 × 일/주/월]
 Scrap Cost(%)  = Scrap Cost ÷ 분모(SVP 또는 추정 SVP) × 100
 공정불량율(ppm) = 공정불량수량 ÷ 생산수량 × 1,000,000              [파트별만, 공정별]
