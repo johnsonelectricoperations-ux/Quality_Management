@@ -13,14 +13,10 @@
   <div class="cap">개요</div>
   <a class="nav {{ 'on' if active=='dash' }}" href="/">▣ 대시보드</a>
   <div class="cap">데이터 입력</div>
-  <a class="nav {{ 'on' if active=='defect' }}" href="/input/defect">✎ 불량 입력</a>
-  <a class="nav {{ 'on' if active=='outsource' }}" href="/input/outsource">⇪ 외주소재불량 가져오기</a>
-  <a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 외주소재불량 검토{% if pending %}<span class="cnt">{{ pending }}</span>{% endif %}</a>
-  <a class="nav {{ 'on' if active=='discard' }}" href="/input/discard">⇪ 폐기불량 가져오기</a>
-  <a class="nav {{ 'on' if active=='prod' }}" href="/input/production">▦ 생산실적 입력</a>
   <a class="nav {{ 'on' if active=='svp' }}" href="/input/svp">₩ SVP 입력</a>
   <a class="nav {{ 'on' if active=='claim' }}" href="/input/claim">▤ Claim 입력</a>
   <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
+  {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 외주소재불량 검토<span class="cnt">{{ pending }}</span></a>{% endif %}
   <div class="cap">집계 / 리포트</div>
   <a class="nav {{ 'on' if active=='rkpi' }}" href="/report/kpi">📈 KPI 현황</a>
   <a class="nav {{ 'on' if active=='rdefect' }}" href="/report/defect">⚙ 공정별 불량현황</a>

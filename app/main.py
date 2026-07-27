@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan
+from . import db, calc, ingest, scan, init_data
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -729,11 +729,12 @@ def _scan_page(request, u, results=None, msg="", err=""):
     logs = [dict(r) for r in conn.execute(
         "SELECT ts,kind,ok,note FROM upload_log WHERE kind LIKE 'scan:%' ORDER BY id DESC LIMIT 20")]
     last_scan = db.get_setting(conn, "last_scan_at", "")
+    init_done = db.get_setting(conn, "init_data_done", "") == "1"
     conn.close()
     return render(request, "scan.html", u, active="scan", heading="폴더 반영",
                   crumb="관리", pending=pending_count(), root=root,
                   root_ok=os.path.isdir(root), sources=sources, results=results,
-                  logs=logs, last_scan=last_scan,
+                  logs=logs, last_scan=last_scan, init_done=init_done,
                   can_edit=(u["role"] == "admin"), msg=msg, err=err)
 
 
@@ -755,6 +756,30 @@ async def scan_set_root(request: Request, root: str = Form("")):
     db.set_setting(conn, scan.SETTING_ROOT, root.strip())
     conn.close()
     return RedirectResponse("/admin/scan?msg=경로 저장됨", status_code=303)
+
+
+@app.post("/admin/scan/init", response_class=HTMLResponse)
+async def scan_init_data(request: Request):
+    """templates/ 실데이터로 DB 초기 구축 (최초 1회). 적재는 멱등이라 재실행해도 중복 없음."""
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/scan", status_code=303)
+    conn = db.connect()
+    try:
+        steps = init_data.run(conn, echo=lambda *_a: None)
+        db.set_setting(conn, "init_data_done", "1")
+    except Exception as e:
+        conn.close()
+        return _scan_page(request, u, err=f"초기 구축 실패: {e}")
+    results = [{"key": "init", "label": lb, "ok": not str(out).startswith("실패"),
+                "files": 1, "rows": 0, "note": out, "errors": []} for lb, out in steps]
+    scan._log(conn, "init:templates", "templates/", True,
+              " / ".join(f"{lb}:{out}" for lb, out in steps))
+    conn.close()
+    return _scan_page(request, u, results=results, msg="초기 구축 완료")
 
 
 @app.post("/admin/scan/run", response_class=HTMLResponse)
@@ -888,11 +913,9 @@ def admin_users(request: Request):
 
 
 # ── 데이터 입력/업로드 (공통 트랜잭션 업로드) ───────────
+# 사내불량·외주·폐기·생산은 '폴더 반영'(/admin/scan)으로 수집하므로 업로드 화면을 두지 않는다.
+# 수기 입력만 존재하는 소스(SVP·Claim·Incident)만 남긴다.
 INPUT_PAGES = {
-    "defect": ("불량 입력", "불량입력(직접) Excel — 일자·TM-NO·불량명·수량"),
-    "outsource": ("외주소재불량 가져오기", "외주소재불량 Excel — 100EA 이상은 검토 격리"),
-    "discard": ("폐기불량 가져오기", "폐기불량 Excel"),
-    "production": ("생산실적 입력", "생산실적 Excel — 일자·TM-NO·생산수량·생산금액(천원)"),
     "svp": ("SVP 입력", "SVP Excel — 년월·파트·금액(천원)"),
     "claim": ("Claim 입력", "Claim Excel — 년월·파트·항목·금액(천원)"),
     "incident": ("Customer Incident 관리", "Incident Excel — 일자·파트·고객·내용"),

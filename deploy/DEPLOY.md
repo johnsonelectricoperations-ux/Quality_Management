@@ -39,14 +39,44 @@ python -m app.db            REM 빈 DB + 기본 계정(admin/editor/viewer)
 > 또는 `cmd`를 쓰거나, 이번 세션만 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` 후 활성화.
 > `.bat` 파일들은 PowerShell 정책과 무관하게 실행됩니다(`.\deploy\run_server.bat`).
 
-### 1-1. 데이터 채우기
-- **데모로 먼저 보고 싶다면**:
-  ```bat
-  python scripts\gen_sample.py
-  python -m app.seed
-  ```
-- **실제 운영**: 서버 실행 후 웹에서 관리자로 로그인 → **마스터 관리**에서
-  공정명/제품/불량유형 Excel 업로드 → 각 입력 화면에서 트랜잭션 Excel 업로드.
+### 1-1. 데이터 채우기 (운영 흐름)
+
+데이터는 **2단계**로 들어갑니다.
+
+**① 최초 1회 — `templates/` 실데이터로 초기 구축**
+
+저장소의 `templates/` 폴더에 실제 데이터(제품목록·불량유형·단가·생산·외주·폐기)가 들어있습니다.
+설치 직후 한 번만 실행해 DB를 채웁니다.
+
+```bat
+python -m app.init_data          REM 이미 데이터가 있으면 자동 중단
+python -m app.init_data --force  REM 강제 재실행
+```
+
+또는 서버 실행 후 웹에서 **관리 → 🔄 폴더 반영 → [⤓ templates 데이터로 초기 구축]** 버튼으로도 됩니다.
+
+**② 이후 계속 — 공유 폴더에서 신규 수집**
+
+이후 신규 데이터는 아래 공유 폴더에 규칙적 파일명으로 저장하고,
+웹에서 **관리 → 🔄 폴더 반영 → [▶ 전체 폴더 반영]** 을 누르면 DB에 들어갑니다.
+
+```
+\\carp130001\TheEyesHaveIt\QC_Data\Quality_Data\
+  01_사내불량\{YYYY-MM}\{1PART|2PART}\{공정}\   ← 일일 불량 양식
+  02_생산량\{YYYY-MM}\                          ← ERP 생산수량 xlsx
+  03_외주소재\00_sintering_defect.xlsm          ← 덮어쓰기
+  04_폐기불량\scrap_data.db                     ← 덮어쓰기
+  05_단가마스터\제품별 단가 Master_*.xlsx
+```
+
+- 폴더의 파일은 **읽기만** 합니다(수정·이동·삭제 없음).
+- 여러 번 반영해도 **중복되지 않습니다**(사내불량=일자·공정 단위 교체, 외주·폐기=전체 교체).
+- 초기 구축과 기간이 겹치면 **폴더 쪽이 최신으로 덮어씁니다**.
+- 루트 경로는 폴더 반영 화면에서 변경할 수 있습니다(환경변수 `QMS_DATA_ROOT` 도 가능).
+- 서비스 계정에 공유 폴더 **읽기 권한**이 필요합니다.
+
+> 수기 입력 소스(SVP·Claim·Customer Incident)만 웹 화면에서 직접 입력/업로드합니다.
+> 데모 데이터로 먼저 보고 싶으면: `python scripts\gen_sample.py` → `python -m app.seed`
 
 ### 1-2. 관리자 비밀번호 변경 (필수)
 ```bat

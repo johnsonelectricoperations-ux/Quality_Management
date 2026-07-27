@@ -78,6 +78,22 @@
 </div>
 {% endif %}
 
+{% if can_edit %}
+<div class="panel">
+  <div class="phead"><h2>초기 데이터 구축 (최초 1회)</h2>
+    {% if init_done %}<span class="tot">구축 완료됨</span>{% endif %}
+  </div>
+  <div class="pbody" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+    <form method="post" action="/admin/scan/init" onsubmit="return confirm('templates 폴더의 초기 데이터를 DB에 적재할까요?');">
+      <button class="btn {{ 'btn-s' if init_done else 'btn-p' }}">⤓ templates 데이터로 초기 구축</button>
+    </form>
+    <span class="hint" style="max-width:560px;">시스템 설치 후 <b>최초 1회</b>만 실행합니다.
+      제품·불량유형·단가 마스터와 그동안의 생산·외주·폐기 실적을 한 번에 채웁니다.
+      이후 신규 데이터는 위의 <b>폴더 반영</b>으로 수집하며, 겹치는 기간은 폴더 쪽이 최신으로 덮어씁니다.</span>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel">
   <div class="phead"><h2>최근 반영 이력</h2></div>
   <table>
