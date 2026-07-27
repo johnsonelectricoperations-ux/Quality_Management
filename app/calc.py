@@ -15,10 +15,25 @@ from . import db
 
 
 def base_tmno(tm):
-    """TM-NO 정규화: 접미 알파벳 제거해 base로 통일.
-    598-10A / 598-10B → 598-10, 6017-01AJ → 6017-01, 014-00P → 014-00.
-    여러 파일의 데이터를 base TM-NO 기준으로 합치는 데 사용."""
-    return re.sub(r"[A-Za-z]+$", "", str(tm or "").strip())
+    """TM-NO 정규화: 여러 파일의 표기 흔들림을 하나의 base 키로 통일.
+
+    규칙
+      1) 접미 알파벳 제거      598-10A / 598-10B → 598-10, 6017-01AJ → 6017-01
+      2) 접미부 2자리 0채움    588-5  → 588-05
+      3) 접미부 없으면 -00     1632 / 1632-0 / 1632-00 → 1632-00
+
+    안전장치: 접미부가 숫자가 아니면(날짜로 깨진 값 등) 손대지 않고 그대로 둔다.
+    """
+    s = re.sub(r"[A-Za-z]+$", "", str(tm or "").strip()).strip()
+    if not s:
+        return ""
+    s = s.rstrip("-")                       # '1632-' → '1632'
+    head, sep, suf = s.partition("-")
+    if not head.isdigit():                  # 숫자 코드가 아니면 원본 유지
+        return s
+    if sep and not suf.isdigit():           # 날짜 등으로 깨진 접미부는 유지
+        return s
+    return f"{head}-{int(suf or 0):02d}"    # 접미부 없으면 00
 
 CLAIM_COPQ_ITEMS = ["Warranty", "3rd Party Containment", "Quality Special Freight",
                     "Customer Incident Cost", "Unplanned Inspection & Sorting", "Variance"]

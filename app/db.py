@@ -181,6 +181,7 @@ def init_db():
     _migrate_defect_type(conn)
     _migrate_target(conn)
     conn.commit()
+    _normalize_tmno(conn)
     _ensure_default_admin(conn)
     conn.close()
 
@@ -192,6 +193,28 @@ def ensure_processes(conn, part):
             "INSERT INTO process(part,name,copq_exclude,ord) VALUES(?,?,?,?) "
             "ON CONFLICT(part,name) DO UPDATE SET ord=excluded.ord",
             (part, name, excl, ordn))
+    conn.commit()
+
+
+TMNO_TABLES = ("product", "product_route", "product_price", "production", "defect_entry")
+
+
+def _normalize_tmno(conn):
+    """TM-NO 정규화 규칙이 바뀌어도 기존 행이 옛 키로 남지 않게 재정규화한다.
+    (588-5 → 588-05, 1632 → 1632-00 규칙 추가분). 이미 정규형이면 아무 것도 하지 않음."""
+    from .calc import base_tmno
+    for t in TMNO_TABLES:
+        rows = [r["tm_no"] for r in conn.execute(
+            f"SELECT DISTINCT tm_no FROM {t} WHERE tm_no IS NOT NULL AND tm_no!=''")]
+        for old in rows:
+            new = base_tmno(old)
+            if new == old:
+                continue
+            try:
+                conn.execute(f"UPDATE {t} SET tm_no=? WHERE tm_no=?", (new, old))
+            except sqlite3.IntegrityError:
+                # 정규화하면 기존 행과 UNIQUE 충돌 → 옛 행은 버린다(정규형이 최신)
+                conn.execute(f"DELETE FROM {t} WHERE tm_no=?", (old,))
     conn.commit()
 
 
