@@ -15,13 +15,12 @@
 <div class="panel"><div class="phead"><h2>지표별 목표 (FY{{ fy }} · {{ part }})</h2>
   {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}</div>
   <table>
-    <thead><tr><th>지표</th><th>단위</th><th class="num" style="width:200px;">목표값</th><th>비고</th></tr></thead>
+    <thead><tr><th>지표</th><th>단위</th><th class="num" style="width:200px;">목표값</th></tr></thead>
     <tbody>
     {% for it in items %}
       {% if not (it.kpi in ['proc_ppm','set_ppm'] and part=='통합') %}
       <tr><td>{{ it.name }}</td><td>{{ it.unit }}</td>
-        <td class="num"><input class="in" style="text-align:right;" name="t_{{ it.kpi }}" value="{{ it.value }}" {{ 'readonly' if not can_edit }}></td>
-        <td class="mono">{% if it.monthly %}파트별 · 월별 목표 있으면 그 값 우선{% else %}대시보드 목표선{% endif %}</td></tr>
+        <td class="num"><input class="in" style="text-align:right;" name="t_{{ it.kpi }}" value="{{ it.value }}" {{ 'readonly' if not can_edit }}></td></tr>
       {% endif %}
     {% endfor %}
     </tbody>
@@ -53,7 +52,4 @@
 </div>
 {% endif %}
 </form>
-<div class="hint">목표는 <b>회계연도(FY, 4월~익년 3월)</b> 단위입니다.
-  공정/셋팅 불량율은 <b>파트별</b>만 있고(통합 목표 없음), <b>월별 목표를 넣으면 그 달은 월별 값</b>을,
-  비워두면 위의 연간 목표를 사용합니다.</div>
 {% endblock %}

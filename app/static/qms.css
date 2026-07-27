@@ -137,8 +137,10 @@
   .jchart .g-ax { font:600 9.5px Pretendard,sans-serif; fill:var(--tx3); }
   .jchart .g-ax.cur { fill:var(--p-600); }
   .jchart .g-vlab { font:700 9px var(--mono); fill:var(--tx2); }
+  .jchart .g-vlab-alt { opacity:0; transition:opacity .12s ease; pointer-events:none; }
+  .jchart .g-bw:hover .g-vlab-alt, .jchart .g-bw.show .g-vlab-alt { opacity:1; }
   .jchart .g-tag { font:700 8px Pretendard,sans-serif; fill:var(--hold); }
-  .jchart .g-bar { transition:opacity .15s ease; cursor:default; }
+  .jchart .g-bar { transition:opacity .15s ease; cursor:pointer; }
   .jchart .g-bar:hover { opacity:.82; }
   .jchart .g-dot { fill:var(--card); stroke-width:2; }
 

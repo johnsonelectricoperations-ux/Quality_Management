@@ -5,14 +5,12 @@
     {% for f in fy_list %}
     <a class="segb {{ 'on' if fy==f }}" href="/input/svp?fy={{ f }}">FY{{ f }}</a>{% endfor %}
   </div>
-  <span class="hint">FY{{ fy }} = {{ fy-1 }}년 4월 ~ {{ fy }}년 3월 · 단위: <b>원</b></span>
 </div>
 
 <form method="post" action="/input/svp/save">
 <input type="hidden" name="fy" value="{{ fy }}">
 <div class="panel">
   <div class="phead"><h2>SVP 입력 (FY{{ fy }})</h2>
-    <span class="tot">월별 매출액 — KPI %의 분모</span>
     {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}
   </div>
   <div style="overflow-x:auto;">
@@ -36,11 +34,6 @@
     </tbody>
   </table>
   </div>
-  <div class="pbody"><div class="hint">SVP는 <b>Scrap Cost % · COPQ %</b> 의 분모입니다. 입력 단위는 <b>원</b>.
-    <b>합계</b> 행은 자동합산이 아니라 <b>직접 입력</b>하며, 통합(전체) 조회의 분모로 쓰입니다
-    (비워두면 1PART+2PART 합으로 계산). 파트 칸을 비우면 그 달은 <b>생산금액 합(추정)</b>으로 계산되고
-    "추정" 배지가 표시됩니다. 값을 지우려면 칸을 비우고 저장하세요.
-    맨 오른쪽 <b>FY 누계</b>는 그 행에 입력된 12개월의 합(참고용)입니다.</div></div>
 </div>
 </form>
 {% endblock %}

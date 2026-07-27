@@ -1,10 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="note">외주소재불량·폐기불량 중 <b>단일 TM-NO × 단일 불량유형 100EA 이상</b>으로 격리된 데이터입니다.
-  수량 확인 후 <b>그대로 반영(승인)·수정 후 반영·삭제</b> 중 하나를 선택하세요.
-  한 번 처리한 건은 다음 폴더 반영(재스캔) 때 다시 나타나지 않습니다. (처리: 입력자·관리자)<br>
-  <b>TM-NO 없음</b>으로 표시된 건은 품목을 특정할 수 없는 불량이므로, 특정 TM-NO에 넣지 않고
-  <b>지정된 공정</b>의 불량으로만 집계합니다.</div>
 <div class="panel"><div class="phead"><h2>검토 대기 목록</h2><span class="tot">{{ rows|length }}건</span></div>
   <table>
     <thead><tr><th>출처</th><th>일자</th><th>TM-NO</th><th>집계공정</th><th>불량명</th><th class="num">수량</th><th>처리</th></tr></thead>

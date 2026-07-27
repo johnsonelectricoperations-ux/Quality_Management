@@ -65,8 +65,7 @@
 <div class="charts2">
   <div class="mcard">
     <div class="mh"><div><div class="mt"><span class="dot" id="mDot" style="background:var(--p-500)"></span><span id="mTitle">COPQ</span> 월별 추이</div>
-      <div class="mv" id="mVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div>
-      <div class="msub">KPI 카드를 클릭하면 그 지표로 바뀝니다 · 최근 7개월</div></div>
+      <div class="mv" id="mVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div></div>
       <span class="mdelta {{ 'chip-up' if d.cards.copq.delta<=0 else 'chip-dn' }}">{{ '▼' if d.cards.copq.delta<=0 else '▲' }} {{ d.cards.copq.delta|abs }}%p</span></div>
     <div class="jchart" id="mChart" data-type="bar" data-color="--p-500" data-unit="%" data-dec="2" data-cur="{{ c.cur }}"
       {% if c.fydiv != '' %}data-fydiv="{{ c.fydiv }}" data-fylabels="{{ c.fylabels }}"{% endif %}

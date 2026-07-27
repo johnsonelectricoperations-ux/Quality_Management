@@ -71,7 +71,7 @@ tr.trow-denom td{border-top:2px solid var(--bd);font-weight:600;color:var(--tx2)
   {% for v, name, desc in views %}
   <a class="vtab {{ 'on' if view==v }}"
      href="/report/detail?view={{ v }}&part={{ part }}&unit={{ unit }}&f={{ ym_from }}&t={{ ym_to }}&kind={{ kind }}&proc={{ proc }}&src={{ src }}&measure={{ measure }}&topn={{ topn }}">
-    {{ name }}<small>{{ desc }}</small></a>
+    {{ name }}</a>
   {% endfor %}
 </div>
 
@@ -153,9 +153,5 @@ tr.trow-denom td{border-top:2px solid var(--bd);font-weight:600;color:var(--tx2)
   </div>
   {% endif %}
 {% endif %}
-
-<div class="hint" style="margin-top:10px;">※ 사내불량·생산수량은 <b>월 단위</b>로 수집되어 각 월 말일에 기록됩니다.
-  따라서 <b>주별 집계는 제공하지 않습니다</b>(일자 있는 외주·폐기만으로는 불량율이 왜곡됨).
-  일일 입력이 쌓이면 주별을 추가할 수 있습니다.</div>
 {% endblock %}
 {% block scripts %}<script src="/static/charts.js"></script>{% endblock %}

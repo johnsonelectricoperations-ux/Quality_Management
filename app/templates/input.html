@@ -7,10 +7,9 @@
       <div class="f"><label>{{ desc }}</label><input class="in" type="file" name="file" accept=".xlsx" required style="width:420px;"></div>
       <button class="btn btn-p">업로드</button>
     </form>
-    <div class="hint" style="margin-top:10px;">TM-NO는 문자로 처리(날짜 자동변환 방지). 정해진 규격의 양식을 사용하세요.</div>
   </div>
 </div>
-{% else %}<div class="note">조회 권한입니다. 데이터 입력은 입력자/관리자만 가능합니다.</div>{% endif %}
+{% endif %}
 
 <div class="panel"><div class="phead"><h2>최근 내역</h2><span class="tot">{{ recent|length }}건</span></div>
   <table>

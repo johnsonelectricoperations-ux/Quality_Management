@@ -127,6 +127,8 @@
       const fs = labW(maxLab, 9) > slot ? 8 : 9;
       // 라벨이 슬롯보다 넓으면, 앞 라벨과 세로로 겹칠 때 위로 한 칸 올려 어긋나게 둔다.
       const wide = labW(maxLab, fs) > slot * 0.92;
+      // 수치 라벨: 해당월(cur)만 항상 표시. 나머지는 마우스오버/클릭 시에만 보인다(g-vlab-alt).
+      const curIdx = cfg.cur !== undefined && cfg.cur !== null && cfg.cur !== "" ? Number(cfg.cur) : null;
       let bars = "", prevY = null;
       vs.forEach((v,i) => {
         if (v == null) return;
@@ -134,12 +136,15 @@
         const over = cfg.over && cfg.target != null && v > cfg.target;
         const isMark = mark.includes(i);
         const fill = isMark ? "var(--hold)" : (over ? "var(--warn)" : `url(#${id})`);
+        const isCur = curIdx != null && i === curIdx;
+        bars += `<g class="g-bw${isCur ? " g-cur" : ""}" tabindex="0">`;
         bars += `<rect class="g-bar" x="${x.toFixed(1)}" y="${yt.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${fill}"${over?' fill-opacity="0.9"':''}/>`;
         let ly = yt - 6;
         if (wide && prevY != null && Math.abs(ly - prevY) < fs + 2) ly = prevY - (fs + 3);
         prevY = ly;
-        bars += `<text class="g-vlab" x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" style="font-size:${fs}px">${vlab(v)}</text>`;
+        bars += `<text class="g-vlab${isCur ? "" : " g-vlab-alt"}" x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" style="font-size:${fs}px">${vlab(v)}</text>`;
         if (isMark) bars += `<text class="g-tag" x="${cx.toFixed(1)}" y="${baseY+14}" text-anchor="middle">제외</text>`;
+        bars += `</g>`;
       });
       return `<svg viewBox="0 0 ${W} ${H}" role="img">`
         + `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">`
@@ -252,6 +257,15 @@
                      : d.type === "multi" ? renderMulti(cfg)
                      : d.type === "hbar" ? renderHBar(cfg)
                      : renderArea(cfg);
+      // 이전월 수치 라벨: 터치기기는 hover가 없으므로 클릭/탭으로 토글한다(PC는 CSS hover로 표시).
+      if (d.type === "bar" && !node._bwBound) {
+        node._bwBound = true;
+        node.addEventListener("click", function (e) {
+          const g = e.target.closest(".g-bw");
+          node.querySelectorAll(".g-bw.show").forEach(el => { if (el !== g) el.classList.remove("show"); });
+          if (g) g.classList.toggle("show");
+        });
+      }
     }
 
     // 지표 전환 등으로 data-* 를 바꾼 뒤 다시 그릴 수 있게 노출

@@ -12,9 +12,6 @@
         <input type="checkbox" name="copq_exclude" value="1"> 제외(Y)</label></div>
       <button class="btn btn-p">저장</button>
     </form>
-    <div class="hint" style="margin-top:8px;">같은 [파트+공정명]이 있으면 순서·COPQ제외가 갱신됩니다.
-      공정별 불량현황은 집계공정 5종(성형·소결·정형·가공·기타)만 표시되며, 여기서 추가한 다른 이름은
-      집계·리포트에 영향을 주지 않습니다.</div>
   </div>
 </div>
 {% endif %}
@@ -30,7 +27,7 @@
           <form method="post" action="/admin/processes/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('{{ r.part|pl }} {{ r.name }} 삭제?');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}
-      <tr><td colspan="5" style="color:var(--tx3);">공정이 없습니다. 제품 CSV를 가져오면 표준 7공정이 자동 생성됩니다.</td></tr>
+      <tr><td colspan="5" style="color:var(--tx3);">공정이 없습니다.</td></tr>
     {% endfor %}
     </tbody>
   </table>

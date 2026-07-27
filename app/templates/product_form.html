@@ -11,13 +11,10 @@
       <div class="f"><label>파트</label><select class="in" name="part">
         {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if p.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
     </div>
-    <div class="hint">TM-NO는 "TM" 접두어 없이 입력(예: 1545-01). 저장 시 문자로 처리되어 날짜 변환이 방지됩니다.
-      접미 알파벳은 base로 합쳐집니다(598-10A → 598-10).</div>
   </div>
 </div>
 
-<div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2>
-  <span class="tot">체크한 공정이 표준 순서대로 라우팅됩니다</span></div>
+<div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2></div>
   <table>
     <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th style="width:100px;">COPQ</th>
       <th class="num" style="width:200px;">기준단가 (원, 누적)</th></tr></thead>
@@ -33,9 +30,6 @@
     {% endfor %}
     </tbody>
   </table>
-  <div class="pbody"><div class="hint">단가는 <b>누적</b>이므로 뒤 공정이 앞 공정보다 큽니다
-    (예: 성형 17.5 → 소결 21 → 정형 28 → 가공·기타 35).
-    비우면 해당 공정 단가가 삭제되어 Scrap Cost 계산에서 0으로 처리됩니다.</div></div>
 </div>
 
 <div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
