@@ -890,6 +890,7 @@ INPUT_PAGES = {
 
 # ── SVP 입력 (FY 가로 표) ───────────────────────────────
 SVP_PARTS = ["VMS PART", "TM PART"]
+SVP_ROWS = SVP_PARTS + [calc.SVP_TOTAL_PART]     # 합계(통합)도 직접 입력
 
 
 def _fy_cols(fy):
@@ -926,18 +927,15 @@ def svp_page(request: Request, fy: int = 0, msg: str = "", err: str = ""):
     cols = _fy_cols(2000 + fy)
     cur = {(r["part"], r["ym"]): r["amount"] for r in conn.execute("SELECT part,ym,amount FROM svp")}
     conn.close()
-    rows, col_total, grand = [], {ym: 0.0 for ym, _l in cols}, 0.0
-    for part in SVP_PARTS:
+    rows = []
+    for part in SVP_ROWS:
         vals = {ym: cur.get((part, ym)) for ym, _l in cols}
         tot = sum(v for v in vals.values() if v)
-        rows.append({"part": part, "vals": vals, "total": round(tot)})
-        for ym, _l in cols:
-            col_total[ym] += vals[ym] or 0
-        grand += tot
+        rows.append({"part": part, "vals": vals, "total": round(tot),
+                     "is_total": part == calc.SVP_TOTAL_PART})
     return render(request, "svp.html", u, active="svp", heading="SVP 입력",
                   crumb="데이터 입력", pending=pending_count(), fy=fy, fy_list=fy_list,
-                  cols=cols, rows=rows, col_total={k: round(v) for k, v in col_total.items()},
-                  grand=round(grand), msg=msg, err=err,
+                  cols=cols, rows=rows, msg=msg, err=err,
                   can_edit=(u["role"] in ("editor", "admin")))
 
 
@@ -950,7 +948,7 @@ async def svp_save(request: Request):
     form = await request.form()
     fy = int(form.get("fy") or 27)
     conn = db.connect()
-    for part in SVP_PARTS:
+    for part in SVP_ROWS:
         for ym, _lbl in _fy_cols(2000 + fy):
             key = f"v_{part}_{ym}"
             if key not in form:

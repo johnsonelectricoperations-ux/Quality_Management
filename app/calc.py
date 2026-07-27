@@ -238,14 +238,29 @@ def _parts_for(part):
     return ["VMS PART", "TM PART"] if part == "통합" else [part]
 
 
+SVP_TOTAL_PART = "통합"     # 합계는 자동합산이 아니라 별도 입력값
+
+
 def svp_of(conn, ym, parts):
-    """월 분모: SVP 입력값 합. 없으면 None(추정 필요)."""
+    """월 분모(천원). SVP는 **원 단위로 저장**되므로 천원으로 환산해 돌려준다.
+    없으면 None(생산금액으로 추정).
+
+    통합 조회(파트 2개 이상)일 때는 별도 입력된 '합계(통합)' 값을 우선 사용하고,
+    없을 때만 파트 합으로 계산한다."""
+    def _amt(p):
+        row = conn.execute("SELECT amount FROM svp WHERE ym=? AND part=?", (ym, p)).fetchone()
+        return row["amount"] if row else None
+
+    if len(parts) > 1:
+        tot = _amt(SVP_TOTAL_PART)
+        if tot is not None:
+            return tot / 1000.0
     total, have = 0.0, False
     for p in parts:
-        row = conn.execute("SELECT amount FROM svp WHERE ym=? AND part=?", (ym, p)).fetchone()
-        if row:
-            total += row["amount"]; have = True
-    return total if have else None
+        v = _amt(p)
+        if v is not None:
+            total += v; have = True
+    return total / 1000.0 if have else None
 
 
 def claim_sum(conn, ym, parts, items=None):

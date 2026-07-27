@@ -5,7 +5,7 @@
     {% for f in fy_list %}
     <a class="segb {{ 'on' if fy==f }}" href="/input/svp?fy={{ f }}">FY{{ f }}</a>{% endfor %}
   </div>
-  <span class="hint">FY{{ fy }} = {{ fy-1 }}년 4월 ~ {{ fy }}년 3월 · 단위: 천원</span>
+  <span class="hint">FY{{ fy }} = {{ fy-1 }}년 4월 ~ {{ fy }}년 3월 · 단위: <b>원</b></span>
 </div>
 
 <form method="post" action="/input/svp/save">
@@ -19,30 +19,28 @@
   <table>
     <thead><tr><th style="min-width:90px;">파트</th>
       {% for ym, lbl in cols %}<th class="num">{{ lbl }}</th>{% endfor %}
-      <th class="num" style="min-width:100px;">합계</th></tr></thead>
+      <th class="num" style="min-width:110px;">FY 누계</th></tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td><b>{{ r.part|pl }}</b></td>
+      <tr {% if r.is_total %}style="background:var(--bg2);"{% endif %}>
+        <td><b>{{ '합계' if r.is_total else r.part|pl }}</b></td>
         {% for ym, lbl in cols %}
         <td class="num"><input class="in" type="number" step="any" min="0"
-               style="text-align:right;width:92px;padding:6px 8px;"
+               style="text-align:right;width:110px;padding:6px 8px;{{ 'font-weight:700;' if r.is_total }}"
                name="v_{{ r.part }}_{{ ym }}" value="{{ r.vals[ym] if r.vals[ym] is not none else '' }}"
                {{ 'readonly' if not can_edit }}></td>
         {% endfor %}
-        <td class="num" style="font-weight:700;">{{ r.total|cf }}</td>
+        <td class="num" style="font-weight:700;color:var(--tx3);">{{ r.total|cf }}</td>
       </tr>
     {% endfor %}
-      <tr style="background:var(--bg2);">
-        <td><b>합계</b></td>
-        {% for ym, lbl in cols %}<td class="num" style="font-weight:700;">{{ col_total[ym]|cf }}</td>{% endfor %}
-        <td class="num" style="font-weight:700;">{{ grand|cf }}</td>
-      </tr>
     </tbody>
   </table>
   </div>
-  <div class="pbody"><div class="hint">SVP는 <b>Scrap Cost % · COPQ %</b> 의 분모입니다.
-    비워두면 그 달은 <b>생산금액 합(추정)</b>으로 계산되고 화면에 "추정" 배지가 표시됩니다.
-    값을 지우려면 칸을 비우고 저장하세요.</div></div>
+  <div class="pbody"><div class="hint">SVP는 <b>Scrap Cost % · COPQ %</b> 의 분모입니다. 입력 단위는 <b>원</b>.
+    <b>합계</b> 행은 자동합산이 아니라 <b>직접 입력</b>하며, 통합(전체) 조회의 분모로 쓰입니다
+    (비워두면 1PART+2PART 합으로 계산). 파트 칸을 비우면 그 달은 <b>생산금액 합(추정)</b>으로 계산되고
+    "추정" 배지가 표시됩니다. 값을 지우려면 칸을 비우고 저장하세요.
+    맨 오른쪽 <b>FY 누계</b>는 그 행에 입력된 12개월의 합(참고용)입니다.</div></div>
 </div>
 </form>
 {% endblock %}
