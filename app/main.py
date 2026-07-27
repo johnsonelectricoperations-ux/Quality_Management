@@ -117,6 +117,35 @@ def latest_month(conn):
     return int(d[:4]), int(d[5:7])
 
 
+# 일 단위로 쌓이는 소스(사내불량/외주소재불량/폐기불량/생산량). 서로 같은 날짜까지
+# 채워져 있어야 정상이므로, 이 중 가장 늦은 날짜(ref_date)보다 뒤처진 소스를 '지연'으로 표시한다.
+FRESHNESS_DAILY = [
+    ("사내불량", "direct"), ("외주소재불량", "outsource"), ("폐기불량", "discard"),
+]
+
+
+def data_freshness(conn):
+    """소스별 DB 반영 최신 일자. 일별 소스(사내/외주/폐기/생산)는 서로 비교해 지연 여부를 표시하고,
+    월별 수기 입력(SVP·Claim)과 비정기 입력(Customer Incident)은 참고용으로만 보여준다."""
+    daily = []
+    for label, src in FRESHNESS_DAILY:
+        row = conn.execute(
+            "SELECT MAX(d) m FROM defect_entry WHERE source=? AND status!='rejected'", (src,)).fetchone()
+        daily.append({"label": label, "date": row["m"]})
+    row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
+    daily.append({"label": "생산량", "date": row["m"]})
+    ref = max((r["date"] for r in daily if r["date"]), default=None)
+    for r in daily:
+        r["stale"] = r["date"] != ref if ref else False
+
+    monthly = []
+    for label, table in [("SVP", "svp"), ("Claim", "claim")]:
+        row = conn.execute(f"SELECT MAX(ym) m FROM {table}").fetchone()
+        monthly.append({"label": label, "date": row["m"]})
+    inc = conn.execute("SELECT MAX(d) m FROM incident").fetchone()
+    return {"daily": daily, "ref_date": ref, "monthly": monthly, "incident": inc["m"]}
+
+
 MONTHLY_KPIS = ("proc_ppm", "set_ppm")      # 월별 목표를 둘 수 있는 지표
 
 
@@ -292,9 +321,10 @@ def dashboard(request: Request, part: str = "통합"):
     m = calc.Masters(conn)
     daily = calc.compute_daily(conn, m)
     data = build_dashboard(conn, m, daily, part)
+    fresh = data_freshness(conn)
     conn.close()
     return render(request, "dashboard.html", u, active="dash", heading="대시보드",
-                  crumb="개요", pending=pending_count(), part=part, d=data)
+                  crumb="개요", pending=pending_count(), part=part, d=data, fresh=fresh)
 
 
 # ── (구) KPI 현황 → 세부지표현황으로 통합 (옛 링크 호환) ──

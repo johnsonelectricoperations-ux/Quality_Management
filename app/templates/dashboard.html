@@ -9,7 +9,29 @@
 </div>
 {%- endmacro %}
 <style>.seg a.segb{font:600 12px/1 inherit;color:var(--tx2);padding:6px 12px;border-radius:4px;cursor:pointer;text-decoration:none;}
-.seg a.segb.on{background:var(--card);color:var(--tx);box-shadow:var(--shadow);}</style>
+.seg a.segb.on{background:var(--card);color:var(--tx);box-shadow:var(--shadow);}
+.freshbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:9px 14px;margin-bottom:12px;
+  background:var(--card);border:1px solid var(--bd);border-radius:8px;font:600 11.5px/1.4 inherit;}
+.freshbar .fitem{display:flex;align-items:center;gap:5px;color:var(--tx2);}
+.freshbar .fitem b{font-weight:700;color:var(--tx);}
+.freshbar .fitem.stale b{color:var(--err);}
+.freshbar .fitem.stale::before{content:"⚠";}
+.freshbar .fsep{color:var(--bd2);}
+</style>
+
+<div class="freshbar">
+  {% for r in fresh.daily %}
+  <span class="fitem{{ ' stale' if r.stale }}">{{ r.label }} <b>{{ r.date or '데이터 없음' }}</b></span>
+  {% if not loop.last %}<span class="fsep">·</span>{% endif %}
+  {% endfor %}
+  <span class="fsep">|</span>
+  {% for r in fresh.monthly %}
+  <span class="fitem">{{ r.label }} <b>{{ r.date or '데이터 없음' }}</b></span>
+  {% if not loop.last %}<span class="fsep">·</span>{% endif %}
+  {% endfor %}
+  <span class="fsep">·</span>
+  <span class="fitem">Customer Incident <b>{{ fresh.incident or '데이터 없음' }}</b></span>
+</div>
 
 {% macro top_table(title, sub, rows) %}
 <div class="panel">
