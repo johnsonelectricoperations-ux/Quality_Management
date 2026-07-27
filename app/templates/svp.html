@@ -25,9 +25,9 @@
       <tr {% if r.is_total %}style="background:var(--bg2);"{% endif %}>
         <td><b>{{ '합계' if r.is_total else r.part|pl }}</b></td>
         {% for ym, lbl in cols %}
-        <td class="num"><input class="in" type="number" step="any" min="0"
+        <td class="num"><input class="in svp-amt" type="text" inputmode="numeric" autocomplete="off"
                style="text-align:right;width:110px;padding:6px 8px;{{ 'font-weight:700;' if r.is_total }}"
-               name="v_{{ r.part }}_{{ ym }}" value="{{ r.vals[ym] if r.vals[ym] is not none else '' }}"
+               name="v_{{ r.part }}_{{ ym }}" value="{{ r.vals[ym]|cf if r.vals[ym] is not none else '' }}"
                {{ 'readonly' if not can_edit }}></td>
         {% endfor %}
         <td class="num" style="font-weight:700;color:var(--tx3);">{{ r.total|cf }}</td>
@@ -43,4 +43,20 @@
     맨 오른쪽 <b>FY 누계</b>는 그 행에 입력된 12개월의 합(참고용)입니다.</div></div>
 </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 천단위 쉼표 자동 표시 (숫자만 입력받아 3자리마다 콤마). 제출 시 서버가 콤마 제거 후 파싱.
+(function () {
+  function format(el) {
+    var digits = el.value.replace(/[^0-9]/g, '');
+    el.value = digits === '' ? '' : Number(digits).toLocaleString('en-US');
+  }
+  document.querySelectorAll('.svp-amt').forEach(function (el) {
+    format(el);   // 서버가 내려준 초기값도 동일 규칙으로 정리
+    el.addEventListener('input', function () { format(el); });
+  });
+})();
+</script>
 {% endblock %}
