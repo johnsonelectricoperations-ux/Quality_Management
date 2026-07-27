@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest
+from . import db, calc, ingest, scan
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -711,6 +711,68 @@ def price_delete(request: Request, tm: str):
     conn.commit()
     conn.close()
     return RedirectResponse("/admin/prices?msg=단가 삭제됨", status_code=303)
+
+
+# ── 폴더 반영(스캔) ─────────────────────────────────────
+def _scan_page(request, u, results=None, msg="", err=""):
+    conn = db.connect()
+    root = scan.data_root(conn)
+    sources = []
+    for key, label, sub in scan.SOURCES:
+        folder = os.path.join(root, sub)
+        exists = os.path.isdir(folder)
+        cnt = 0
+        if exists:
+            for _r, _d, names in os.walk(folder):
+                cnt += sum(1 for n in names if not n.startswith("~$"))
+        sources.append({"key": key, "label": label, "sub": sub, "exists": exists, "count": cnt})
+    logs = [dict(r) for r in conn.execute(
+        "SELECT ts,kind,ok,note FROM upload_log WHERE kind LIKE 'scan:%' ORDER BY id DESC LIMIT 20")]
+    last_scan = db.get_setting(conn, "last_scan_at", "")
+    conn.close()
+    return render(request, "scan.html", u, active="scan", heading="폴더 반영",
+                  crumb="관리", pending=pending_count(), root=root,
+                  root_ok=os.path.isdir(root), sources=sources, results=results,
+                  logs=logs, last_scan=last_scan,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+
+
+@app.get("/admin/scan", response_class=HTMLResponse)
+def scan_page(request: Request, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    return _scan_page(request, u, msg=msg, err=err)
+
+
+@app.post("/admin/scan/root")
+async def scan_set_root(request: Request, root: str = Form("")):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/scan", status_code=303)
+    conn = db.connect()
+    db.set_setting(conn, scan.SETTING_ROOT, root.strip())
+    conn.close()
+    return RedirectResponse("/admin/scan?msg=경로 저장됨", status_code=303)
+
+
+@app.post("/admin/scan/run", response_class=HTMLResponse)
+async def scan_run(request: Request, key: str = Form("all")):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/scan", status_code=303)
+    conn = db.connect()
+    try:
+        results = scan.scan_all(conn) if key == "all" else [scan.scan_one(conn, key)]
+    except Exception as e:
+        conn.close()
+        return _scan_page(request, u, err=f"반영 실패: {e}")
+    conn.close()
+    return _scan_page(request, u, results=results)
 
 
 # ── 공정 관리 ───────────────────────────────────────────

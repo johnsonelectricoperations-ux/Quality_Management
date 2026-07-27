@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
   pw_hash TEXT NOT NULL, role TEXT NOT NULL  -- viewer|editor|admin
 );
+CREATE TABLE IF NOT EXISTS setting (
+  k TEXT PRIMARY KEY, v TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS upload_log (
   id INTEGER PRIMARY KEY, ts TEXT NOT NULL, kind TEXT NOT NULL,
   filename TEXT NOT NULL, ok INTEGER NOT NULL, note TEXT DEFAULT ''
@@ -164,6 +167,17 @@ def ensure_processes(conn, part):
             "INSERT INTO process(part,name,copq_exclude,ord) VALUES(?,?,?,?) "
             "ON CONFLICT(part,name) DO UPDATE SET ord=excluded.ord",
             (part, name, excl, ordn))
+    conn.commit()
+
+
+def get_setting(conn, key, default=""):
+    r = conn.execute("SELECT v FROM setting WHERE k=?", (key,)).fetchone()
+    return r["v"] if r else default
+
+
+def set_setting(conn, key, value):
+    conn.execute("INSERT INTO setting(k,v) VALUES(?,?) "
+                 "ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, str(value)))
     conn.commit()
 
 
