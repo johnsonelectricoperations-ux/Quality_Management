@@ -49,8 +49,9 @@ CREATE TABLE IF NOT EXISTS defect_entry (
   source TEXT NOT NULL DEFAULT 'direct',    -- direct|outsource|discard
   status TEXT NOT NULL DEFAULT 'confirmed', -- confirmed|pending
   reg_user TEXT DEFAULT '',
-  batch_key TEXT DEFAULT ''                 -- 폴더 재적재 idempotent 키(파트|공정|구분|일자)
-);
+  batch_key TEXT DEFAULT '',                -- 폴더 재적재 idempotent 키(파트|공정|구분|일자)
+  reviewed INTEGER NOT NULL DEFAULT 0       -- 100EA 검토화면에서 사람이 승인/수정/반려했으면 1
+);                                           -- (재스캔 시 reviewed=1 행은 덮어쓰지 않고 보존)
 CREATE TABLE IF NOT EXISTS production (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
   qty INTEGER NOT NULL, amount REAL NOT NULL DEFAULT 0,  -- 생산금액(천원)
@@ -184,6 +185,7 @@ def init_db():
     _add_col(conn, "defect_entry", "kind", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "batch_key", "TEXT DEFAULT ''")
     _add_col(conn, "defect_entry", "part", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "defect_entry", "reviewed", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
     _migrate_target(conn)

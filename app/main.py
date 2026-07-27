@@ -1047,29 +1047,39 @@ async def input_upload(request: Request, page: str, file: UploadFile = File(...)
     return RedirectResponse(f"/input/{page}{q}", status_code=303)
 
 
+SOURCE_LABEL = {"outsource": "외주소재불량", "discard": "폐기불량"}
+
+
 def outsource_review(request, u):
+    """외주소재불량·폐기불량 100EA 이상 검토 대기 목록(공통 화면)."""
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,tm_no,defect_name,qty FROM defect_entry WHERE status='pending' ORDER BY id")]
+        "SELECT id,d,tm_no,defect_name,qty,source FROM defect_entry WHERE status='pending' ORDER BY id")]
+    for r in rows:
+        r["source_label"] = SOURCE_LABEL.get(r["source"], r["source"])
     conn.close()
-    return render(request, "review.html", u, active="oreview", heading="외주소재불량 검토",
+    return render(request, "review.html", u, active="oreview", heading="불량 검토 (100EA 이상)",
                   crumb="데이터 입력", pending=len(rows), rows=rows,
                   can_edit=(u["role"] in ("editor", "admin")))
 
 
 @app.post("/input/outsource-review/{eid}")
 async def review_action(request: Request, eid: int, action: str = Form(...), qty: int = Form(None)):
+    """검토 대기 건 처리: approve(그대로/수정 반영)·reject(삭제).
+    사람이 결정한 건은 reviewed=1로 표시해 다음 폴더 반영(재스캔) 때도 덮어써지지 않는다."""
     u = current_user(request)
     if u is None or u["role"] not in ("editor", "admin"):
         return RedirectResponse("/input/outsource-review", status_code=303)
     conn = db.connect()
     if action == "approve":
         if qty is not None:
-            conn.execute("UPDATE defect_entry SET qty=?, status='confirmed' WHERE id=?", (qty, eid))
+            conn.execute("UPDATE defect_entry SET qty=?, status='confirmed', reviewed=1 WHERE id=?", (qty, eid))
         else:
-            conn.execute("UPDATE defect_entry SET status='confirmed' WHERE id=?", (eid,))
+            conn.execute("UPDATE defect_entry SET status='confirmed', reviewed=1 WHERE id=?", (eid,))
     elif action == "reject":
-        conn.execute("DELETE FROM defect_entry WHERE id=?", (eid,))
+        # 하드 삭제 대신 상태만 'rejected'로 바꿔 집계에서 제외(status='confirmed' 조건에 안 걸림)하고,
+        # reviewed=1로 표시해 다음 폴더 재스캔에도 이 건이 다시 나타나지 않게 한다.
+        conn.execute("UPDATE defect_entry SET status='rejected', reviewed=1 WHERE id=?", (eid,))
     conn.commit()
     conn.close()
     return RedirectResponse("/input/outsource-review", status_code=303)

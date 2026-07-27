@@ -219,6 +219,31 @@ def ingest_defect_master(conn, path):
     return len(data), []
 
 
+# ── 100EA 검토(외주/폐기 공통) ──────────────────────────
+def _reingest_preserve_reviewed(conn, source, rows):
+    """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행은 보존한다.
+
+    rows: [(d,tm_no,defect_name,qty,part,proc,kind,status,reg_user), ...] (source는 고정값으로 별도 처리)
+    reviewed=1인 기존 행(사람이 결정 완료)과 (d,tm_no,defect_name) 키가 같은 신규행은 버리고,
+    reviewed=0인 기존 행만 삭제 후 나머지를 재적재한다.
+    반환: (적재건수, 검토완료라 건너뛴 건수)."""
+    reviewed_keys = {(r["d"], r["tm_no"], r["defect_name"]) for r in conn.execute(
+        "SELECT d,tm_no,defect_name FROM defect_entry WHERE source=? AND reviewed=1", (source,))}
+    conn.execute("DELETE FROM defect_entry WHERE source=? AND reviewed=0", (source,))
+    keep, skipped = [], 0
+    for row in rows:
+        d, tm_no, defect_name = row[0], row[1], row[2]
+        if (d, tm_no, defect_name) in reviewed_keys:
+            skipped += 1
+            continue
+        keep.append(row)
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)", [(*row[:7], source, row[7], row[8]) for row in keep])
+    conn.commit()
+    return len(keep), skipped
+
+
 # ── 사내불량 일일 양식(폴더 스캔) ──────────────────────
 import os
 import re
@@ -385,10 +410,12 @@ _SCRAP_KNOWN_PROC = set(db.PHYS_TO_BUCKET)
 _SCRAP_PART = {"1part": "VMS PART", "2part": "TM PART"}
 
 
-def ingest_scrap_db(conn, path):
+def ingest_scrap_db(conn, path, quarantine_100=True):
     """폐기 scrap_data.db 적재. defect_category='해당' 만, defect_process→집계공정(수량 합산).
     폐기는 공정불량(kind='공정'). TM-NO 없는 공정단위 폐기(소결로_산화 등)는 part만으로 집계.
-    전체 재스캔이므로 기존 source='discard' 삭제 후 재적재(idempotent).
+    단일 TM×단일 불량명 ≥100 → pending(검토 대기, /input/outsource-review 화면에서 외주와 함께 관리).
+    전체 재스캔 idempotent(source='discard' 삭제 후 재적재) — 사람이 검토(승인/수정/반려)한
+    행(reviewed=1)은 재스캔해도 보존한다.
     반환: (건수, note[dict])."""
     src = sqlite3.connect(path)
     src.row_factory = sqlite3.Row
@@ -415,14 +442,13 @@ def ingest_scrap_db(conn, path):
             unmapped[raw_proc] = unmapped.get(raw_proc, 0) + 1
             proc = "기타"                                   # 비표준 공정은 기타로(경고)
         name = str(r["scrap_reason"] or "").strip() or "기타"
-        rows.append((d, tm, name, qty, part, proc, "공정", "discard", ""))
+        status = "pending" if (quarantine_100 and qty >= 100) else "confirmed"
+        rows.append((d, tm, name, qty, part, proc, "공정", status, ""))
     src.close()
-    conn.execute("DELETE FROM defect_entry WHERE source='discard'")
-    conn.executemany(
-        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
-        "VALUES(?,?,?,?,?,?,?,?, 'confirmed', ?)", rows)
-    conn.commit()
-    return len(rows), {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped}
+    pend = sum(1 for row in rows if row[7] == "pending")
+    n, _skipped = _reingest_preserve_reviewed(conn, "discard", rows)
+    return n, {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped,
+              "검토대기": pend}
 
 
 # 제품별 단가 Master(단가산출 시트) 블록: (블록명, TM열, 단가열)
@@ -491,11 +517,12 @@ _OUTSOURCE_PART = {"1part": "VMS PART", "2part": "TM PART"}
 _OUTSOURCE_SUMS = [("성형불량 합계", "성형"), ("소결불량 합계", "소결"), ("기타 합계", "기타")]
 
 
-def ingest_outsource_xlsm(conn, path, quarantine_100=False):
+def ingest_outsource_xlsm(conn, path, quarantine_100=True):
     """외주소재불량 xlsm(Sheet1) 적재. 파일이 계산한 성형/소결/기타 합계를 그대로
     집계공정 공정불량 수량으로 반영(별도 외주불량율 없음). 공정불량(kind='공정').
-    단일 TM×단일 공정합계 ≥100 → pending(검토 대기).
-    전체 재스캔 idempotent(source='outsource' 삭제 후 재적재).
+    단일 TM×단일 공정합계 ≥100 → pending(검토 대기, /input/outsource-review 화면).
+    전체 재스캔 idempotent(source='outsource' 삭제 후 재적재) — 단, 사람이 검토(승인/수정/반려)한
+    행(reviewed=1)은 재스캔해도 덮어쓰지 않고 보존한다.
     반환: (건수, pending수, errors)."""
     wb = load_workbook(path, data_only=True)
     ws = wb["Sheet1"] if "Sheet1" in wb.sheetnames else wb.worksheets[0]
@@ -527,14 +554,9 @@ def ingest_outsource_xlsm(conn, path, quarantine_100=False):
             status = "pending" if (quarantine_100 and qty >= 100) else "confirmed"
             if status == "pending":
                 pend += 1
-            rows.append((d, tm, f"외주 {proc}불량", qty, part, proc, "공정",
-                         "outsource", status, ""))
-    conn.execute("DELETE FROM defect_entry WHERE source='outsource'")
-    conn.executemany(
-        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?)", rows)
-    conn.commit()
-    return len(rows), pend, []
+            rows.append((d, tm, f"외주 {proc}불량", qty, part, proc, "공정", status, ""))
+    n, _skipped = _reingest_preserve_reviewed(conn, "outsource", rows)
+    return n, pend, []
 
 
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)

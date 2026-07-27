@@ -16,7 +16,7 @@
   <a class="nav {{ 'on' if active=='svp' }}" href="/input/svp">₩ SVP 입력</a>
   <a class="nav {{ 'on' if active=='claim' }}" href="/input/claim">▤ Claim 입력</a>
   <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
-  {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 외주소재불량 검토<span class="cnt">{{ pending }}</span></a>{% endif %}
+  {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span></a>{% endif %}
   <div class="cap">집계 / 리포트</div>
   <a class="nav {{ 'on' if active=='rkpi' }}" href="/report/kpi">📈 KPI 현황</a>
   <a class="nav {{ 'on' if active=='rdefect' }}" href="/report/defect">⚙ 공정별 불량현황</a>

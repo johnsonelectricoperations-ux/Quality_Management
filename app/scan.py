@@ -120,8 +120,13 @@ def scan_scrap(conn, root):
     except Exception as e:
         return {"ok": False, "note": str(e), "files": 1, "rows": 0, "errors": [str(e)]}
     skip = note.get("수량없음_스킵", 0)
-    return {"ok": True, "files": 1, "rows": n, "errors": [],
-            "note": f"{os.path.basename(p)} / {n}건 적재" + (f" (수량없음 {skip}건 제외)" if skip else "")}
+    pend = note.get("검토대기", 0)
+    extra = ""
+    if skip:
+        extra += f" (수량없음 {skip}건 제외)"
+    if pend:
+        extra += f" (검토대기 {pend})"
+    return {"ok": True, "files": 1, "rows": n, "errors": [], "note": f"{os.path.basename(p)} / {n}건 적재{extra}"}
 
 
 def scan_price(conn, root):
