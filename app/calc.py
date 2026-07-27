@@ -161,10 +161,16 @@ class Masters:
         마스터(defect_type)에 발생공정 또는 배분기준이 **지정돼 있으면** 그 규칙대로 배분한다
         (여러 공정이면 largest_remainder로 정수 배분, 시트에 어느 공정이 기록했는지는 무시).
         마스터에 아무 지정이 없으면(공란="입력공정 100%") 시트에 기록된 공정(stored_process)을
-        그대로 100% 사용한다."""
+        그대로 100% 사용한다.
+
+        예외: **TM-NO가 없는 건**(폐기의 소결로_산화 등 품목을 특정할 수 없는 공정단위 불량)은
+        품목 라우팅이 없어 마스터 배분기준을 적용할 수 없다. 특정 TM-NO에 넣지 않고
+        입력에 지정된 공정(stored_process) 100%로만 집계한다."""
         sp = (stored_process or "").strip()
         dt = self.defect.get((part, defect_name))
         kind = (stored_kind or "").strip() or (dt[0] if dt else "공정")
+        if not str(tm_no or "").strip() and sp:
+            return kind, [(db.bucket_of(sp), qty)]
         has_master_rule = bool(dt and (dt[1] or dt[2]))      # 발생공정 또는 배분기준 지정됨
         if not has_master_rule and sp:
             return kind, [(db.bucket_of(sp), qty)]

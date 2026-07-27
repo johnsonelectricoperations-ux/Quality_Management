@@ -1126,9 +1126,10 @@ def outsource_review(request, u):
     """외주소재불량·폐기불량 100EA 이상 검토 대기 목록(공통 화면)."""
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,tm_no,defect_name,qty,source FROM defect_entry WHERE status='pending' ORDER BY id")]
+        "SELECT id,d,tm_no,defect_name,qty,source,process FROM defect_entry WHERE status='pending' ORDER BY id")]
     for r in rows:
         r["source_label"] = SOURCE_LABEL.get(r["source"], r["source"])
+        r["no_tm"] = not (r["tm_no"] or "").strip()      # TM-NO 없는 건 = 공정 단위로만 집계
     conn.close()
     return render(request, "review.html", u, active="oreview", heading="불량 검토 (100EA 이상)",
                   crumb="데이터 입력", pending=len(rows), rows=rows,
