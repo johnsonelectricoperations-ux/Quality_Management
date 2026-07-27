@@ -3,37 +3,45 @@
 <div class="panel">
   <div class="phead"><h2>제품 목록</h2>
     <form method="get" action="/admin/products" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-      <select class="in" name="part" style="width:120px;padding:6px 10px;">
+      <select class="in" name="part" style="width:110px;padding:6px 10px;">
         <option value="" {{ 'selected' if not part }}>전체 파트</option>
         {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if part==pv }}>{{ pl }}</option>{% endfor %}
       </select>
-      <input class="in" name="q" value="{{ q }}" placeholder="TM-NO / 품명 검색" style="width:200px;padding:6px 10px;">
+      <select class="in" name="miss" style="width:130px;padding:6px 10px;">
+        <option value="" {{ 'selected' if not miss }}>전체</option>
+        <option value="1" {{ 'selected' if miss }}>단가 미등록만</option>
+      </select>
+      <input class="in" name="q" value="{{ q }}" placeholder="TM-NO / 품명 검색" style="width:190px;padding:6px 10px;">
       <button class="btn btn-s btn-sm">검색</button>
       {% if can_edit %}<a class="btn btn-p btn-sm" href="/admin/products/new" style="text-decoration:none;">+ 제품 등록</a>{% endif %}
     </form>
   </div>
+  <div style="overflow-x:auto;">
   <table>
-    <thead><tr><th>TM-NO</th><th>품명</th><th>파트</th><th class="num">중량</th><th>공정 라우팅</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <thead><tr><th>TM-NO</th><th>품명</th><th>파트</th><th>공정 라우팅</th>
+      {% for p in agg %}<th class="num">{{ p }}</th>{% endfor %}
+      {% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
       <tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part|pl }}</td>
-        <td class="num">{{ '%.4g'|format(r.weight) if r.weight else '' }}</td>
-        <td class="mono" style="font-size:11px;">{{ r.route or '-' }}</td>
+        <td class="mono" style="font-size:11px;color:var(--tx3);">{{ r.route or '-' }}</td>
+        {% for p in agg %}
+          <td class="num">{% if r.price[p] is not none %}{{ '%g'|format(r.price[p]) }}{% else %}<span style="color:var(--tx3);">-</span>{% endif %}</td>
+        {% endfor %}
         {% if can_edit %}<td style="white-space:nowrap;">
           <a class="btn btn-s btn-sm" href="/admin/products/{{ r.tm_no }}/edit" style="text-decoration:none;">수정</a>
-          <form method="post" action="/admin/products/{{ r.tm_no }}/delete" style="display:inline;" onsubmit="return confirm('{{ r.tm_no }} 삭제할까요?');">
-            <button class="btn btn-ghost btn-sm">삭제</button></form>
         </td>{% endif %}</tr>
     {% else %}
-      <tr><td colspan="6" style="color:var(--tx3);">데이터가 없습니다. CSV를 가져오거나 제품을 등록하세요.</td></tr>
+      <tr><td colspan="{{ 4 + agg|length + (1 if can_edit else 0) }}" style="color:var(--tx3);">데이터가 없습니다. 폴더 반영에서 초기 구축을 실행하거나 제품을 등록하세요.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;font:500 12px/1 inherit;color:var(--tx3);">
-    <span>총 {{ total|cf }}건 · {{ page }}/{{ pages if pages else 1 }} 페이지</span>
+    <span>총 {{ total|cf }}건 · {{ page }}/{{ pages if pages else 1 }} 페이지 · 단가 단위: 원(누적)</span>
     <span style="margin-left:auto;display:flex;gap:6px;">
-      {% if page>1 %}<a class="btn btn-s btn-sm" href="/admin/products?q={{ q }}&part={{ part }}&page={{ page-1 }}" style="text-decoration:none;">← 이전</a>{% endif %}
-      {% if page<pages %}<a class="btn btn-s btn-sm" href="/admin/products?q={{ q }}&part={{ part }}&page={{ page+1 }}" style="text-decoration:none;">다음 →</a>{% endif %}
+      {% if page>1 %}<a class="btn btn-s btn-sm" href="/admin/products?q={{ q }}&part={{ part }}&miss={{ miss }}&page={{ page-1 }}" style="text-decoration:none;">← 이전</a>{% endif %}
+      {% if page<pages %}<a class="btn btn-s btn-sm" href="/admin/products?q={{ q }}&part={{ part }}&miss={{ miss }}&page={{ page+1 }}" style="text-decoration:none;">다음 →</a>{% endif %}
     </span>
   </div>
 </div>

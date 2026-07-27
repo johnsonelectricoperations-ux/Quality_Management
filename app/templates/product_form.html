@@ -5,36 +5,62 @@
 <div class="panel"><div class="phead"><h2>{{ '제품 등록' if mode=='new' else '제품 수정' }}</h2>
   <a class="btn btn-s btn-sm" href="/admin/products" style="margin-left:auto;text-decoration:none;">← 목록</a></div>
   <div class="pbody">
-    <div class="frow" style="grid-template-columns:180px 1fr 150px 120px;">
+    <div class="frow" style="grid-template-columns:200px 1fr 160px;">
       <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ p.tm_no }}" placeholder="예: 1545-01" required></div>
       <div class="f"><label>품명</label><input class="in" name="name" value="{{ p.name }}"></div>
       <div class="f"><label>파트</label><select class="in" name="part">
         {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if p.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
-      <div class="f"><label>중량</label><input class="in" name="weight" value="{{ p.weight or '' }}"></div>
     </div>
-    <div class="hint">TM-NO는 "TM" 접두어 없이 입력(예: 1545-01). 저장 시 문자로 처리되어 날짜 변환이 방지됩니다.</div>
+    <div class="hint">TM-NO는 "TM" 접두어 없이 입력(예: 1545-01). 저장 시 문자로 처리되어 날짜 변환이 방지됩니다.
+      접미 알파벳은 base로 합쳐집니다(598-10A → 598-10).</div>
   </div>
 </div>
 
 <div class="panel"><div class="phead"><h2>공정 라우팅</h2>
   <span class="tot">체크한 공정이 표준 순서대로 라우팅됩니다</span></div>
   <table>
-    <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th>COPQ</th><th class="num" style="width:160px;">기준단가(원, 누적)</th><th style="width:140px;">원본 코드</th></tr></thead>
+    <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th>집계공정</th><th style="width:180px;">원본 코드</th></tr></thead>
     <tbody>
-    {% for pr in procs %}
-      {% set r = route.get(pr.name) %}
+    {% for pr in phys %}
+      {% set r = route.get(pr) %}
       <tr>
-        <td><input type="checkbox" name="use_{{ pr.name }}" value="1" {{ 'checked' if r }}></td>
-        <td>{{ loop.index }}. {{ pr.name }}</td>
-        <td>{% if pr.excl %}<span class="badge bg-hold">제외</span>{% else %}포함{% endif %}</td>
-        <td class="num"><input class="in" style="text-align:right;" name="price_{{ pr.name }}" value="{{ r.unit_price if r and r.unit_price else '' }}"></td>
-        <td class="mono"><input class="in" name="code_{{ pr.name }}" value="{{ r.op_code if r else '' }}" style="font-size:12px;"></td>
+        <td><input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if r }}></td>
+        <td>{{ loop.index }}. {{ pr }}</td>
+        <td style="color:var(--tx3);">→ {{ bucket[pr] }}</td>
+        <td class="mono"><input class="in" name="code_{{ pr }}" value="{{ r.op_code if r else '' }}" style="font-size:12px;"></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  <div class="pbody"><button class="btn btn-p">저장</button>
-    <span class="hint" style="margin-left:10px;">기준단가는 아직 미확정(다른 파일에서 확정 예정)이면 비워두어도 됩니다.</span></div>
 </div>
+
+<div class="panel"><div class="phead"><h2>공정별 단가</h2>
+  <span class="tot">원 · 누적단가</span></div>
+  <div class="pbody">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      {% for proc in agg %}
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <label style="font:600 11.5px/1.3 inherit;color:var(--tx2);">{{ proc }}</label>
+        <input class="in" type="number" step="any" min="0" name="price_{{ proc }}"
+               value="{{ price[proc] if price[proc] is not none else '' }}" style="width:120px;text-align:right;">
+      </div>
+      {% endfor %}
+    </div>
+    <div class="hint" style="margin-top:10px;">누적단가이므로 뒤 공정이 앞 공정보다 큽니다
+      (예: 성형 17.5 → 소결 21 → 정형 28 → 가공·기타 35).
+      비우면 해당 공정 단가가 삭제되고 Scrap Cost 계산에서 0으로 처리됩니다.</div>
+  </div>
+</div>
+
+<div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
+  <button class="btn btn-p">저장</button>
+  <a class="btn btn-s" href="/admin/products" style="text-decoration:none;">취소</a>
+  {% if mode=='edit' %}
+  <span style="margin-left:auto;">
+    <button class="btn btn-ghost" formaction="/admin/products/{{ p.tm_no }}/delete"
+            onclick="return confirm('{{ p.tm_no }} 제품을 삭제할까요? (라우팅·단가도 함께 삭제)');">제품 삭제</button>
+  </span>
+  {% endif %}
+</div></div>
 </form>
 {% endblock %}

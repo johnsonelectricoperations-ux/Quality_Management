@@ -107,6 +107,9 @@ CANON_PROCESSES = [
 ]
 AGG_PROCESSES = [name for name, _o, _e in CANON_PROCESSES]     # 집계공정 이름
 
+# 제품 라우팅에 쓰이는 물리공정(제품목록 CSV 컬럼 순서). 집계는 bucket_of()로 5종에 매핑.
+PHYS_PROCESSES = ["성형", "소결", "정형", "가공", "압입", "밴딩", "후처리"]
+
 # 물리공정(제품 라우팅·일일시트 공정) → 집계버킷 매핑.
 # 성형·소결·정형·가공은 그대로, 나머지 후처리 계열은 전부 '기타'.
 PHYS_TO_BUCKET = {
