@@ -91,6 +91,14 @@
       제품·불량유형·단가 마스터와 그동안의 생산·외주·폐기 실적을 한 번에 채웁니다.
       이후 신규 데이터는 위의 <b>폴더 반영</b>으로 수집하며, 겹치는 기간은 폴더 쪽이 최신으로 덮어씁니다.</span>
   </div>
+  <div class="pbody" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--bd);">
+    <form method="post" action="/admin/scan/purge-demo"
+          onsubmit="return confirm('데모(샘플) 품목과 그 생산·불량 실적을 삭제할까요?\n실데이터는 영향받지 않습니다.');">
+      <button class="btn btn-s">🧹 데모 데이터 삭제</button>
+    </form>
+    <span class="hint" style="max-width:560px;">개발용 샘플(<span class="mono">1545-01 VVT 스프로킷</span> 등 10품목)과
+      그 생산·불량 실적을 지웁니다. 제품만 지우면 실적이 남아 KPI가 왜곡되므로 함께 삭제합니다.</span>
+  </div>
 </div>
 {% endif %}
 

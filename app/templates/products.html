@@ -30,6 +30,9 @@
         {% endfor %}
         {% if can_edit %}<td style="white-space:nowrap;">
           <a class="btn btn-s btn-sm" href="/admin/products/{{ r.tm_no }}/edit" style="text-decoration:none;">수정</a>
+          <form method="post" action="/admin/products/{{ r.tm_no }}/delete" style="display:inline;"
+                onsubmit="return confirm('{{ r.tm_no }} 을(를) 삭제할까요?\n제품·라우팅·단가가 함께 삭제됩니다.');">
+            <button class="btn btn-ghost btn-sm">삭제</button></form>
         </td>{% endif %}</tr>
     {% else %}
       <tr><td colspan="{{ 4 + agg|length + (1 if can_edit else 0) }}" style="color:var(--tx3);">데이터가 없습니다. 폴더 반영에서 초기 구축을 실행하거나 제품을 등록하세요.</td></tr>

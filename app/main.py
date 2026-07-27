@@ -703,6 +703,30 @@ async def scan_init_data(request: Request):
     return _scan_page(request, u, results=results, msg="초기 구축 완료")
 
 
+@app.post("/admin/scan/purge-demo", response_class=HTMLResponse)
+async def scan_purge_demo(request: Request):
+    """데모(샘플) 품목과 그 실적을 삭제. 실데이터로 전환할 때 1회 사용."""
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/admin/scan", status_code=303)
+    conn = db.connect()
+    try:
+        out = init_data.purge_demo(conn)
+    except Exception as e:
+        conn.close()
+        return _scan_page(request, u, err=f"데모 삭제 실패: {e}")
+    note = " · ".join(f"{k} {v}행" for k, v in out.items() if v)
+    scan._log(conn, "purge:demo", "데모 데이터", True, note or "삭제 대상 없음")
+    conn.close()
+    results = [{"key": "demo", "label": "데모 데이터 삭제", "ok": True,
+                "files": 0, "rows": sum(out.values()),
+                "note": note or "삭제할 데모 데이터가 없습니다", "errors": []}]
+    return _scan_page(request, u, results=results)
+
+
 @app.post("/admin/scan/run", response_class=HTMLResponse)
 async def scan_run(request: Request, key: str = Form("all")):
     u = current_user(request)

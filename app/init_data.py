@@ -47,6 +47,27 @@ def _defect_master(conn, path):
     return "%d건" % n
 
 
+# scripts/gen_sample.py + app.seed 로 들어간 데모 품목 (실데이터에는 없는 가상 TM-NO)
+DEMO_TMNOS = ["1545-01", "2233-02", "3010-04", "4820-07", "5501-03",
+              "6120-01", "6640-05", "7233-02", "8410-03", "9051-06"]
+
+
+def purge_demo(conn):
+    """데모(샘플) 데이터 삭제.
+
+    제품만 지우면 그 제품의 생산·불량 실적이 남아 KPI가 계속 왜곡되므로
+    (defect_entry는 part가 저장돼 제품이 없어도 집계됨) 트랜잭션까지 함께 지운다.
+    반환: {테이블: 삭제행수}
+    """
+    q = ",".join("?" * len(DEMO_TMNOS))
+    out = {}
+    for t in ("product", "product_route", "product_price", "production", "defect_entry"):
+        cur = conn.execute(f"DELETE FROM {t} WHERE tm_no IN ({q})", DEMO_TMNOS)
+        out[t] = cur.rowcount
+    conn.commit()
+    return out
+
+
 def has_data(conn):
     """이미 운영 데이터가 있는가."""
     for t in ("defect_entry", "production", "product"):
