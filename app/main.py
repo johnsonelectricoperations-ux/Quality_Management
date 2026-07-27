@@ -883,10 +883,94 @@ def admin_users(request: Request):
 # 사내불량·외주·폐기·생산은 '폴더 반영'(/admin/scan)으로 수집하므로 업로드 화면을 두지 않는다.
 # 수기 입력만 존재하는 소스(SVP·Claim·Incident)만 남긴다.
 INPUT_PAGES = {
-    "svp": ("SVP 입력", "SVP Excel — 년월·파트·금액(천원)"),
     "claim": ("Claim 입력", "Claim Excel — 년월·파트·항목·금액(천원)"),
     "incident": ("Customer Incident 관리", "Incident Excel — 일자·파트·고객·내용"),
 }
+
+
+# ── SVP 입력 (FY 가로 표) ───────────────────────────────
+SVP_PARTS = ["VMS PART", "TM PART"]
+
+
+def _fy_cols(fy):
+    """FY의 12개월 → [(ym, 라벨)] (4월~익년 3월)."""
+    out = []
+    for m in range(4, 13):
+        out.append((f"{fy-1:04d}-{m:02d}", f"{m}월"))
+    for m in range(1, 4):
+        out.append((f"{fy:04d}-{m:02d}", f"{m}월"))
+    return out
+
+
+def _fy_options(conn):
+    """선택 가능한 FY 목록 (입력된 SVP + 생산 데이터 + 당해 FY)."""
+    fys = set()
+    for r in conn.execute("SELECT DISTINCT ym FROM svp"):
+        fys.add(calc.ym_to_fy(r["ym"]))
+    cy, cm = latest_month(conn)
+    fys.add(calc.fy_of(cy, cm))
+    fys.add(calc.fy_of(cy, cm) - 1)
+    return sorted(f % 100 for f in fys)
+
+
+@app.get("/input/svp", response_class=HTMLResponse)
+def svp_page(request: Request, fy: int = 0, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    fy_list = _fy_options(conn)
+    if not fy:
+        fy = fy_list[-1] if fy_list else 27
+    cols = _fy_cols(2000 + fy)
+    cur = {(r["part"], r["ym"]): r["amount"] for r in conn.execute("SELECT part,ym,amount FROM svp")}
+    conn.close()
+    rows, col_total, grand = [], {ym: 0.0 for ym, _l in cols}, 0.0
+    for part in SVP_PARTS:
+        vals = {ym: cur.get((part, ym)) for ym, _l in cols}
+        tot = sum(v for v in vals.values() if v)
+        rows.append({"part": part, "vals": vals, "total": round(tot)})
+        for ym, _l in cols:
+            col_total[ym] += vals[ym] or 0
+        grand += tot
+    return render(request, "svp.html", u, active="svp", heading="SVP 입력",
+                  crumb="데이터 입력", pending=pending_count(), fy=fy, fy_list=fy_list,
+                  cols=cols, rows=rows, col_total={k: round(v) for k, v in col_total.items()},
+                  grand=round(grand), msg=msg, err=err,
+                  can_edit=(u["role"] in ("editor", "admin")))
+
+
+@app.post("/input/svp/save")
+async def svp_save(request: Request):
+    """FY 표 저장. 빈칸은 삭제(그 달은 생산금액 추정으로 계산)."""
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/svp", status_code=303)
+    form = await request.form()
+    fy = int(form.get("fy") or 27)
+    conn = db.connect()
+    for part in SVP_PARTS:
+        for ym, _lbl in _fy_cols(2000 + fy):
+            key = f"v_{part}_{ym}"
+            if key not in form:
+                continue
+            raw = str(form.get(key) or "").replace(",", "").strip()
+            if raw == "":
+                conn.execute("DELETE FROM svp WHERE ym=? AND part=?", (ym, part))
+                continue
+            try:
+                v = float(raw)
+            except ValueError:
+                conn.close()
+                return RedirectResponse(f"/input/svp?fy={fy}&err={ym} 값이 숫자가 아님",
+                                        status_code=303)
+            conn.execute("INSERT INTO svp(ym,part,amount) VALUES(?,?,?) "
+                         "ON CONFLICT(ym,part) DO UPDATE SET amount=excluded.amount",
+                         (ym, part, v))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/input/svp?fy={fy}&msg=저장됨", status_code=303)
 
 
 @app.get("/input/{page}", response_class=HTMLResponse)
@@ -917,8 +1001,6 @@ def _recent_rows(conn, page):
     if page == "production":
         return [dict(r) for r in conn.execute(
             "SELECT d,tm_no,qty,amount FROM production ORDER BY d DESC,tm_no LIMIT 12")]
-    if page == "svp":
-        return [dict(r) for r in conn.execute("SELECT ym,part,amount FROM svp ORDER BY ym DESC LIMIT 12")]
     if page == "claim":
         return [dict(r) for r in conn.execute(
             "SELECT ym,part,item,amount FROM claim ORDER BY ym DESC LIMIT 12")]
@@ -950,8 +1032,6 @@ async def input_upload(request: Request, page: str, file: UploadFile = File(...)
             msg = f"폐기불량 {n}건"
         elif page == "production":
             msg = f"생산실적 {ingest.ingest_production(conn, path)}건"
-        elif page == "svp":
-            msg = f"SVP {ingest.ingest_svp(conn, path)}건"
         elif page == "claim":
             msg = f"Claim {ingest.ingest_claim(conn, path)}건"
         elif page == "incident":

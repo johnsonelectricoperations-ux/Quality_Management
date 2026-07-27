@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+  <div class="seg">
+    {% for f in fy_list %}
+    <a class="segb {{ 'on' if fy==f }}" href="/input/svp?fy={{ f }}">FY{{ f }}</a>{% endfor %}
+  </div>
+  <span class="hint">FY{{ fy }} = {{ fy-1 }}년 4월 ~ {{ fy }}년 3월 · 단위: 천원</span>
+</div>
+
+<form method="post" action="/input/svp/save">
+<input type="hidden" name="fy" value="{{ fy }}">
+<div class="panel">
+  <div class="phead"><h2>SVP 입력 (FY{{ fy }})</h2>
+    <span class="tot">월별 매출액 — KPI %의 분모</span>
+    {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}
+  </div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th style="min-width:90px;">파트</th>
+      {% for ym, lbl in cols %}<th class="num">{{ lbl }}</th>{% endfor %}
+      <th class="num" style="min-width:100px;">합계</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td><b>{{ r.part|pl }}</b></td>
+        {% for ym, lbl in cols %}
+        <td class="num"><input class="in" type="number" step="any" min="0"
+               style="text-align:right;width:92px;padding:6px 8px;"
+               name="v_{{ r.part }}_{{ ym }}" value="{{ r.vals[ym] if r.vals[ym] is not none else '' }}"
+               {{ 'readonly' if not can_edit }}></td>
+        {% endfor %}
+        <td class="num" style="font-weight:700;">{{ r.total|cf }}</td>
+      </tr>
+    {% endfor %}
+      <tr style="background:var(--bg2);">
+        <td><b>합계</b></td>
+        {% for ym, lbl in cols %}<td class="num" style="font-weight:700;">{{ col_total[ym]|cf }}</td>{% endfor %}
+        <td class="num" style="font-weight:700;">{{ grand|cf }}</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="pbody"><div class="hint">SVP는 <b>Scrap Cost % · COPQ %</b> 의 분모입니다.
+    비워두면 그 달은 <b>생산금액 합(추정)</b>으로 계산되고 화면에 "추정" 배지가 표시됩니다.
+    값을 지우려면 칸을 비우고 저장하세요.</div></div>
+</div>
+</form>
+{% endblock %}
