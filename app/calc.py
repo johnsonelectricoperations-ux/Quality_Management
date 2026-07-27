@@ -318,6 +318,8 @@ def month_kpi(conn, m, daily, y, mth, part):
         "incident": incident_count(conn, ym, parts),
         "proc_ppm": ppm(agg["proc_qty"], agg["prod_qty"]),
         "set_ppm": ppm(agg["set_qty"], agg["prod_qty"]),
+        "proc_qty": agg["proc_qty"],
+        "set_qty": agg["set_qty"],
         "prod_qty": agg["prod_qty"],
         "denom": round(denom),
         "denom_est": est,
@@ -508,23 +510,30 @@ def analyze(conn, m, kind_of_chart, date_from, date_to, part, unit,
         if rest:                                 # 합산 그룹은 포함된 그룹들의 합집합
             denom_tms[other] = set().union(*(denom_tms[g] for g in rest))
 
+    def denom_of(g, k):
+        if per_tm:
+            return sum(prod.get((k, tmk), 0) for tmk in denom_tms.get(g, ()))
+        return prod.get(k, 0)
+
     series = []
     for g in keep:
-        vals = []
+        vals, qtys, denoms = [], [], []
         for k in periods:
             q = cell.get((g, k), 0)
+            qtys.append(q)
+            denom = denom_of(g, k)
+            denoms.append(denom)
             if measure == "qty":
                 vals.append(q)
-                continue
-            # 불량율(ppm): TM/품명 축은 그 그룹의 TM-NO 생산수량 합, 그 외는 파트 전체
-            if per_tm:
-                denom = sum(prod.get((k, tmk), 0) for tmk in denom_tms.get(g, ()))
             else:
-                denom = prod.get(k, 0)
-            vals.append(round(q / denom * 1_000_000) if denom else None)
-        total_q = sum(cell.get((g, k), 0) for k in periods)
-        series.append({"name": g, "values": vals, "total": total_q})
-    return {"periods": periods, "series": series, "unit": unit_label, "note": note}
+                vals.append(round(q / denom * 1_000_000) if denom else None)
+        total_q = sum(qtys)
+        series.append({"name": g, "values": vals, "qty": qtys, "denom": denoms, "total": total_q})
+    # 표시용 분모 시리즈: per_tm 축은 그룹마다 다르므로 그룹별로, 아니면 공통 1개
+    denom_series = ({s["name"]: s["denom"] for s in series} if per_tm
+                    else (series[0]["denom"] if series else []))
+    return {"periods": periods, "series": series, "unit": unit_label, "note": note,
+            "per_tm": per_tm, "denom_series": denom_series}
 
 
 PART_DISPLAY = {"VMS PART": "1PART", "TM PART": "2PART"}

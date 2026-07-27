@@ -13,6 +13,11 @@
 .lgd{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 2px;}
 .lgd i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;}
 .lgd span{font:600 11px/1.5 inherit;color:var(--tx2);}
+.srct{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;}
+.srct th,.srct td{padding:3px 6px;border-top:1px solid var(--bd);white-space:nowrap;}
+.srct th{text-align:left;color:var(--tx3);font-weight:600;}
+.srct td.num, .srct th.num{text-align:right;font-variant-numeric:tabular-nums;}
+tr.trow-denom td{border-top:2px solid var(--bd);font-weight:600;color:var(--tx2);background:var(--bg2,rgba(127,127,127,.06));}
 </style>
 
 <form class="fbar" method="get" action="/report/detail">
@@ -79,6 +84,16 @@
       <div class="jchart" data-type="bar" data-color="{{ ch.color }}" data-unit="{{ ch.unit }}" data-dec="{{ ch.dec }}"
         data-cur="{{ cur }}" {% if fydiv != '' %}data-fydiv="{{ fydiv }}" data-fylabels="{{ fylabels }}"{% endif %}
         data-targets="{{ ch.targets }}" data-labels="{{ labels }}" data-values="{{ ch.vseries }}"></div>
+      {% if ch.src_table %}
+      <div style="overflow-x:auto;">
+      <table class="srct">
+        <thead><tr>{% for h in ch.src_table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in ch.src_table.rows %}
+          <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
+        {% endfor %}</tbody>
+      </table>
+      </div>
+      {% endif %}
     </div>
   {% endfor %}
   </div>
@@ -104,7 +119,7 @@
   </div>
 
   {% if table %}
-  <div class="panel"><div class="phead"><h2>상세 데이터</h2></div>
+  <div class="panel"><div class="phead"><h2>상세 데이터 (소스: 분자)</h2></div>
     <div style="overflow-x:auto;">
     <table>
       <thead><tr>{% for h in table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
@@ -113,6 +128,24 @@
         <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
       {% else %}
         <tr><td colspan="{{ table.head|length }}" style="color:var(--tx3);">데이터가 없습니다.</td></tr>
+      {% endfor %}
+      {% if table.denom_row %}
+        <tr class="trow-denom">{% for cval in table.denom_row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
+      {% endif %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if denom_table %}
+  <div class="panel"><div class="phead"><h2>생산수량 (소스: 분모)</h2></div>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr>{% for h in denom_table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in denom_table.rows %}
+        <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
       {% endfor %}
       </tbody>
     </table>

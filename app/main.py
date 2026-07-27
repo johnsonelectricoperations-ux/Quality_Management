@@ -387,35 +387,50 @@ def report_detail(request: Request, view: str = "kpi", part: str = "통합", uni
                  ("Warranty", "--sec", "", 0, "warranty", "warranty", part),
                  ("공정불량율 (ppm)", "--p-500", "", 0, "proc_ppm", "proc_ppm", ppm_part),
                  ("셋팅불량율 (ppm)", "--sec", "", 0, "set_ppm", "set_ppm", ppm_part)]
+        # 카드별 월별 분자·분모(소스 데이터): vk(값 키)로 매핑
+        KPI_SRC = {
+            "scrap_cost_pct": ("scrap_cost", "Scrap Cost(천원)", "denom", "분모(SVP·천원)"),
+            "scrap_qty_pct": ("scrap_qty", "Scrap 수량(EA)", "prod_qty", "생산수량(EA)"),
+            "copq_pct": ("copq_cost", "COPQ 비용(천원)", "denom", "분모(SVP·천원)"),
+            "warranty": ("warranty", "Warranty(천원)", None, None),
+            "proc_ppm": ("proc_qty", "공정불량 수량(EA)", "prod_qty", "생산수량(EA)"),
+            "set_ppm": ("set_qty", "셋팅불량 수량(EA)", "prod_qty", "생산수량(EA)"),
+        }
+
+        def src_table(vk):
+            num_key, num_label, den_key, den_label = KPI_SRC[vk]
+            rows = [[num_label] + [f"{s[num_key]:,}" for s in series]]
+            if den_key:
+                rows.append([den_label] + [f"{s[den_key]:,}" for s in series])
+            return {"head": ["구분"] + labels, "rows": rows}
+
         ctx["kpi_charts"] = [{
             "name": nm, "color": col, "unit": un, "dec": dc,
             "cur_val": series[-1][vk] if series else 0,
             "vseries": _join([s[vk] for s in series]), "targets": tgt(tk, tp),
+            "src_table": src_table(vk),
         } for nm, col, un, dc, vk, tk, tp in specs]
         ctx["labels"] = ",".join(labels)
         ctx["cur"] = len(months) - 1
         ctx["fydiv"] = fydiv if fydiv is not None else ""
         ctx["fylabels"] = fylabels
-    elif view == "defect_share":
-        res = calc.analyze(conn, m, "defect_type", date_from, date_to, part, unit,
+    elif view in ("defect_share", "product_name"):
+        axis, label, color = ("defect_type", "불량유형", "--p-500") if view == "defect_share" \
+                             else ("product_name", "품명", "--sec")
+        res = calc.analyze(conn, m, axis, date_from, date_to, part, unit,
                            kind_f, procs, sources, measure="qty", topn=topn)
         rows = sorted(res["series"], key=lambda s: s["total"], reverse=True)
+        grand = sum(r["total"] for r in rows) or 1
         ctx["chart"] = {"type": "hbar", "names": "|".join(r["name"] for r in rows),
                         "vseries": _join([r["total"] for r in rows]),
-                        "unit": "EA", "dec": 0, "color": "--p-500", "note": res["note"]}
-        tot = sum(r["total"] for r in rows) or 1
-        ctx["table"] = {"head": ["불량유형", "수량(EA)", "비중"],
-                        "rows": [[r["name"], f"{r['total']:,}", f"{r['total']/tot*100:.1f}%"] for r in rows]}
-    elif view == "product_name":
-        res = calc.analyze(conn, m, "product_name", date_from, date_to, part, unit,
-                           kind_f, procs, sources, measure="qty", topn=topn)
-        rows = sorted(res["series"], key=lambda s: s["total"], reverse=True)
-        ctx["chart"] = {"type": "hbar", "names": "|".join(r["name"] for r in rows),
-                        "vseries": _join([r["total"] for r in rows]),
-                        "unit": "EA", "dec": 0, "color": "--sec", "note": res["note"]}
-        tot = sum(r["total"] for r in rows) or 1
-        ctx["table"] = {"head": ["품명", "수량(EA)", "비중"],
-                        "rows": [[r["name"], f"{r['total']:,}", f"{r['total']/tot*100:.1f}%"] for r in rows]}
+                        "unit": "EA", "dec": 0, "color": color, "note": res["note"]}
+        # 월별 소스 데이터: 분자(항목별 월 수량) + 분모(그 달 전체 수량, 열 합계)
+        by_period_total = [sum(r["qty"][i] for r in rows) for i in range(len(res["periods"]))]
+        ctx["table"] = {"head": [label] + res["periods"] + ["합계(EA)", "비중"],
+                        "rows": [[r["name"]] + [f"{v:,}" for v in r["qty"]]
+                                 + [f"{r['total']:,}", f"{r['total']/grand*100:.1f}%"] for r in rows],
+                        "denom_row": ["합계(분모)"] + [f"{v:,}" for v in by_period_total]
+                                     + [f"{grand:,}", "100.0%"]}
     else:
         res = calc.analyze(conn, m, view, date_from, date_to, part, unit,
                            kind_f, procs, sources, measure=measure, topn=topn)
@@ -425,9 +440,19 @@ def report_detail(request: Request, view: str = "kpi", part: str = "통합", uni
                         "sets": "|".join(_join(s["values"]) for s in res["series"]),
                         "unit": res["unit"], "dec": 0, "color": "--p-500", "note": res["note"],
                         "legend": list(zip(names, range(len(names))))}
-        ctx["table"] = {"head": ["구분"] + res["periods"] + ["합계(EA)"],
-                        "rows": [[names[i]] + ["-" if v is None else f"{v:,}" for v in s["values"]]
+        # 상세 표는 항상 원본 수량(분자)로 표시하고, 생산수량(분모)은 별도 표로 보여준다
+        ctx["table"] = {"head": ["구분(분자·EA)"] + res["periods"] + ["합계(EA)"],
+                        "rows": [[names[i]] + [f"{v:,}" for v in s["qty"]]
                                  + [f"{s['total']:,}"] for i, s in enumerate(res["series"])]}
+        if res["per_tm"]:
+            ctx["denom_table"] = {"head": ["구분(분모·생산수량 EA)"] + res["periods"] + ["합계(EA)"],
+                                  "rows": [[names[i]] + [f"{v:,}" for v in res["denom_series"][s["name"]]]
+                                           + [f"{sum(res['denom_series'][s['name']]):,}"]
+                                           for i, s in enumerate(res["series"])]}
+        else:
+            dv = res["denom_series"]
+            ctx["denom_table"] = {"head": ["구분(분모)"] + res["periods"] + ["합계(EA)"],
+                                  "rows": [["생산수량(EA)"] + [f"{v:,}" for v in dv] + [f"{sum(dv):,}"]]}
         ctx["measure_unit"] = "ppm" if measure == "ppm" else "EA"
     conn.close()
     return render(request, "report_detail.html", u, active="rdetail", heading="세부지표현황",
