@@ -584,6 +584,84 @@ def ingest_production_xlsx(conn, path):
     return len(agg), []
 
 
+# 과거 KPI 실적표: 시트의 KPI명 → 내부 키
+_HIST_KPI = {
+    "COPQ": "copq_pct",
+    "CUSTOMER INCIDENT": "incident",
+    "WARRANTY": "warranty",
+    "공정불량": "proc_ppm",
+    "셋팅불량": "set_ppm",
+    "SCRAP QUANTITY": "scrap_qty_pct",
+    "SCRAP COST": "scrap_cost_pct",
+}
+_HIST_PART = {"1PART": "VMS PART", "2PART": "TM PART", "합계": "통합"}
+
+
+def _hist_kpi_key(name):
+    n = " ".join(str(name or "").split()).upper()
+    if n in _HIST_KPI:
+        return _HIST_KPI[n]
+    for k, v in _HIST_KPI.items():          # 'Customer Incident Cost' 등 부분일치 허용
+        if n.startswith(k):
+            return v
+    return None
+
+
+def ingest_history_xlsx(conn, path):
+    """과거 KPI 실적표 적재 (행=KPI×부문, 열=FY별 12개월).
+
+    1행에 FY 라벨(FY26/FY27...)이 병합되어 있고, 2행이 월(4월~3월), 3행부터 데이터.
+    A열=KPI, B열=부문(1PART/2PART/합계), C열=단위.
+    반환: (건수, note[dict])
+    """
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+
+    # 열 → (ym) 매핑: 1행 FY 라벨을 오른쪽으로 전파하며 2행 월과 조합
+    colmap, fy = {}, None
+    for c in range(4, ws.max_column + 1):
+        v1 = str(ws.cell(row=1, column=c).value or "").strip()
+        if v1.upper().startswith("FY"):
+            try:
+                fy = int(v1[2:])
+            except ValueError:
+                pass
+        mon = str(ws.cell(row=2, column=c).value or "").strip().replace("월", "")
+        if fy is None or not mon.isdigit():
+            continue
+        m = int(mon)
+        year = 2000 + fy - 1 if m >= 4 else 2000 + fy      # FY는 4월~익년 3월
+        colmap[c] = f"{year:04d}-{m:02d}"
+
+    rows, skipped = [], []
+    for r in range(3, ws.max_row + 1):
+        kpi = _hist_kpi_key(ws.cell(row=r, column=1).value)
+        part = _HIST_PART.get(str(ws.cell(row=r, column=2).value or "").strip().upper())
+        unit = str(ws.cell(row=r, column=3).value or "").strip()
+        if not kpi or not part:
+            name = ws.cell(row=r, column=1).value
+            if name:
+                skipped.append(str(name))
+            continue
+        for c, ym in colmap.items():
+            v = ws.cell(row=r, column=c).value
+            if v in (None, ""):
+                continue
+            try:
+                val = float(v)
+            except (TypeError, ValueError):
+                continue
+            rows.append((ym, part, kpi, val, unit))
+    conn.executemany(
+        "INSERT INTO kpi_actual(ym,part,kpi,value,unit) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(ym,part,kpi) DO UPDATE SET value=excluded.value, unit=excluded.unit", rows)
+    conn.commit()
+    months = sorted({ym for ym, *_ in rows})
+    return len(rows), {"기간": f"{months[0]}~{months[-1]}" if months else "-",
+                       "지표": len({k for _y, _p, k, _v, _u in rows}),
+                       "인식못한행": sorted(set(skipped))}
+
+
 def ingest_svp(conn, path):
     _, rows = _rows(path)
     n = 0

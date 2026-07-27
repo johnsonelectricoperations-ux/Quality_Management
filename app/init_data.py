@@ -37,7 +37,14 @@ STEPS = [
      lambda conn, p: "%d건" % ingest.ingest_outsource_xlsm(conn, p)[0]),
     ("폐기불량", "scrap_data.db",
      lambda conn, p: "%d건" % ingest.ingest_scrap_db(conn, p)[0]),
+    ("과거 KPI 실적", "과거데이터.xlsx",
+     lambda conn, p: _history(conn, p)),
 ]
+
+
+def _history(conn, path):
+    n, note = ingest.ingest_history_xlsx(conn, path)
+    return "%d건 (%s)" % (n, note["기간"])
 
 
 def _defect_master(conn, path):

@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS incident (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
   customer TEXT DEFAULT '', content TEXT DEFAULT '', reg_user TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS kpi_actual (
+  -- 과거 월 KPI 실적(집계 완료값). 원천 데이터가 없는 기간을 채우고,
+  -- 있는 기간에도 '보고된 공식 수치'가 계산값보다 우선한다.
+  id INTEGER PRIMARY KEY, ym TEXT NOT NULL, part TEXT NOT NULL,
+  kpi TEXT NOT NULL, value REAL NOT NULL, unit TEXT DEFAULT '',
+  UNIQUE(ym, part, kpi)
+);
 CREATE TABLE IF NOT EXISTS target (
   id INTEGER PRIMARY KEY, fy INTEGER NOT NULL, part TEXT NOT NULL,
   kpi TEXT NOT NULL, value REAL NOT NULL, unit TEXT DEFAULT '',

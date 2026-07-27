@@ -278,8 +278,18 @@ def incident_count(conn, ym, parts):
     return conn.execute(q, [like] + list(parts)).fetchone()["c"]
 
 
+def kpi_actual_of(conn, ym, part):
+    """그 달에 입력된 KPI 실적(공식 집계값) {kpi: value}. 없으면 {}."""
+    return {r["kpi"]: r["value"] for r in conn.execute(
+        "SELECT kpi,value FROM kpi_actual WHERE ym=? AND part=?", (ym, part))}
+
+
 def month_kpi(conn, m, daily, y, mth, part):
-    """한 달의 KPI dict. 분모/추정 여부 포함."""
+    """한 달의 KPI dict. 분모/추정 여부 포함.
+
+    입력된 KPI 실적(kpi_actual)이 있으면 그 값이 계산값보다 우선한다
+    (과거 월은 원천 데이터가 없고, 보고된 공식 수치가 기준이므로).
+    """
     ym = "%04d-%02d" % (y, mth)
     parts = _parts_for(part)
     agg = _sum_cells(daily, _dates_in_month(y, mth), parts)
@@ -293,7 +303,7 @@ def month_kpi(conn, m, daily, y, mth, part):
         return round(a / b * 100, 2) if b else 0.0
     def ppm(a, b):
         return round(a / b * 1_000_000) if b else 0
-    return {
+    out = {
         "ym": ym,
         "scrap_cost": round(agg["scrap_cost"]),
         "scrap_cost_pct": pct(agg["scrap_cost"], denom),
@@ -309,6 +319,11 @@ def month_kpi(conn, m, daily, y, mth, part):
         "denom": round(denom),
         "denom_est": est,
     }
+    actual = kpi_actual_of(conn, ym, part)
+    if actual:
+        out.update(actual)                 # 입력된 실적이 계산값보다 우선
+        out["from_actual"] = sorted(actual)
+    return out
 
 
 def target_map(conn, fy, part):
