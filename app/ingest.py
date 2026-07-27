@@ -687,6 +687,152 @@ def ingest_claim(conn, path):
     return n
 
 
+# ── 과거(Low_data/Low_Inventory) 이력 일괄 적재 ──────────
+# Low_data: 월단위 사내불량 실적(공정/셋팅 별도, 1part/2part 별도).
+# 열=불량유형(여러 공정 유형이 한 시트에 섞여 있음), 행=TM-NO별 실적.
+# 발생공정은 컬럼이 아니라 **품명(B열) 문자열**로 결정한다.
+import calendar
+
+_HIST_DEFECT_RE = re.compile(r"^(1part|2part)_(공정|셋팅)불량_(\d{2})년\s*(\d{1,2})월$", re.IGNORECASE)
+_HIST_INVENTORY_RE = re.compile(r"^(1part|2part)_(\d{1,2})월_입고수량$", re.IGNORECASE)
+_HIST_PART = {"1part": "VMS PART", "2part": "TM PART"}
+_HIST_PROC_KEYWORDS = ["성형", "정형", "압입", "가공"]   # 우선순위 순. 매칭 없으면 '후처리'
+_HIST_IGNORE_COLS = {"폐기"}                              # 불량유형이 아닌 별도 집계라 무시
+
+
+def _month_last_day(year, month):
+    return f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+
+
+def _hist_process_of(name):
+    n = str(name or "")
+    for kw in _HIST_PROC_KEYWORDS:
+        if kw in n:
+            return kw
+    return "후처리"
+
+
+def ingest_history_defect_xlsx(conn, path, year_base=2000):
+    """Low_data 월별 사내불량 실적 1개 파일 적재.
+
+    파일명 {1part|2part}_{공정|셋팅}불량_{YY}년 {M}월.xlsx.
+    행의 품명(B열)에 성형/정형/압입/가공 중 포함된 키워드로 발생공정을 정하고
+    (없으면 '후처리'), 그 행의 모든 불량유형 컬럼 수량을 그 공정에 귀속시킨다.
+    '폐기' 컬럼은 불량유형이 아니라서 무시한다. 날짜는 그 달 **말일**로 통일.
+    마스터(defect_type)에 없는 불량명은 공백만 다르면 기존 이름에 맞추고,
+    그래도 없으면 새 이름으로 마스터에 추가한다(process='', alloc_rule='').
+    재실행 안전(batch_key로 기존 분 삭제 후 재적재).
+    반환: (건수, note[dict]).
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    mo = _HIST_DEFECT_RE.match(stem)
+    if not mo:
+        return 0, {"error": f"파일명 형식 오류: {os.path.basename(path)}"}
+    part = _HIST_PART[mo.group(1).lower()]
+    kind = mo.group(2)
+    year = year_base + int(mo.group(3))
+    month = int(mo.group(4))
+    d = _month_last_day(year, month)
+    batch_key = f"hist|{part}|{kind}|{year:04d}-{month:02d}"
+
+    # 마스터 이름 정규화(공백 유무만 다른 표기 흡수): 공백 제거 후 비교
+    master = {(r["part"], r["kind"]): r["name"]
+              for r in conn.execute("SELECT part,kind,name FROM defect_type WHERE part=? AND kind=?",
+                                    (part, kind))}
+    by_nospace = {}
+    for r in conn.execute("SELECT name FROM defect_type WHERE part=? AND kind=?", (part, kind)):
+        by_nospace["".join(r["name"].split())] = r["name"]
+
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+    headers = [_clean_name(ws.cell(row=2, column=c).value) for c in range(1, ws.max_column + 1)]
+    defect_cols = [(c + 1, headers[c]) for c in range(5, len(headers))
+                  if headers[c] and headers[c] not in _HIST_IGNORE_COLS]
+
+    new_types, rows = set(), []
+    for r in range(3, ws.max_row + 1):
+        first = str(ws.cell(row=r, column=1).value or "").strip()
+        if first.upper() == "TOTAL" or not first:
+            continue
+        tm = base_tmno(ws.cell(row=r, column=3).value)
+        if not tm:
+            continue
+        proc = _hist_process_of(ws.cell(row=r, column=2).value)
+        for c, raw_name in defect_cols:
+            qty = _int(ws.cell(row=r, column=c).value)
+            if qty <= 0:
+                continue
+            key = "".join(raw_name.split())
+            name = by_nospace.get(key)
+            if not name:
+                name = raw_name
+                by_nospace[key] = name
+                new_types.add(name)                    # 마스터에 없는 이름 → 추가 대상
+            rows.append((d, tm, name, qty, part, proc, kind, "direct", "confirmed", "", batch_key))
+
+    if new_types:
+        conn.executemany(
+            "INSERT OR IGNORE INTO defect_type(part,kind,process,alloc_rule,name) "
+            "VALUES(?,?,?,?,?)", [(part, kind, "", "", n) for n in new_types])
+    conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user,batch_key) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    return len(rows), {"기간": d, "신규불량유형": sorted(new_types)}
+
+
+def ingest_history_inventory_xlsx(conn, path, year=2026):
+    """Low_Inventory 월별 입고수량 1개 파일 적재 → production 테이블.
+    파일명 {1part|2part}_{M}월_입고수량.xlsx. 컬럼은 기존 생산실적 xlsx와 동일
+    (C=규격=TM-NO, I=입고수량, J=입고금액(원)→천원). 날짜는 그 달 **말일**.
+    반환: (품목수, errors)."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    mo = _HIST_INVENTORY_RE.match(stem)
+    if not mo:
+        return 0, [f"파일명 형식 오류: {os.path.basename(path)}"]
+    part = _HIST_PART[mo.group(1).lower()]
+    month = int(mo.group(2))
+    d = _month_last_day(year, month)
+
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+    hr = None
+    for r in range(1, min(ws.max_row, 8) + 1):
+        vals = [str(ws.cell(row=r, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        if "규격" in vals and "입고수량" in vals:
+            hr = r; headers = vals; break
+    if hr is None:
+        return 0, [f"{os.path.basename(path)}: 헤더행(규격/입고수량)을 찾을 수 없음"]
+    c_tm = headers.index("규격") + 1
+    c_qty = headers.index("입고수량") + 1
+    c_amt = headers.index("입고금액") + 1
+
+    agg = {}
+    for r in range(hr + 1, ws.max_row + 1):
+        if str(ws.cell(row=r, column=1).value or "").strip() == "TOTAL":
+            continue
+        raw = ws.cell(row=r, column=c_tm).value
+        if isinstance(raw, (datetime.date, datetime.datetime)):
+            continue
+        tm = base_tmno(raw)
+        if not tm:
+            continue
+        qty = _int(ws.cell(row=r, column=c_qty).value)
+        if qty <= 0:
+            continue
+        amt = float(ws.cell(row=r, column=c_amt).value or 0) / 1000.0
+        cur = agg.setdefault(tm, [0, 0.0])
+        cur[0] += qty; cur[1] += amt
+    for tm, (qty, amt) in agg.items():
+        conn.execute(
+            "INSERT INTO production(d,tm_no,qty,amount,part) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(d,tm_no) DO UPDATE SET qty=excluded.qty, amount=excluded.amount, part=excluded.part",
+            (d, tm, qty, amt, part))
+    conn.commit()
+    return len(agg), []
+
+
 def ingest_incident(conn, path):
     _, rows = _rows(path)
     n = 0
