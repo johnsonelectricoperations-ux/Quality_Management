@@ -452,6 +452,11 @@ def _proc_options(conn):
         "SELECT name, MIN(ord) o, MAX(copq_exclude) excl FROM process GROUP BY name ORDER BY o, name")]
 
 
+def _copq_excluded(conn):
+    """COPQ 제외 공정명 집합 (성형 등)."""
+    return {r["name"] for r in conn.execute("SELECT DISTINCT name FROM process WHERE copq_exclude=1")}
+
+
 def _price_map(conn, tm):
     """{집계공정: 단가|None}"""
     cur = {r["process"]: r["unit_price"]
@@ -525,11 +530,14 @@ def product_new(request: Request):
         return g
     if u["role"] != "admin":
         return RedirectResponse("/admin/products", status_code=303)
+    conn = db.connect()
+    excl = _copq_excluded(conn)
+    conn.close()
     return render(request, "product_form.html", u, active="products", heading="제품 등록",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="new",
                   p={"tm_no": "", "name": "", "part": "VMS PART"},
-                  phys=db.PHYS_PROCESSES, agg=db.AGG_PROCESSES, bucket=db.PHYS_TO_BUCKET,
-                  route={}, price={pr: None for pr in db.AGG_PROCESSES})
+                  agg=db.AGG_PROCESSES, excl=excl,
+                  route=set(), price={pr: None for pr in db.AGG_PROCESSES})
 
 
 @app.get("/admin/products/{tm}/edit", response_class=HTMLResponse)
@@ -546,14 +554,15 @@ def product_edit(request: Request, tm: str):
     if not p:
         conn.close()
         return RedirectResponse("/admin/products?err=제품 없음", status_code=303)
-    route = {r["process"]: dict(r) for r in conn.execute(
-        "SELECT process,op_code FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
+    # 라우팅은 집계공정(5종) 기준으로 표시 — 압입·밴딩·후처리는 '기타'로 모임
+    route = {db.bucket_of(r["process"]) for r in conn.execute(
+        "SELECT process FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
     price = _price_map(conn, tm)
+    excl = _copq_excluded(conn)
     conn.close()
     return render(request, "product_form.html", u, active="products", heading="제품 수정",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="edit",
-                  p=dict(p), phys=db.PHYS_PROCESSES, agg=db.AGG_PROCESSES,
-                  bucket=db.PHYS_TO_BUCKET, route=route, price=price)
+                  p=dict(p), agg=db.AGG_PROCESSES, excl=excl, route=route, price=price)
 
 
 @app.post("/admin/products/save")
@@ -576,14 +585,16 @@ async def product_save(request: Request):
     conn.execute("INSERT INTO product(tm_no,name,part) VALUES(?,?,?) "
                  "ON CONFLICT(tm_no) DO UPDATE SET name=excluded.name, part=excluded.part",
                  (tm, name, part))
-    # 라우팅(물리공정, 표준 순서)
+    # 라우팅(집계공정 5종, 표준 순서). 기존 op_code는 공정별로 보존한다.
+    codes = {db.bucket_of(r["process"]): (r["op_code"] or "") for r in conn.execute(
+        "SELECT process,op_code FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
     conn.execute("DELETE FROM product_route WHERE tm_no=?", (tm,))
     seq = 0
-    for pr in db.PHYS_PROCESSES:
+    for pr in db.AGG_PROCESSES:
         if form.get("use_" + pr):
             seq += 1
             conn.execute("INSERT INTO product_route(tm_no,seq,process,unit_price,op_code) "
-                         "VALUES(?,?,?,0,?)", (tm, seq, pr, (form.get("code_" + pr) or "").strip()))
+                         "VALUES(?,?,?,0,?)", (tm, seq, pr, codes.get(pr, "")))
     # 공정별 단가(집계공정) — 빈칸이면 삭제
     for proc in db.AGG_PROCESSES:
         raw = (form.get("price_" + proc) or "").replace(",", "").strip()

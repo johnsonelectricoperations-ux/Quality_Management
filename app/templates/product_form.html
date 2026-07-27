@@ -16,40 +16,26 @@
   </div>
 </div>
 
-<div class="panel"><div class="phead"><h2>공정 라우팅</h2>
+<div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2>
   <span class="tot">체크한 공정이 표준 순서대로 라우팅됩니다</span></div>
   <table>
-    <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th>집계공정</th><th style="width:180px;">원본 코드</th></tr></thead>
+    <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th style="width:100px;">COPQ</th>
+      <th class="num" style="width:200px;">기준단가 (원, 누적)</th></tr></thead>
     <tbody>
-    {% for pr in phys %}
-      {% set r = route.get(pr) %}
+    {% for pr in agg %}
       <tr>
-        <td><input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if r }}></td>
-        <td>{{ loop.index }}. {{ pr }}</td>
-        <td style="color:var(--tx3);">→ {{ bucket[pr] }}</td>
-        <td class="mono"><input class="in" name="code_{{ pr }}" value="{{ r.op_code if r else '' }}" style="font-size:12px;"></td>
+        <td><input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if pr in route }}></td>
+        <td>{{ loop.index }}. {{ pr }}{% if pr == '기타' %}<span style="color:var(--tx3);font-size:11px;"> (압입·밴딩·선별)</span>{% endif %}</td>
+        <td>{% if pr in excl %}<span class="badge bg-hold">제외</span>{% else %}포함{% endif %}</td>
+        <td class="num"><input class="in" type="number" step="any" min="0" name="price_{{ pr }}"
+               value="{{ price[pr] if price[pr] is not none else '' }}" style="text-align:right;"></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-</div>
-
-<div class="panel"><div class="phead"><h2>공정별 단가</h2>
-  <span class="tot">원 · 누적단가</span></div>
-  <div class="pbody">
-    <div style="display:flex;gap:12px;flex-wrap:wrap;">
-      {% for proc in agg %}
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <label style="font:600 11.5px/1.3 inherit;color:var(--tx2);">{{ proc }}</label>
-        <input class="in" type="number" step="any" min="0" name="price_{{ proc }}"
-               value="{{ price[proc] if price[proc] is not none else '' }}" style="width:120px;text-align:right;">
-      </div>
-      {% endfor %}
-    </div>
-    <div class="hint" style="margin-top:10px;">누적단가이므로 뒤 공정이 앞 공정보다 큽니다
-      (예: 성형 17.5 → 소결 21 → 정형 28 → 가공·기타 35).
-      비우면 해당 공정 단가가 삭제되고 Scrap Cost 계산에서 0으로 처리됩니다.</div>
-  </div>
+  <div class="pbody"><div class="hint">단가는 <b>누적</b>이므로 뒤 공정이 앞 공정보다 큽니다
+    (예: 성형 17.5 → 소결 21 → 정형 28 → 가공·기타 35).
+    비우면 해당 공정 단가가 삭제되어 Scrap Cost 계산에서 0으로 처리됩니다.</div></div>
 </div>
 
 <div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
