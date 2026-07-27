@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS incident (
 CREATE TABLE IF NOT EXISTS target (
   id INTEGER PRIMARY KEY, fy INTEGER NOT NULL, part TEXT NOT NULL,
   kpi TEXT NOT NULL, value REAL NOT NULL, unit TEXT DEFAULT '',
-  UNIQUE(fy, part, kpi)
+  mon INTEGER NOT NULL DEFAULT 0,          -- 0=FY 연간, 1~12=월별(공정/셋팅 불량율)
+  UNIQUE(fy, part, kpi, mon)
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
@@ -126,6 +127,26 @@ def _add_col(conn, table, col, decl):
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
+def _migrate_target(conn):
+    """target UNIQUE(fy,part,kpi) → UNIQUE(fy,part,kpi,mon).
+    mon 컬럼이 없으면 테이블을 재생성하고 기존 목표를 연간(mon=0)으로 이관한다."""
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(target)")]
+    if not cols or "mon" in cols:
+        return
+    old = list(conn.execute("SELECT fy,part,kpi,value,unit FROM target"))
+    conn.execute("DROP TABLE target")
+    conn.executescript("""
+    CREATE TABLE target (
+      id INTEGER PRIMARY KEY, fy INTEGER NOT NULL, part TEXT NOT NULL,
+      kpi TEXT NOT NULL, value REAL NOT NULL, unit TEXT DEFAULT '',
+      mon INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(fy, part, kpi, mon)
+    );""")
+    conn.executemany(
+        "INSERT INTO target(fy,part,kpi,value,unit,mon) VALUES(?,?,?,?,?,0)",
+        [(r["fy"], r["part"], r["kpi"], r["value"], r["unit"]) for r in old])
+
+
 def _migrate_defect_type(conn):
     """defect_type UNIQUE(name) → UNIQUE(part,kind,name) 로 변경.
     ALTER로 UNIQUE를 못 바꾸므로 part 컬럼이 없으면 테이블을 재생성한다.
@@ -155,6 +176,7 @@ def init_db():
     _add_col(conn, "defect_entry", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
+    _migrate_target(conn)
     conn.commit()
     _ensure_default_admin(conn)
     conn.close()

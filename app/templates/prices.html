@@ -1,27 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-{% if can_edit %}
-<div class="panel"><div class="phead"><h2>단가 마스터 가져오기</h2></div>
-  <div class="pbody" style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end;">
-    <form method="post" action="/admin/prices/import" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:6px;">
-      <label style="font:600 11.5px/1.3 inherit;color:var(--tx2);">제품별 단가 Master (.xlsx)</label>
-      <input class="in" type="file" name="file" accept=".xlsx,.xlsm" required style="width:280px;">
-      <button class="btn btn-p btn-sm" style="width:fit-content;">가져오기</button>
-    </form>
-    <div class="hint" style="max-width:420px;">'단가산출' 시트의 성형·소결·정형·완제품 블록을 읽습니다.
-      <b>가공·기타는 완제품 단가</b>를 적용하고, 정형이 <b>'O'(정형공정 없음)</b>이면 정형도 완제품 단가를 적용합니다.
-      단가는 <b>누적</b> 개념입니다.</div>
-  </div>
-</div>
-{% endif %}
-
 <div class="panel">
   <div class="phead"><h2>공정별 단가</h2>
     <form method="get" action="/admin/prices" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <select class="in" name="part" style="width:120px;padding:6px 10px;">
         <option value="" {{ 'selected' if not part }}>전체 파트</option>
-        <option value="VMS PART" {{ 'selected' if part=='VMS PART' }}>VMS PART</option>
-        <option value="TM PART" {{ 'selected' if part=='TM PART' }}>TM PART</option>
+        {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if part==pv }}>{{ pl }}</option>{% endfor %}
       </select>
       <select class="in" name="miss" style="width:130px;padding:6px 10px;">
         <option value="" {{ 'selected' if not miss }}>전체</option>
@@ -40,7 +24,7 @@
     </tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part }}</td>
+      <tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part|pl }}</td>
         <td class="mono" style="font-size:11px;color:var(--tx3);">{{ r.route or '-' }}</td>
         {% for p in procs %}
           <td class="num">{% if r.price[p] is not none %}{{ '%g'|format(r.price[p]) }}{% else %}<span style="color:var(--tx3);">-</span>{% endif %}</td>

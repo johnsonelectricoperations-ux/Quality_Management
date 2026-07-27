@@ -5,7 +5,7 @@
   <div class="pbody">
     <form method="post" action="/admin/processes/save" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
       <div class="f"><label>파트</label><select class="in" name="part" style="width:130px;">
-        <option value="VMS PART">VMS PART</option><option value="TM PART">TM PART</option></select></div>
+        {% for pv, pl in PARTS %}<option value="{{ pv }}">{{ pl }}</option>{% endfor %}</select></div>
       <div class="f"><label>공정명</label><input class="in" name="name" placeholder="예: 후처리" required style="width:160px;"></div>
       <div class="f"><label>순서(ord)</label><input class="in" name="ord" type="number" value="0" style="width:90px;"></div>
       <div class="f"><label>COPQ 제외</label><label style="display:flex;align-items:center;gap:6px;height:34px;">
@@ -22,10 +22,10 @@
     <thead><tr><th>파트</th><th class="num" style="width:80px;">순서</th><th>공정명</th><th>COPQ 제외</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td>{{ r.part }}</td><td class="num">{{ r.ord }}</td><td>{{ r.name }}</td>
+      <tr><td>{{ r.part|pl }}</td><td class="num">{{ r.ord }}</td><td>{{ r.name }}</td>
         <td>{% if r.copq_exclude %}<span class="badge bg-hold">제외(Y)</span>{% else %}N{% endif %}</td>
         {% if can_edit %}<td>
-          <form method="post" action="/admin/processes/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('{{ r.part }} {{ r.name }} 삭제?');">
+          <form method="post" action="/admin/processes/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('{{ r.part|pl }} {{ r.name }} 삭제?');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}
       <tr><td colspan="5" style="color:var(--tx3);">공정이 없습니다. 제품 CSV를 가져오면 표준 7공정이 자동 생성됩니다.</td></tr>

@@ -7,7 +7,7 @@
   </div>
   <div class="seg">
     {% for p in ['통합','VMS PART','TM PART'] %}
-    <a class="segb {{ 'on' if part==p }}" href="/admin/target?fy={{ fy }}&part={{ p }}">{{ p }}</a>{% endfor %}
+    <a class="segb {{ 'on' if part==p }}" href="/admin/target?fy={{ fy }}&part={{ p }}">{{ p|pl }}</a>{% endfor %}
   </div>
 </div>
 <form method="post" action="/admin/target">
@@ -21,12 +21,39 @@
       {% if not (it.kpi in ['proc_ppm','set_ppm'] and part=='통합') %}
       <tr><td>{{ it.name }}</td><td>{{ it.unit }}</td>
         <td class="num"><input class="in" style="text-align:right;" name="t_{{ it.kpi }}" value="{{ it.value }}" {{ 'readonly' if not can_edit }}></td>
-        <td class="mono">{% if it.kpi in ['proc_ppm','set_ppm'] %}파트별{% else %}대시보드 목표선{% endif %}</td></tr>
+        <td class="mono">{% if it.monthly %}파트별 · 월별 목표 있으면 그 값 우선{% else %}대시보드 목표선{% endif %}</td></tr>
       {% endif %}
     {% endfor %}
     </tbody>
   </table>
 </div>
+
+{% if part != '통합' %}
+<div class="panel">
+  <div class="phead"><h2>월별 목표 (FY{{ fy }} · {{ part|pl }})</h2>
+    <span class="tot">공정불량율 · 셋팅불량율</span>
+    {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}
+  </div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th style="min-width:110px;">지표</th>
+      {% for mm in fy_months %}<th class="num">{{ mm }}월</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in monthly %}
+      <tr><td>{{ r.name }} <span style="color:var(--tx3);">({{ r.unit }})</span></td>
+        {% for c in r.vals %}
+        <td class="num"><input class="in" style="text-align:right;width:72px;padding:6px 8px;"
+               name="m_{{ r.kpi }}_{{ c.mon }}" value="{{ c.value }}" {{ 'readonly' if not can_edit }}></td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
 </form>
-<div class="hint">목표는 <b>회계연도(FY, 4월~익년 3월)</b> 단위입니다. 공정/셋팅 불량율은 파트별만(통합 목표 없음).</div>
+<div class="hint">목표는 <b>회계연도(FY, 4월~익년 3월)</b> 단위입니다.
+  공정/셋팅 불량율은 <b>파트별</b>만 있고(통합 목표 없음), <b>월별 목표를 넣으면 그 달은 월별 값</b>을,
+  비워두면 위의 연간 목표를 사용합니다.</div>
 {% endblock %}

@@ -9,8 +9,7 @@
       <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ p.tm_no }}" placeholder="예: 1545-01" required></div>
       <div class="f"><label>품명</label><input class="in" name="name" value="{{ p.name }}"></div>
       <div class="f"><label>파트</label><select class="in" name="part">
-        <option value="VMS PART" {{ 'selected' if p.part=='VMS PART' }}>VMS PART</option>
-        <option value="TM PART" {{ 'selected' if p.part=='TM PART' }}>TM PART</option></select></div>
+        {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if p.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
       <div class="f"><label>중량</label><input class="in" name="weight" value="{{ p.weight or '' }}"></div>
     </div>
     <div class="hint">TM-NO는 "TM" 접두어 없이 입력(예: 1545-01). 저장 시 문자로 처리되어 날짜 변환이 방지됩니다.</div>

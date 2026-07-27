@@ -4,8 +4,8 @@
 {% macro seg(cur) -%}
 <div class="seg">
   <a class="segb {{ 'on' if part=='통합' }}" href="/?part=통합">통합</a>
-  <a class="segb {{ 'on' if part=='VMS PART' }}" href="/?part=VMS PART">VMS</a>
-  <a class="segb {{ 'on' if part=='TM PART' }}" href="/?part=TM PART">TM</a>
+  <a class="segb {{ 'on' if part=='VMS PART' }}" href="/?part=VMS PART">1PART</a>
+  <a class="segb {{ 'on' if part=='TM PART' }}" href="/?part=TM PART">2PART</a>
 </div>
 {%- endmacro %}
 <style>.seg a.segb{font:600 12px/1 inherit;color:var(--tx2);padding:6px 12px;border-radius:4px;cursor:pointer;text-decoration:none;}
@@ -13,7 +13,7 @@
 
 {% macro top_table(title, sub, rows) %}
 <div class="panel">
-  <div class="phead"><h2>{{ title }}</h2><span class="tot">{{ sub }} · {{ d.top_part.split(' ')[0] }}</span></div>
+  <div class="phead"><h2>{{ title }}</h2><span class="tot">{{ sub }} · {{ d.top_part|pl }}</span></div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th>불량유형별 수량</th></tr></thead>
     <tbody>
@@ -47,9 +47,9 @@
     <div class="ft"><span class="gl">목표 {{ d.cards.incident.target|cf if d.cards.incident.target is not none else '-' }}건</span></div></div>
   <div class="kpi sec2"><div class="lb">Warranty</div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.warranty.delta>0 else 'up' }}">{{ '▲' if d.cards.warranty.delta>0 else '▼' }} {{ d.cards.warranty.delta|abs|cf }}</span>{% if d.cards.warranty.target is not none %}<span class="gl">목표 {{ d.cards.warranty.target|cf }}</span>{% endif %}</div></div>
-  <div class="kpi"><div class="lb">공정불량율 <span class="est">VMS/TM별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
+  <div class="kpi"><div class="lb">공정불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.proc_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.proc_ppm.delta>0 else '▼' }} {{ d.cards.proc_ppm.delta|abs|cf }}</span>{% if d.cards.proc_ppm.target is not none %}<span class="gl">목표 {{ d.cards.proc_ppm.target|cf }} ppm</span>{% endif %}</div></div>
-  <div class="kpi"><div class="lb">셋팅불량율 <span class="est">VMS/TM별</span></div><div class="vl">{{ d.cards.set_ppm.val|cf }}<small> ppm</small></div>
+  <div class="kpi"><div class="lb">셋팅불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.set_ppm.val|cf }}<small> ppm</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.set_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.set_ppm.delta>0 else '▼' }} {{ d.cards.set_ppm.delta|abs|cf }}</span>{% if d.cards.set_ppm.target is not none %}<span class="gl">목표 {{ d.cards.set_ppm.target|cf }} ppm</span>{% endif %}</div></div>
   <div class="kpi sec2"><div class="lb">생산수량</div><div class="vl">{{ d.cards.prod_qty.val|cf }}<small> EA</small></div><div class="ft"><span class="gl">당월 누계</span></div></div>
 </div>
@@ -75,7 +75,7 @@
 </div>
 
 <div class="toph"><h2>공정불량 TOP 5</h2>
-  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">{{ d.top_part }} · 발생 수량 순 · 불량유형별 수량</span></div>
+  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">{{ d.top_part|pl }} · 발생 수량 순 · 불량유형별 수량</span></div>
 <div class="grid2">
   {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top_month) }}
   {{ top_table("해당주 누적", '%d월 %d주차'|format(d.cm, d.cur_week), d.top_week) }}

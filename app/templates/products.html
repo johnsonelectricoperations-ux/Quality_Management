@@ -1,29 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-{% if can_edit %}
-<div class="panel"><div class="phead"><h2>CSV 가져오기 (제품 목록)</h2></div>
-  <div class="pbody" style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end;">
-    {% for pv, plabel in [('VMS PART','VMS Part CSV'),('TM PART','TM Part CSV')] %}
-    <form method="post" action="/admin/products/import" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:6px;">
-      <label style="font:600 11.5px/1.3 inherit;color:var(--tx2);">{{ plabel }}</label>
-      <input type="hidden" name="part" value="{{ pv }}">
-      <input class="in" type="file" name="file" accept=".csv,.CSV" required style="width:250px;">
-      <button class="btn btn-p btn-sm" style="width:fit-content;">가져오기</button>
-    </form>
-    {% endfor %}
-    <div class="hint" style="max-width:320px;">컬럼: TM-NO·품명·중량·성형·소결·정형·가공·압입·밴딩·후처리 (CP949/UTF-8).
-      공정 칸에 값이 있으면 라우팅에 포함(좌→우 순서). TM-NO 기준으로 갱신됩니다.</div>
-  </div>
-</div>
-{% endif %}
-
 <div class="panel">
   <div class="phead"><h2>제품 목록</h2>
     <form method="get" action="/admin/products" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <select class="in" name="part" style="width:120px;padding:6px 10px;">
         <option value="" {{ 'selected' if not part }}>전체 파트</option>
-        <option value="VMS PART" {{ 'selected' if part=='VMS PART' }}>VMS PART</option>
-        <option value="TM PART" {{ 'selected' if part=='TM PART' }}>TM PART</option>
+        {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if part==pv }}>{{ pl }}</option>{% endfor %}
       </select>
       <input class="in" name="q" value="{{ q }}" placeholder="TM-NO / 품명 검색" style="width:200px;padding:6px 10px;">
       <button class="btn btn-s btn-sm">검색</button>
@@ -34,7 +16,7 @@
     <thead><tr><th>TM-NO</th><th>품명</th><th>파트</th><th class="num">중량</th><th>공정 라우팅</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part }}</td>
+      <tr><td class="mono">{{ r.tm_no }}</td><td>{{ r.name }}</td><td>{{ r.part|pl }}</td>
         <td class="num">{{ '%.4g'|format(r.weight) if r.weight else '' }}</td>
         <td class="mono" style="font-size:11px;">{{ r.route or '-' }}</td>
         {% if can_edit %}<td style="white-space:nowrap;">

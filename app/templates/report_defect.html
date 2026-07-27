@@ -6,8 +6,8 @@
     <a class="segb {{ 'on' if kind=='셋팅' }}" href="/report/defect?part={{ part }}&kind=셋팅">셋팅불량</a>
   </div>
   <div class="seg">
-    <a class="segb {{ 'on' if part=='VMS PART' }}" href="/report/defect?part=VMS PART&kind={{ kind }}">VMS PART</a>
-    <a class="segb {{ 'on' if part=='TM PART' }}" href="/report/defect?part=TM PART&kind={{ kind }}">TM PART</a>
+    <a class="segb {{ 'on' if part=='VMS PART' }}" href="/report/defect?part=VMS PART&kind={{ kind }}">1PART</a>
+    <a class="segb {{ 'on' if part=='TM PART' }}" href="/report/defect?part=TM PART&kind={{ kind }}">2PART</a>
   </div>
   <span style="margin-left:auto;font:500 12px/1.6 inherit;color:var(--tx3);">{{ ym }} · 공정별</span>
 </div>
@@ -24,7 +24,7 @@
 {% endfor %}
 </div>
 
-<div class="panel"><div class="phead"><h2>상세 데이터 · {{ part }} · {{ kind }}불량</h2></div>
+<div class="panel"><div class="phead"><h2>상세 데이터 · {{ part|pl }} · {{ kind }}불량</h2></div>
   <table>
     <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th class="num">Scrap Cost(천원)</th><th>COPQ</th></tr></thead>
     <tbody>

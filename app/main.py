@@ -21,6 +21,11 @@ tpl = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 tpl.env.filters["cf"] = lambda v: f"{v:,.0f}" if isinstance(v, (int, float)) else v
 tpl.env.filters["cf2"] = lambda v: f"{v:,.2f}" if isinstance(v, (int, float)) else v
 
+# 화면 표기 통일: DB는 'VMS PART'/'TM PART'로 저장하고, 화면에는 1PART/2PART로 보여준다.
+PART_LABEL = {"VMS PART": "1PART", "TM PART": "2PART"}
+tpl.env.filters["pl"] = lambda v: PART_LABEL.get(str(v).strip(), v)
+tpl.env.globals["PARTS"] = [("VMS PART", "1PART"), ("TM PART", "2PART")]
+
 ROLE_KO = {"viewer": "조회자", "editor": "입력자", "admin": "관리자"}
 ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
 SESSIONS = {}   # token -> username
@@ -109,9 +114,21 @@ def latest_month(conn):
     return int(d[:4]), int(d[5:7])
 
 
-def target_val(conn, fy, part, kpi):
+MONTHLY_KPIS = ("proc_ppm", "set_ppm")      # 월별 목표를 둘 수 있는 지표
+
+
+def target_val(conn, fy, part, kpi, mon=0):
+    """목표값. mon(1~12)을 주면 그 달의 월별 목표를 우선 사용하고,
+    없으면 연간 목표(mon=0)로 폴백한다."""
     fy = fy % 100 if fy >= 100 else fy      # 2027 → 27 정규화 (목표는 2자리 FY)
-    row = conn.execute("SELECT value FROM target WHERE fy=? AND part=? AND kpi=?", (fy, part, kpi)).fetchone()
+    if mon:
+        row = conn.execute(
+            "SELECT value FROM target WHERE fy=? AND part=? AND kpi=? AND mon=?",
+            (fy, part, kpi, mon)).fetchone()
+        if row:
+            return row["value"]
+    row = conn.execute("SELECT value FROM target WHERE fy=? AND part=? AND kpi=? AND mon=0",
+                       (fy, part, kpi)).fetchone()
     return row["value"] if row else None
 
 
@@ -142,6 +159,7 @@ def build_dashboard(conn, m, daily, part):
         return {"value": value, "unit": unit, "target": tv, "delta": delta,
                 "good": (delta <= 0) if better_down else (delta >= 0)}
 
+    ppm_part = part if part != "통합" else "VMS PART"     # 불량율 목표는 파트별만 존재
     cards = {
         "scrap_cost": {"amt": cur["scrap_cost"], "pct": cur["scrap_cost_pct"],
                        "target": target_val(conn, cur_fy, part, "scrap_cost"),
@@ -155,9 +173,11 @@ def build_dashboard(conn, m, daily, part):
         "incident": {"val": cur["incident"], "target": target_val(conn, cur_fy, part, "incident")},
         "warranty": {"val": cur["warranty"], "target": target_val(conn, cur_fy, part, "warranty"),
                      "delta": cur["warranty"] - prev["warranty"]},
-        "proc_ppm": {"val": cur["proc_ppm"], "target": target_val(conn, cur_fy, "VMS PART", "proc_ppm"),
+        "proc_ppm": {"val": cur["proc_ppm"],
+                     "target": target_val(conn, cur_fy, ppm_part, "proc_ppm", cm),
                      "delta": cur["proc_ppm"] - prev["proc_ppm"]},
-        "set_ppm": {"val": cur["set_ppm"], "target": target_val(conn, cur_fy, "VMS PART", "set_ppm"),
+        "set_ppm": {"val": cur["set_ppm"],
+                    "target": target_val(conn, cur_fy, ppm_part, "set_ppm", cm),
                     "delta": cur["set_ppm"] - prev["set_ppm"]},
         "prod_qty": {"val": cur["prod_qty"]},
         "denom_est": cur["denom_est"],
@@ -259,7 +279,10 @@ def report_kpi(request: Request, part: str = "통합"):
     fylabels = f"{calc.fy_label(fys[0])},{calc.fy_label(fys[-1])}" if fydiv is not None else ""
 
     def tgt(kpi, tpart=None):
-        return _join([target_val(conn, fy, tpart or part, kpi) for fy in fys])
+        # 공정/셋팅 불량율은 월별 목표를 우선 사용(없으면 연간 목표)
+        mon = kpi in MONTHLY_KPIS
+        return _join([target_val(conn, calc.fy_of(y, mm), tpart or part, kpi, mm if mon else 0)
+                      for (y, mm) in months])
 
     def vals(key):
         return _join([s[key] for s in series])
@@ -269,8 +292,9 @@ def report_kpi(request: Request, part: str = "통합"):
     charts.append(("Scrap Quantity", "--sec", "%", 2, "scrap_qty_pct", "scrap_qty", part))
     charts.append(("COPQ", "--p-500", "%", 2, "copq_pct", "copq", part))
     charts.append(("Warranty", "--sec", "", 0, "warranty", "warranty", part))
-    charts.append(("공정불량율 (ppm)", "--p-500", "", 0, "proc_ppm", "proc_ppm", "VMS PART"))
-    charts.append(("셋팅불량율 (ppm)", "--sec", "", 0, "set_ppm", "set_ppm", "VMS PART"))
+    ppm_part = part if part != "통합" else "VMS PART"     # 불량율 목표는 파트별만 존재
+    charts.append(("공정불량율 (ppm)", "--p-500", "", 0, "proc_ppm", "proc_ppm", ppm_part))
+    charts.append(("셋팅불량율 (ppm)", "--sec", "", 0, "set_ppm", "set_ppm", ppm_part))
     chart_ctx = []
     for name, color, unit, dec, vkey, tkey, tpart in charts:
         chart_ctx.append({
@@ -345,16 +369,17 @@ def report_defect(request: Request, part: str = "VMS PART", kind: str = "공정"
         pb = calc.process_breakdown(conn, m, cy, cm, p, kind)
         procs = [r["process"] for r in pb]
         charts.append({
-            "title": f"공정별 불량율 (ppm) · {p}", "color": "--p-500",
+            "title": f"공정별 불량율 (ppm) · {PART_LABEL.get(p, p)}", "color": "--p-500",
             "labels": ",".join(procs), "vseries": _join([r["ppm"] for r in pb]),
-            "over": 1, "target": target_val(conn, calc.fy_of(cy, cm), p, "proc_ppm" if kind == "공정" else "set_ppm"),
+            "over": 1, "target": target_val(conn, calc.fy_of(cy, cm), p,
+                                            "proc_ppm" if kind == "공정" else "set_ppm", cm),
         })
     for p in ("VMS PART", "TM PART"):
         pb = calc.process_breakdown(conn, m, cy, cm, p, kind)
         procs = [r["process"] for r in pb]
         mark = ",".join(str(i) for i, r in enumerate(pb) if r["excl"])
         charts.append({
-            "title": f"공정별 Scrap Cost (천원) · {p}", "color": "--sec",
+            "title": f"공정별 Scrap Cost (천원) · {PART_LABEL.get(p, p)}", "color": "--sec",
             "labels": ",".join(procs), "vseries": _join([r["cost"] for r in pb]),
             "mark": mark, "target": None,
         })
@@ -380,7 +405,7 @@ def masters(request: Request):
         "LEFT JOIN product_route r ON r.tm_no=p.tm_no GROUP BY p.tm_no ORDER BY p.tm_no LIMIT 20")]
     dtypes = [dict(r) for r in conn.execute("SELECT * FROM defect_type ORDER BY kind,name")]
     conn.close()
-    return render(request, "masters.html", u, active="masters", heading="마스터 업로드",
+    return render(request, "masters.html", u, active="masters", heading="마스터 조회",
                   crumb="관리", pending=pending_count(), proc=proc, prod=prod, prod_total=prod_total,
                   dtypes=dtypes, can_edit=(u["role"] == "admin"))
 
@@ -859,17 +884,25 @@ def admin_target(request: Request, fy: int = 27, part: str = "통합"):
     if g:
         return g
     conn = db.connect()
-    rows = {r["kpi"]: dict(r) for r in conn.execute(
-        "SELECT * FROM target WHERE fy=? AND part=?", (fy, part))}
+    rows = {}
+    for r in conn.execute("SELECT * FROM target WHERE fy=? AND part=?", (fy, part)):
+        rows[(r["kpi"], r["mon"])] = r["value"]
     conn.close()
     order = [("scrap_cost", "Scrap Cost", "%"), ("scrap_qty", "Scrap Quantity", "%"),
              ("copq", "COPQ", "%"), ("incident", "Customer Incident", "건"),
              ("warranty", "Warranty", "천원"), ("proc_ppm", "공정불량율", "ppm"),
              ("set_ppm", "셋팅불량율", "ppm")]
     items = [{"kpi": k, "name": n, "unit": un,
-              "value": rows.get(k, {}).get("value", "")} for k, n, un in order]
+              "value": rows.get((k, 0), ""), "monthly": k in MONTHLY_KPIS}
+             for k, n, un in order]
+    # 월별 목표(FY 순서: 4월~익년 3월)
+    fy_months = [m for m in range(4, 13)] + [m for m in range(1, 4)]
+    monthly = [{"kpi": k, "name": n, "unit": un,
+                "vals": [{"mon": mm, "value": rows.get((k, mm), "")} for mm in fy_months]}
+               for k, n, un in order if k in MONTHLY_KPIS]
     return render(request, "target.html", u, active="target", heading="목표 관리",
                   crumb="관리", pending=pending_count(), fy=fy, part=part, items=items,
+                  monthly=monthly, fy_months=fy_months,
                   can_edit=(u["role"] == "admin"))
 
 
@@ -883,15 +916,29 @@ async def admin_target_save(request: Request):
     units = {"scrap_cost": "%", "scrap_qty": "%", "copq": "%", "incident": "건",
              "warranty": "천원", "proc_ppm": "ppm", "set_ppm": "ppm"}
     conn = db.connect()
-    for kpi, unit in units.items():
-        if kpi in ("proc_ppm", "set_ppm") and part == "통합":
-            continue
-        v = form.get("t_" + kpi, "").replace(",", "").strip()
+
+    def put(kpi, unit, mon, raw):
+        """빈칸이면 해당 목표 삭제, 값이 있으면 저장."""
+        v = (raw or "").replace(",", "").strip()
         if v == "":
+            conn.execute("DELETE FROM target WHERE fy=? AND part=? AND kpi=? AND mon=?",
+                         (fy, part, kpi, mon))
+            return
+        conn.execute("INSERT INTO target(fy,part,kpi,value,unit,mon) VALUES(?,?,?,?,?,?) "
+                     "ON CONFLICT(fy,part,kpi,mon) DO UPDATE SET value=excluded.value",
+                     (fy, part, kpi, float(v), unit, mon))
+
+    for kpi, unit in units.items():
+        if kpi in MONTHLY_KPIS and part == "통합":
             continue
-        conn.execute("INSERT INTO target(fy,part,kpi,value,unit) VALUES(?,?,?,?,?) "
-                     "ON CONFLICT(fy,part,kpi) DO UPDATE SET value=excluded.value",
-                     (fy, part, kpi, float(v), unit))
+        raw = form.get("t_" + kpi, "")
+        if raw != "" or form.get("t_" + kpi) is not None:
+            put(kpi, unit, 0, raw)                     # 연간 목표
+        if kpi in MONTHLY_KPIS:                        # 월별 목표 (4~3월)
+            for mm in list(range(4, 13)) + list(range(1, 4)):
+                key = f"m_{kpi}_{mm}"
+                if key in form:
+                    put(kpi, unit, mm, form.get(key, ""))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/admin/target?fy={fy}&part={part}&msg=저장됨", status_code=303)
