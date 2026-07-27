@@ -147,7 +147,7 @@ class Masters:
         filt = [(p, r) for p, r in targets if p in bucket_route]
         if not filt:
             fp = gen_proc if gen_proc in bucket_route else (db.bucket_of(route[0]) if route else gen_proc)
-            filt = [(fp, 1.0)]
+            filt = [(fp or "?", 1.0)]   # 제품 마스터에 없는 TM-NO는 공정을 특정할 수 없다
         allocs = largest_remainder(qty, [r for _, r in filt])
         return [(filt[i][0], allocs[i]) for i in range(len(filt)) if allocs[i] > 0]
 
@@ -374,6 +374,160 @@ def process_breakdown(conn, m, y, mth, part, kind):
         rows.append({"process": proc, "qty": d["qty"], "prod": prod_qty,
                      "ppm": ppm, "cost": round(d["cost"])})
     return rows
+
+
+# ── 세부지표현황 (다축 분석) ────────────────────────────
+PERIOD_UNITS = ("월", "분기", "년")     # 주별은 현 데이터(월말 1일 몰림)에서 왜곡되어 제외
+
+
+def period_key(dstr, unit):
+    """일자 → 집계 기간 키. 년(FY)은 4월~익년 3월 기준."""
+    y, mth = int(dstr[:4]), int(dstr[5:7])
+    if unit == "월":
+        return f"{y:04d}-{mth:02d}"
+    if unit == "분기":
+        fy = fy_of(y, mth)
+        q = ((mth - 4) % 12) // 3 + 1        # 4~6월=Q1 … 1~3월=Q4
+        return f"FY{fy % 100:02d} Q{q}"
+    return fy_label(fy_of(y, mth))            # 년 = FY
+
+
+def _period_sort_key(k):
+    """기간 키 정렬용(문자열 사전순이 시간순과 어긋나지 않게)."""
+    if k.startswith("FY") and " Q" in k:
+        return (int(k[2:4]), int(k[-1]))
+    if k.startswith("FY"):
+        return (int(k[2:4]), 0)
+    return (int(k[:4]), int(k[5:7]))
+
+
+def _defect_rows(conn, m, date_from, date_to, part, kind=None, procs=None, sources=None):
+    """조건에 맞는 불량을 (기간키 계산 전) 정규화해 돌려준다.
+    반환: [(d, part, tm_no, defect_name, 집계공정, qty, source)]"""
+    parts = _parts_for(part)
+    out = []
+    for r in conn.execute(
+            "SELECT d,tm_no,defect_name,qty,part,process,kind,source FROM defect_entry "
+            "WHERE status='confirmed' AND d BETWEEN ? AND ?", (date_from, date_to)):
+        prod = m.product.get(r["tm_no"])
+        rpart = prod[1] if prod else (r["part"] or "")
+        if rpart not in parts:
+            continue
+        if sources and r["source"] not in sources:
+            continue
+        rkind, allocs = m.resolve(rpart, r["tm_no"], r["defect_name"], r["qty"],
+                                  r["process"], r["kind"])
+        if kind and rkind != kind:
+            continue
+        for proc, q in allocs:
+            if procs and proc not in procs:
+                continue
+            out.append((r["d"], rpart, r["tm_no"], r["defect_name"], proc, q, r["source"]))
+    return out
+
+
+def _prod_by_period(conn, m, date_from, date_to, part, unit, by_tm=False):
+    """기간별 생산수량(불량율 분모). by_tm=True면 {(기간,tm): qty}."""
+    parts = _parts_for(part)
+    agg = defaultdict(int)
+    for r in conn.execute("SELECT d,tm_no,qty FROM production WHERE d BETWEEN ? AND ?",
+                          (date_from, date_to)):
+        prod = m.product.get(r["tm_no"])
+        if not prod or prod[1] not in parts:
+            continue
+        k = period_key(r["d"], unit)
+        agg[(k, r["tm_no"]) if by_tm else k] += r["qty"]
+    return agg
+
+
+def analyze(conn, m, kind_of_chart, date_from, date_to, part, unit,
+            kind=None, procs=None, sources=None, measure="ppm", topn=10):
+    """세부지표현황 공용 분석기.
+
+    kind_of_chart: part | process | defect_type | tm | product_name
+    measure: ppm(불량율) | qty(수량)
+    반환: {"periods":[기간...], "series":[{"name":..,"values":[..]}], "unit":..., "note":...}
+    """
+    rows = _defect_rows(conn, m, date_from, date_to, part, kind, procs, sources)
+    periods = sorted({period_key(d, unit) for d, *_ in rows}, key=_period_sort_key)
+    if not periods:
+        return {"periods": [], "series": [], "unit": "", "note": "해당 조건의 데이터가 없습니다."}
+
+    # 분류 축 결정
+    def group_of(row):
+        d, rpart, tm, dname, proc, q, src = row
+        if kind_of_chart == "part":
+            return PART_DISPLAY.get(rpart, rpart)
+        if kind_of_chart == "process":
+            return proc
+        if kind_of_chart == "defect_type":
+            return dname
+        if kind_of_chart == "tm":
+            return tm or "(미지정)"
+        if kind_of_chart == "product_name":
+            p = m.product.get(tm)
+            return p[0] if p else "(미등록)"
+        return "전체"
+
+    cell = defaultdict(int)          # (group, period) -> qty
+    gtotal = defaultdict(int)
+    for row in rows:
+        g = group_of(row)
+        k = period_key(row[0], unit)
+        cell[(g, k)] += row[5]
+        gtotal[g] += row[5]
+
+    # 상위 N개 + 나머지 합계
+    ordered = sorted(gtotal, key=lambda g: gtotal[g], reverse=True)
+    keep, rest = ordered[:topn], ordered[topn:]
+    note = ""
+    if rest:
+        # '기타'는 실제 불량유형 이름으로도 쓰이므로 합산 항목은 이름을 분리한다
+        other = f"그 외 {len(rest)}개"
+        note = f"상위 {topn}개만 표시(나머지 {len(rest)}개는 '{other}'로 합산)"
+        for g in rest:
+            for k in periods:
+                cell[(other, k)] += cell.get((g, k), 0)
+        keep = keep + [other]
+
+    # 분모(불량율) 준비
+    unit_label = "ppm" if measure == "ppm" else "EA"
+    per_tm = kind_of_chart in ("tm", "product_name")
+    prod = _prod_by_period(conn, m, date_from, date_to, part, unit, by_tm=per_tm)
+
+    # 그룹별 분모 TM-NO 집합: 불량이 없던 품번도 분모에는 들어가야 한다
+    denom_tms = {}
+    if per_tm:
+        by_name = defaultdict(set)
+        if kind_of_chart == "product_name":
+            for tmk, pr in m.product.items():
+                by_name[pr[0]].add(tmk)
+        tms_of = (lambda g: {g}) if kind_of_chart == "tm" else (lambda g: by_name.get(g, set()))
+        for g in ordered:                        # 상위 N + 나머지 원본 그룹 전부
+            denom_tms[g] = tms_of(g)
+        if rest:                                 # 합산 그룹은 포함된 그룹들의 합집합
+            denom_tms[other] = set().union(*(denom_tms[g] for g in rest))
+
+    series = []
+    for g in keep:
+        vals = []
+        for k in periods:
+            q = cell.get((g, k), 0)
+            if measure == "qty":
+                vals.append(q)
+                continue
+            # 불량율(ppm): TM/품명 축은 그 그룹의 TM-NO 생산수량 합, 그 외는 파트 전체
+            if per_tm:
+                denom = sum(prod.get((k, tmk), 0) for tmk in denom_tms.get(g, ()))
+            else:
+                denom = prod.get(k, 0)
+            vals.append(round(q / denom * 1_000_000) if denom else None)
+        total_q = sum(cell.get((g, k), 0) for k in periods)
+        series.append({"name": g, "values": vals, "total": total_q})
+    return {"periods": periods, "series": series, "unit": unit_label, "note": note}
+
+
+PART_DISPLAY = {"VMS PART": "1PART", "TM PART": "2PART"}
 
 
 # ── TOP5 (공정불량, 기간 누적, 파트) ────────────────────

@@ -18,8 +18,7 @@
   <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
   {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span></a>{% endif %}
   <div class="cap">집계 / 리포트</div>
-  <a class="nav {{ 'on' if active=='rkpi' }}" href="/report/kpi">📈 KPI 현황</a>
-  <a class="nav {{ 'on' if active=='rdefect' }}" href="/report/defect">⚙ 공정별 불량현황</a>
+  <a class="nav {{ 'on' if active=='rdetail' }}" href="/report/detail">📈 세부지표현황</a>
   <div class="cap">관리</div>
   <a class="nav {{ 'on' if active=='products' }}" href="/admin/products">📦 제품 마스터 (단가 포함)</a>
   <a class="nav {{ 'on' if active=='processes' }}" href="/admin/processes">🏭 공정 관리</a>
