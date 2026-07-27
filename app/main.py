@@ -136,7 +136,14 @@ def target_val(conn, fy, part, kpi, mon=0):
 
 
 def _join(vals):
-    return ",".join("" if v is None else (f"{v:g}") for v in vals)
+    """차트 data-* 용 CSV. 큰 수가 지수표기(1.7e+07)로 나가면 JS가 못 읽으므로 고정소수로."""
+    def one(v):
+        if v is None:
+            return ""
+        if isinstance(v, float) and not v.is_integer():
+            return f"{v:.6f}".rstrip("0").rstrip(".")
+        return str(int(v))
+    return ",".join(one(v) for v in vals)
 
 
 def build_dashboard(conn, m, daily, part):
@@ -192,6 +199,35 @@ def build_dashboard(conn, m, daily, part):
         "copq_values": _join([s["copq_pct"] for s in series]),
         "copq_targets": _join(targets("copq")),
     }
+
+    # KPI 카드 클릭 시 아래 차트를 그 지표로 전환하기 위한 월별 시리즈 (지표별)
+    def mtargets(kpi, tpart=None, monthly=False):
+        return _join([target_val(conn, calc.fy_of(y, mm), tpart or part, kpi, mm if monthly else 0)
+                      for (y, mm) in months])
+
+    metrics = [
+        {"key": "copq", "label": "COPQ", "unit": "%", "dec": 2, "color": "--p-500",
+         "vseries": _join([s["copq_pct"] for s in series]), "targets": targets("copq")},
+        {"key": "scrap_cost", "label": "Scrap Cost", "unit": "%", "dec": 2, "color": "--p-500",
+         "vseries": _join([s["scrap_cost_pct"] for s in series]), "targets": targets("scrap_cost")},
+        {"key": "scrap_qty", "label": "Scrap Quantity", "unit": "%", "dec": 2, "color": "--sec",
+         "vseries": _join([s["scrap_qty_pct"] for s in series]), "targets": targets("scrap_qty")},
+        {"key": "incident", "label": "Customer Incident", "unit": "건", "dec": 0, "color": "--sec",
+         "vseries": _join([s["incident"] for s in series]), "targets": targets("incident")},
+        {"key": "warranty", "label": "Warranty", "unit": "천원", "dec": 0, "color": "--sec",
+         "vseries": _join([s["warranty"] for s in series]), "targets": targets("warranty")},
+        {"key": "proc_ppm", "label": "공정불량율", "unit": "ppm", "dec": 0, "color": "--p-500",
+         "vseries": _join([s["proc_ppm"] for s in series]),
+         "targets": [target_val(conn, calc.fy_of(y, mm), ppm_part, "proc_ppm", mm) for (y, mm) in months]},
+        {"key": "set_ppm", "label": "셋팅불량율", "unit": "ppm", "dec": 0, "color": "--p-500",
+         "vseries": _join([s["set_ppm"] for s in series]),
+         "targets": [target_val(conn, calc.fy_of(y, mm), ppm_part, "set_ppm", mm) for (y, mm) in months]},
+        {"key": "prod_qty", "label": "생산수량", "unit": "EA", "dec": 0, "color": "--sec",
+         "vseries": _join([s["prod_qty"] for s in series]), "targets": [None] * len(months)},
+    ]
+    for mt in metrics:
+        mt["targets"] = _join(mt["targets"]) if isinstance(mt["targets"], list) else mt["targets"]
+    charts["metrics"] = metrics
 
     # 당월 주별 COPQ (추정 SVP, claim 생산액 비례배분)
     weekly = build_weekly(conn, m, daily, cy, cm, part)

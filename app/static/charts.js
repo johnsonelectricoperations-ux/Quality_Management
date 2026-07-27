@@ -107,11 +107,27 @@
       const vs = cfg.values, n = vs.length;
       const nums = vs.filter(v => v != null);
       const tvals = cfg.targets ? cfg.targets.filter(v => v != null) : (cfg.target != null ? [cfg.target] : []);
-      const vmax = Math.max(...nums, ...tvals, 0) * 1.18 || 1;
+      const vmax = Math.max(...nums, ...tvals, 0) * 1.30 || 1;   // 값 라벨 자리 확보
       const y = scaleY(0, vmax);
       const slot = plotW / n, bw = Math.min(42, slot * 0.52);
       const mark = (cfg.mark || "").split(",").filter(s=>s!=="").map(Number);
-      let bars = "";
+      // 값 라벨: 자릿수가 많으면 만/천 단위로 축약해 슬롯 안에 들어가게 한다.
+      const vabs = Math.max(...nums.map(v => Math.abs(v)), 0);
+      let sc = 1, suf = "";
+      if (cfg.dec === 0 && vabs >= 1e7){ sc = 1e4; suf = "만"; }
+      else if (cfg.dec === 0 && vabs >= 1e5){ sc = 1e3; suf = "천"; }
+      const vlab = v => {
+        if (sc === 1) return fmt(v, cfg.dec) + cfg.unit;
+        const s = v / sc;
+        return s.toLocaleString("en-US", {maximumFractionDigits: s >= 100 ? 0 : 1}) + suf + cfg.unit;
+      };
+      // 글자 폭 추정: 숫자/기호는 폰트크기의 약 0.60배, 한글(만/천/원)은 1.0배
+      const labW = (s, size) => [...s].reduce((w,ch) => w + size * (/[가-힣]/.test(ch) ? 1.0 : 0.60), 0);
+      const maxLab = nums.reduce((a,v) => { const s = vlab(v); return s.length > a.length ? s : a; }, "");
+      const fs = labW(maxLab, 9) > slot ? 8 : 9;
+      // 라벨이 슬롯보다 넓으면, 앞 라벨과 세로로 겹칠 때 위로 한 칸 올려 어긋나게 둔다.
+      const wide = labW(maxLab, fs) > slot * 0.92;
+      let bars = "", prevY = null;
       vs.forEach((v,i) => {
         if (v == null) return;
         const cx = pL + slot*i + slot/2, x = cx - bw/2, yt = y(v), h = baseY - yt;
@@ -119,7 +135,10 @@
         const isMark = mark.includes(i);
         const fill = isMark ? "var(--hold)" : (over ? "var(--warn)" : `url(#${id})`);
         bars += `<rect class="g-bar" x="${x.toFixed(1)}" y="${yt.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${fill}"${over?' fill-opacity="0.9"':''}/>`;
-        bars += `<text class="g-vlab" x="${cx.toFixed(1)}" y="${(yt-6).toFixed(1)}" text-anchor="middle">${fmt(v,cfg.dec)}${cfg.unit}</text>`;
+        let ly = yt - 6;
+        if (wide && prevY != null && Math.abs(ly - prevY) < fs + 2) ly = prevY - (fs + 3);
+        prevY = ly;
+        bars += `<text class="g-vlab" x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" style="font-size:${fs}px">${vlab(v)}</text>`;
         if (isMark) bars += `<text class="g-tag" x="${cx.toFixed(1)}" y="${baseY+14}" text-anchor="middle">제외</text>`;
       });
       return `<svg viewBox="0 0 ${W} ${H}" role="img">`
@@ -133,7 +152,7 @@
         + `</svg>`;
     }
 
-    document.querySelectorAll(".jchart").forEach(node => {
+    function draw(node){
       const d = node.dataset;
       const cfg = {
         values: d.values.split(",").map(s => { s = s.trim(); return (s === "" || s === "-") ? null : Number(s); }),
@@ -150,5 +169,9 @@
         mark: d.mark
       };
       node.innerHTML = d.type === "bar" ? renderBar(cfg) : renderArea(cfg);
-    });
+    }
+
+    // 지표 전환 등으로 data-* 를 바꾼 뒤 다시 그릴 수 있게 노출
+    window.renderChart = draw;
+    document.querySelectorAll(".jchart").forEach(draw);
   })();

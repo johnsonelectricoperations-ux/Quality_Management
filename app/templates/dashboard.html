@@ -35,32 +35,40 @@
   <span class="sp" style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">최근 7개월 (FY경계 포함) · 당월 {{ '%04d-%02d'|format(d.cy, d.cm) }} · {{ d.cur_fy }}</span>
 </div>
 
+<style>
+.kpi{cursor:pointer;position:relative;transition:box-shadow .12s,transform .12s;}
+.kpi:hover{box-shadow:var(--shadow);}
+.kpi.sel{outline:2px solid var(--p-500);outline-offset:-2px;}
+.kpi.sel::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
+  border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--p-500);}
+</style>
+
 <div class="kpis">
-  <div class="kpi"><div class="lb">Scrap Cost</div><div class="vl">{{ d.cards.scrap_cost.amt|cf }}<small> 천원</small></div>
+  <div class="kpi" data-metric="scrap_cost"><div class="lb">Scrap Cost</div><div class="vl">{{ d.cards.scrap_cost.amt|cf }}<small> 천원</small></div>
     <div class="pct">{{ d.cards.scrap_cost.pct|cf2 }}%{% if d.cards.scrap_cost.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_cost.target|cf2 }}%</span>{% endif %}</div></div>
-  <div class="kpi sec2"><div class="lb">Scrap Quantity</div><div class="vl">{{ d.cards.scrap_qty.amt|cf }}<small> EA</small></div>
+  <div class="kpi sec2" data-metric="scrap_qty"><div class="lb">Scrap Quantity</div><div class="vl">{{ d.cards.scrap_qty.amt|cf }}<small> EA</small></div>
     <div class="pct">{{ d.cards.scrap_qty.pct|cf2 }}%{% if d.cards.scrap_qty.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_qty.target|cf2 }}%</span>{% endif %}</div></div>
-  <div class="kpi"><div class="lb">COPQ {% if d.cards.denom_est %}<span class="est">추정 SVP</span>{% else %}<span class="fix">SVP확정</span>{% endif %}</div>
+  <div class="kpi" data-metric="copq"><div class="lb">COPQ {% if d.cards.denom_est %}<span class="est">추정 SVP</span>{% else %}<span class="fix">SVP확정</span>{% endif %}</div>
     <div class="vl">{{ d.cards.copq.amt|cf }}<small> 천원</small></div>
     <div class="pct">{{ d.cards.copq.pct|cf2 }}%{% if d.cards.copq.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.copq.target|cf2 }}%</span>{% endif %}</div></div>
-  <div class="kpi sec2"><div class="lb">Customer Incident</div><div class="vl">{{ d.cards.incident.val }}<small> 건</small></div>
+  <div class="kpi sec2" data-metric="incident"><div class="lb">Customer Incident</div><div class="vl">{{ d.cards.incident.val }}<small> 건</small></div>
     <div class="ft"><span class="gl">목표 {{ d.cards.incident.target|cf if d.cards.incident.target is not none else '-' }}건</span></div></div>
-  <div class="kpi sec2"><div class="lb">Warranty</div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
+  <div class="kpi sec2" data-metric="warranty"><div class="lb">Warranty</div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.warranty.delta>0 else 'up' }}">{{ '▲' if d.cards.warranty.delta>0 else '▼' }} {{ d.cards.warranty.delta|abs|cf }}</span>{% if d.cards.warranty.target is not none %}<span class="gl">목표 {{ d.cards.warranty.target|cf }}</span>{% endif %}</div></div>
-  <div class="kpi"><div class="lb">공정불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
+  <div class="kpi" data-metric="proc_ppm"><div class="lb">공정불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.proc_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.proc_ppm.delta>0 else '▼' }} {{ d.cards.proc_ppm.delta|abs|cf }}</span>{% if d.cards.proc_ppm.target is not none %}<span class="gl">목표 {{ d.cards.proc_ppm.target|cf }} ppm</span>{% endif %}</div></div>
-  <div class="kpi"><div class="lb">셋팅불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.set_ppm.val|cf }}<small> ppm</small></div>
+  <div class="kpi" data-metric="set_ppm"><div class="lb">셋팅불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.set_ppm.val|cf }}<small> ppm</small></div>
     <div class="ft"><span class="{{ 'dn' if d.cards.set_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.set_ppm.delta>0 else '▼' }} {{ d.cards.set_ppm.delta|abs|cf }}</span>{% if d.cards.set_ppm.target is not none %}<span class="gl">목표 {{ d.cards.set_ppm.target|cf }} ppm</span>{% endif %}</div></div>
-  <div class="kpi sec2"><div class="lb">생산수량</div><div class="vl">{{ d.cards.prod_qty.val|cf }}<small> EA</small></div><div class="ft"><span class="gl">당월 누계</span></div></div>
+  <div class="kpi sec2" data-metric="prod_qty"><div class="lb">생산수량</div><div class="vl">{{ d.cards.prod_qty.val|cf }}<small> EA</small></div><div class="ft"><span class="gl">당월 누계</span></div></div>
 </div>
 
 <div class="charts2">
   <div class="mcard">
-    <div class="mh"><div><div class="mt"><span class="dot" style="background:var(--p-500)"></span>COPQ 월별 추이</div>
-      <div class="mv">{{ d.cards.copq.pct|cf2 }}<small>%</small></div>
-      <div class="msub">FY 경계에서 목표 계단식 · 최근 7개월</div></div>
+    <div class="mh"><div><div class="mt"><span class="dot" id="mDot" style="background:var(--p-500)"></span><span id="mTitle">COPQ</span> 월별 추이</div>
+      <div class="mv" id="mVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div>
+      <div class="msub">KPI 카드를 클릭하면 그 지표로 바뀝니다 · 최근 7개월</div></div>
       <span class="mdelta {{ 'chip-up' if d.cards.copq.delta<=0 else 'chip-dn' }}">{{ '▼' if d.cards.copq.delta<=0 else '▲' }} {{ d.cards.copq.delta|abs }}%p</span></div>
-    <div class="jchart" data-type="area" data-color="--p-500" data-unit="%" data-dec="2" data-cur="{{ c.cur }}"
+    <div class="jchart" id="mChart" data-type="bar" data-color="--p-500" data-unit="%" data-dec="2" data-cur="{{ c.cur }}"
       {% if c.fydiv != '' %}data-fydiv="{{ c.fydiv }}" data-fylabels="{{ c.fylabels }}"{% endif %}
       data-targets="{{ c.copq_targets }}" data-labels="{{ c.labels }}" data-values="{{ c.copq_values }}"></div>
   </div>
@@ -82,4 +90,52 @@
 </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/charts.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/charts.js"></script>
+<script>
+// KPI 카드 클릭 → 아래 월별 추이 차트를 그 지표로 전환
+(function () {
+  var METRICS = {
+  {%- for mt in d.charts.metrics %}
+    "{{ mt.key }}": {label: "{{ mt.label }}", unit: "{{ mt.unit }}", dec: {{ mt.dec }},
+                     color: "{{ mt.color }}", values: "{{ mt.vseries }}", targets: "{{ mt.targets }}"}{{ "," if not loop.last }}
+  {%- endfor %}
+  };
+  var chart = document.getElementById("mChart");
+  var title = document.getElementById("mTitle");
+  var dot = document.getElementById("mDot");
+  var valEl = document.getElementById("mVal");
+  if (!chart) return;
+
+  function fmt(v, dec) {
+    return v == null ? "-" : v.toLocaleString("en-US", {minimumFractionDigits: dec, maximumFractionDigits: dec});
+  }
+
+  function select(key) {
+    var m = METRICS[key];
+    if (!m) return;
+    chart.dataset.values = m.values;
+    chart.dataset.targets = m.targets;
+    chart.dataset.unit = m.unit;
+    chart.dataset.dec = m.dec;
+    chart.dataset.color = m.color;
+    title.textContent = m.label;
+    dot.style.background = "var(" + m.color + ")";
+    var last = m.values.split(",").pop().trim();
+    valEl.innerHTML = fmt(last === "" ? null : Number(last), m.dec) + "<small>" + m.unit + "</small>";
+    window.renderChart(chart);
+    document.querySelectorAll(".kpi[data-metric]").forEach(function (el) {
+      el.classList.toggle("sel", el.dataset.metric === key);
+    });
+    try { localStorage.setItem("qms_metric", key); } catch (e) {}
+  }
+
+  document.querySelectorAll(".kpi[data-metric]").forEach(function (el) {
+    el.addEventListener("click", function () { select(el.dataset.metric); });
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem("qms_metric"); } catch (e) {}
+  select(METRICS[saved] ? saved : "copq");
+})();
+</script>
+{% endblock %}
