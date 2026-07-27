@@ -26,12 +26,11 @@
 
 <div class="panel"><div class="phead"><h2>상세 데이터 · {{ part|pl }} · {{ kind }}불량</h2></div>
   <table>
-    <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th class="num">Scrap Cost(천원)</th><th>COPQ</th></tr></thead>
+    <thead><tr><th>공정</th><th class="num">불량수량</th><th class="num">생산수량</th><th class="num">불량율(ppm)</th><th class="num">Scrap Cost(천원)</th></tr></thead>
     <tbody>
     {% for r in detail %}
       <tr><td>{{ r.process }}</td><td class="num">{{ r.qty|cf }}</td><td class="num">{{ r.prod|cf }}</td>
-        <td class="num">{{ r.ppm|cf }}</td><td class="num">{{ r.cost|cf }}</td>
-        <td>{% if r.excl %}<span class="badge bg-hold">제외</span>{% else %}<span class="badge bg-ok">포함</span>{% endif %}</td></tr>
+        <td class="num">{{ r.ppm|cf }}</td><td class="num">{{ r.cost|cf }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

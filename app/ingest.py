@@ -254,7 +254,11 @@ def _find_header_row(ws, key="TM-NO"):
 
 def ingest_daily_defect_file(conn, path, user=""):
     """사내불량 일일 양식 1개 적재. 행=TM-NO, 열=불량유형, 셀=수량.
-    발생공정이 지정된 유형은 그 공정, 공란이면 파일의 공정(시트)에 귀속.
+
+    공정(성형시트가 어디서 작성됐는지)은 그대로 원본 그대로 저장만 하고,
+    '이 불량이 어느 집계공정 몫인지'는 여기서 정하지 않는다 — calc.Masters.resolve()가
+    마스터의 발생공정/배분기준을 보고 최종 결정한다(공란/입력공정100%인 유형만 여기 저장한
+    시트 공정을 그대로 씀). 성형 시트는 애초에 불량 D/B에 반영하지 않는다(전량 제외).
     같은 batch_key(파트|공정|구분|일자)는 삭제 후 재적재(idempotent).
     반환: (적재건수, errors[list])."""
     parsed = parse_daily_filename(path)
@@ -264,10 +268,15 @@ def ingest_daily_defect_file(conn, path, user=""):
     part, sheet_proc, kind, d, batch_key = parsed
     if sheet_proc not in _DAILY_PROCS.get(part, set()):
         return 0, [f"{os.path.basename(path)}: '{sheet_proc}'은 {part}의 공정이 아님"]
+    if sheet_proc == "성형":
+        # 성형 공정에서 작성한 불량시트(공정/셋팅 모두)는 D/B에 반영하지 않는다.
+        conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
+        conn.commit()
+        return 0, []
 
-    # 마스터: (part,kind,name) → 발생공정
-    dmap = {(r["part"], r["kind"], r["name"]): (r["process"] or "").strip()
-            for r in conn.execute("SELECT part,kind,name,process FROM defect_type")}
+    # 불량유형이 마스터(part,kind)에 등록돼 있는지만 확인(발생공정 판단은 calc가 함)
+    names = {r["name"] for r in conn.execute(
+        "SELECT name FROM defect_type WHERE part=? AND kind=?", (part, kind))}
 
     wb = load_workbook(path, data_only=True)
     ws = wb["DATA"] if "DATA" in wb.sheetnames else wb.worksheets[0]
@@ -294,12 +303,11 @@ def ingest_daily_defect_file(conn, path, user=""):
             qty = _int(ws.cell(row=r, column=c).value)
             if qty <= 0:
                 continue
-            key = (part, kind, name)
-            if key not in dmap:
+            if name not in names:
                 errors.append(f"{os.path.basename(path)}: 불량유형 '{name}'이 {part} {kind} 마스터에 없음")
                 continue
-            proc = dmap[key] or sheet_proc          # 발생공정 지정 우선, 없으면 시트 공정
-            rows.append((d, tmno, name, qty, part, proc, kind, "direct", user, batch_key))
+            # 공정은 이 시트(sheet_proc)를 그대로 저장 — 최종 귀속은 calc.resolve()가 결정
+            rows.append((d, tmno, name, qty, part, sheet_proc, kind, "direct", user, batch_key))
     if errors:
         return 0, errors
     conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
@@ -716,8 +724,10 @@ def ingest_history_defect_xlsx(conn, path, year_base=2000):
     """Low_data 월별 사내불량 실적 1개 파일 적재.
 
     파일명 {1part|2part}_{공정|셋팅}불량_{YY}년 {M}월.xlsx.
-    행의 품명(B열)에 성형/정형/압입/가공 중 포함된 키워드로 발생공정을 정하고
-    (없으면 '후처리'), 그 행의 모든 불량유형 컬럼 수량을 그 공정에 귀속시킨다.
+    행의 품명(B열)에 성형/정형/압입/가공 중 포함된 키워드로 그 행을 작성한 공정을 정하고
+    (없으면 '후처리'), **성형 공정에서 작성한 행은 통째로 제외**한다(공정/셋팅 모두).
+    나머지 행의 모든 불량유형 컬럼 수량은 그 시트 작성 공정 그대로 저장만 하고,
+    최종 귀속 공정은 calc.Masters.resolve()가 마스터의 발생공정/배분기준을 보고 정한다.
     '폐기' 컬럼은 불량유형이 아니라서 무시한다. 날짜는 그 달 **말일**로 통일.
     마스터(defect_type)에 없는 불량명은 공백만 다르면 기존 이름에 맞추고,
     그래도 없으면 새 이름으로 마스터에 추가한다(process='', alloc_rule='').
@@ -758,6 +768,8 @@ def ingest_history_defect_xlsx(conn, path, year_base=2000):
         if not tm:
             continue
         proc = _hist_process_of(ws.cell(row=r, column=2).value)
+        if proc == "성형":
+            continue                                    # 성형 시트 작성분은 D/B 미반영
         for c, raw_name in defect_cols:
             qty = _int(ws.cell(row=r, column=c).value)
             if qty <= 0:

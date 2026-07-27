@@ -26,6 +26,9 @@ PART_LABEL = {"VMS PART": "1PART", "TM PART": "2PART"}
 tpl.env.filters["pl"] = lambda v: PART_LABEL.get(str(v).strip(), v)
 tpl.env.globals["PARTS"] = [("VMS PART", "1PART"), ("TM PART", "2PART")]
 
+# 집계공정 '기타' 표시명(압입·밴딩·선별 등 후공정 묶음이라는 의미를 화면에 드러냄)
+PROC_LABEL = {"기타": "기타후공정"}
+
 ROLE_KO = {"viewer": "조회자", "editor": "입력자", "admin": "관리자"}
 ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
 SESSIONS = {}   # token -> username
@@ -367,7 +370,7 @@ def report_defect(request: Request, part: str = "VMS PART", kind: str = "공정"
     charts = []
     for p in ("VMS PART", "TM PART"):
         pb = calc.process_breakdown(conn, m, cy, cm, p, kind)
-        procs = [r["process"] for r in pb]
+        procs = [PROC_LABEL.get(r["process"], r["process"]) for r in pb]
         charts.append({
             "title": f"공정별 불량율 (ppm) · {PART_LABEL.get(p, p)}", "color": "--p-500",
             "labels": ",".join(procs), "vseries": _join([r["ppm"] for r in pb]),
@@ -376,14 +379,15 @@ def report_defect(request: Request, part: str = "VMS PART", kind: str = "공정"
         })
     for p in ("VMS PART", "TM PART"):
         pb = calc.process_breakdown(conn, m, cy, cm, p, kind)
-        procs = [r["process"] for r in pb]
-        mark = ",".join(str(i) for i, r in enumerate(pb) if r["excl"])
+        procs = [PROC_LABEL.get(r["process"], r["process"]) for r in pb]
         charts.append({
             "title": f"공정별 Scrap Cost (천원) · {PART_LABEL.get(p, p)}", "color": "--sec",
             "labels": ",".join(procs), "vseries": _join([r["cost"] for r in pb]),
-            "mark": mark, "target": None,
+            "target": None,
         })
     detail = calc.process_breakdown(conn, m, cy, cm, part, kind)
+    for r in detail:
+        r["process"] = PROC_LABEL.get(r["process"], r["process"])
     conn.close()
     return render(request, "report_defect.html", u, active="rdefect", heading="공정별 불량현황",
                   crumb="집계/리포트", pending=pending_count(), part=part, kind=kind,

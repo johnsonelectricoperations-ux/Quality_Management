@@ -12,7 +12,9 @@
         <input type="checkbox" name="copq_exclude" value="1"> 제외(Y)</label></div>
       <button class="btn btn-p">저장</button>
     </form>
-    <div class="hint" style="margin-top:8px;">같은 [파트+공정명]이 있으면 순서·COPQ제외가 갱신됩니다. COPQ 제외 공정(예: 성형)은 COPQ 계산에서 Scrap Cost가 빠집니다.</div>
+    <div class="hint" style="margin-top:8px;">같은 [파트+공정명]이 있으면 순서·COPQ제외가 갱신됩니다.
+      공정별 불량현황은 집계공정 5종(성형·소결·정형·가공·기타)만 표시되며, 여기서 추가한 다른 이름은
+      집계·리포트에 영향을 주지 않습니다.</div>
   </div>
 </div>
 {% endif %}

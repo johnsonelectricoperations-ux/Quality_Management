@@ -120,8 +120,7 @@ class Masters:
         self.product = {}       # tm -> (name, part)
         self.route = {}         # tm -> [proc,...] (순서)
         self.price = {}         # (tm, proc) -> 원
-        self.defect = {}        # name -> (kind, proc, rule_list)
-        self.exclude = set()    # (part, proc) COPQ 제외
+        self.defect = {}        # (part, name) -> (kind, proc, rule_list)
         for r in conn.execute("SELECT * FROM product"):
             self.product[r["tm_no"]] = (r["name"], r["part"])
         for r in conn.execute("SELECT * FROM product_route ORDER BY tm_no, seq"):
@@ -132,40 +131,44 @@ class Masters:
         for r in conn.execute("SELECT tm_no,process,unit_price FROM product_price"):
             self.price[(r["tm_no"], r["process"])] = r["unit_price"]
         for r in conn.execute("SELECT * FROM defect_type"):
-            self.defect[r["name"]] = (r["kind"], r["process"], parse_alloc_rule(r["alloc_rule"]))
-        for r in conn.execute("SELECT * FROM process WHERE copq_exclude=1"):
-            self.exclude.add((r["part"], r["name"]))
+            self.defect[(r["part"], r["name"])] = (r["kind"], r["process"], parse_alloc_rule(r["alloc_rule"]))
 
-    def allocate(self, tm_no, defect_name, qty):
-        """→ [(process, alloc_qty)] 정수 배분. 알 수 없으면 발생공정 100%."""
-        dt = self.defect.get(defect_name)
+    def allocate(self, part, tm_no, defect_name, qty):
+        """→ [(집계공정, alloc_qty)] 정수 배분(최대잉여법, 소수점 없음).
+        마스터에 발생공정/배분기준이 없으면 제품 라우팅의 첫 공정으로 폴백."""
+        dt = self.defect.get((part, defect_name))
         route = self.route.get(tm_no, [])
+        bucket_route = {db.bucket_of(p) for p in route}      # 이 제품이 실제 거치는 집계공정
         if not dt:
-            proc = route[0] if route else "?"
+            proc = db.bucket_of(route[0]) if route else "?"
             return [(proc, qty)]
         kind, gen_proc, rule = dt
         targets = rule if rule else [(gen_proc, 1.0)]
-        filt = [(p, r) for p, r in targets if p in route]
+        filt = [(p, r) for p, r in targets if p in bucket_route]
         if not filt:
-            fp = gen_proc if gen_proc in route else (route[0] if route else gen_proc)
+            fp = gen_proc if gen_proc in bucket_route else (db.bucket_of(route[0]) if route else gen_proc)
             filt = [(fp, 1.0)]
         allocs = largest_remainder(qty, [r for _, r in filt])
         return [(filt[i][0], allocs[i]) for i in range(len(filt)) if allocs[i] > 0]
 
-    def kind_of(self, defect_name):
-        dt = self.defect.get(defect_name)
+    def kind_of(self, part, defect_name):
+        dt = self.defect.get((part, defect_name))
         return dt[0] if dt else "공정"
 
-    def resolve(self, tm_no, defect_name, qty, stored_process="", stored_kind=""):
+    def resolve(self, part, tm_no, defect_name, qty, stored_process="", stored_kind=""):
         """→ (kind, [(집계공정, qty)]).
-        저장된 공정·구분(사내/외주/폐기)이 있으면 그대로 집계공정 버킷에 100%,
-        없으면 기존 배분(allocate)+kind_of 폴백. 결과 공정은 항상 집계버킷으로 정규화."""
+
+        마스터(defect_type)에 발생공정 또는 배분기준이 **지정돼 있으면** 그 규칙대로 배분한다
+        (여러 공정이면 largest_remainder로 정수 배분, 시트에 어느 공정이 기록했는지는 무시).
+        마스터에 아무 지정이 없으면(공란="입력공정 100%") 시트에 기록된 공정(stored_process)을
+        그대로 100% 사용한다."""
         sp = (stored_process or "").strip()
-        sk = (stored_kind or "").strip()
-        kind = sk or self.kind_of(defect_name)
-        if sp:
+        dt = self.defect.get((part, defect_name))
+        kind = (stored_kind or "").strip() or (dt[0] if dt else "공정")
+        has_master_rule = bool(dt and (dt[1] or dt[2]))      # 발생공정 또는 배분기준 지정됨
+        if not has_master_rule and sp:
             return kind, [(db.bucket_of(sp), qty)]
-        allocs = [(db.bucket_of(p), q) for p, q in self.allocate(tm_no, defect_name, qty)]
+        allocs = self.allocate(part, tm_no, defect_name, qty)
         return kind, allocs
 
 
@@ -184,7 +187,7 @@ def compute_daily(conn, m: Masters):
         part = prod[1] if prod else (r["part"] or "")   # 제품 파트 우선, 없으면 저장된 파트(제품 미지정 폐기)
         if not part:
             continue
-        kind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
+        kind, allocs = m.resolve(part, r["tm_no"], r["defect_name"], r["qty"],
                                  r["process"], r["kind"])
         cell = daily[r["d"]][part]
         cell["scrap_qty"] += r["qty"]
@@ -196,9 +199,7 @@ def compute_daily(conn, m: Masters):
             price = m.price.get((r["tm_no"], proc), 0)
             cost = q * price / 1000.0                      # 원 → 천원
             cell["scrap_cost"] += cost
-            excl = (part, proc) in m.exclude
-            if not excl:
-                cell["scrap_cost_copq"] += cost
+            cell["scrap_cost_copq"] += cost                # COPQ는 성형 등 별도 제외 없이 전체 반영
 
     for r in conn.execute("SELECT d,tm_no,qty,amount FROM production"):
         prod = m.product.get(r["tm_no"])
@@ -340,16 +341,16 @@ def process_breakdown(conn, m, y, mth, part, kind):
     """공정별 불량수량·생산·ppm·ScrapCost. part는 VMS/TM (통합 아님)."""
     parts = _parts_for(part)
     dates = set(_dates_in_month(y, mth))
-    per = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})
+    per = defaultdict(lambda: {"qty": 0, "cost": 0.0})
     for r in conn.execute(
             "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry WHERE status='confirmed'"):
         if r["d"] not in dates:
             continue
         prod = m.product.get(r["tm_no"])
-        part = prod[1] if prod else (r["part"] or "")
-        if part not in parts:
+        rpart = prod[1] if prod else (r["part"] or "")
+        if rpart not in parts:
             continue
-        rkind, allocs = m.resolve(r["tm_no"], r["defect_name"], r["qty"],
+        rkind, allocs = m.resolve(rpart, r["tm_no"], r["defect_name"], r["qty"],
                                   r["process"], r["kind"])
         if rkind != kind:
             continue
@@ -357,7 +358,6 @@ def process_breakdown(conn, m, y, mth, part, kind):
             price = m.price.get((r["tm_no"], proc), 0)
             per[proc]["qty"] += q
             per[proc]["cost"] += q * price / 1000.0
-            per[proc]["excl"] = any((p, proc) in m.exclude for p in parts)
     # 생산수량(파트 합, 월)
     prod_qty = 0
     for r in conn.execute("SELECT tm_no, SUM(qty) s FROM production WHERE substr(d,1,7)=? GROUP BY tm_no",
@@ -365,18 +365,14 @@ def process_breakdown(conn, m, y, mth, part, kind):
         pr = m.product.get(r["tm_no"])
         if pr and pr[1] in parts:
             prod_qty += r["s"]
-    # 공정 순서는 process 마스터(ord) 기준
-    proc_order = [r["name"] for r in conn.execute(
-        "SELECT name FROM process WHERE part=? ORDER BY ord, name", (parts[0],))]
-    if not proc_order:
-        proc_order = sorted(per.keys())
+    # 공정별 불량현황은 집계공정 5종만 표시(성형·소결·정형·가공·기타)
+    proc_order = list(db.AGG_PROCESSES)
     rows = []
     for proc in proc_order:
-        excl_default = any((p, proc) in m.exclude for p in parts)
-        d = per.get(proc, {"qty": 0, "cost": 0.0, "excl": excl_default})
+        d = per.get(proc, {"qty": 0, "cost": 0.0})
         ppm = round(d["qty"] / prod_qty * 1_000_000) if prod_qty else 0
         rows.append({"process": proc, "qty": d["qty"], "prod": prod_qty,
-                     "ppm": ppm, "cost": round(d["cost"]), "excl": d["excl"]})
+                     "ppm": ppm, "cost": round(d["cost"])})
     return rows
 
 
@@ -391,7 +387,7 @@ def top5_defect(conn, m, date_from, date_to, part, limit=5):
         prod = m.product.get(r["tm_no"])
         if not prod or prod[1] not in parts:
             continue
-        if m.kind_of(r["defect_name"]) != "공정":
+        if m.kind_of(prod[1], r["defect_name"]) != "공정":
             continue
         agg[r["tm_no"]]["defect"] += r["s"]
         agg[r["tm_no"]]["by"][r["defect_name"]] += r["s"]

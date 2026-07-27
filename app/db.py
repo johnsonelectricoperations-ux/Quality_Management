@@ -110,7 +110,7 @@ def connect():
 # 불량율 집계공정 5종 (순서 고정). copq_exclude 기본: 성형=제외.
 # 기타 = 후처리 = 압입·밴딩·선별공정을 묶은 버킷.
 CANON_PROCESSES = [
-    ("성형", 1, 1), ("소결", 2, 0), ("정형", 3, 0), ("가공", 4, 0), ("기타", 5, 0),
+    ("성형", 1, 0), ("소결", 2, 0), ("정형", 3, 0), ("가공", 4, 0), ("기타", 5, 0),
 ]
 AGG_PROCESSES = [name for name, _o, _e in CANON_PROCESSES]     # 집계공정 이름
 
@@ -187,10 +187,21 @@ def init_db():
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
     _migrate_target(conn)
+    _prune_noncanonical_processes(conn)
     conn.commit()
     _normalize_tmno(conn)
     _ensure_default_admin(conn)
     conn.close()
+
+
+def _prune_noncanonical_processes(conn):
+    """process 테이블에 집계공정 5종 외의 잔여 항목(예: 과거 테스트로 남은 '선별')이 있으면 정리하고,
+    COPQ 제외 플래그를 CANON_PROCESSES 기준으로 맞춘다(현재는 전부 0=제외 없음)."""
+    canon = {name: excl for name, _o, excl in CANON_PROCESSES}
+    names = ",".join("?" * len(canon))
+    conn.execute(f"DELETE FROM process WHERE name NOT IN ({names})", list(canon))
+    for name, excl in canon.items():
+        conn.execute("UPDATE process SET copq_exclude=? WHERE name=?", (excl, name))
 
 
 def ensure_processes(conn, part):
