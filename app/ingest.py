@@ -311,17 +311,24 @@ def ingest_daily_defect_file(conn, path, user=""):
 
 
 def ingest_daily_defect_folder(conn, folder, user=""):
-    """폴더 내 사내불량 일일 양식 전체 스캔 적재. 반환: (파일수, 총건수, 상세[list])."""
+    """폴더(하위 포함) 사내불량 일일 양식 전체 스캔 적재.
+
+    폴더 구조(년월/파트/공정)는 사람이 찾기 위한 것이고, 시스템은 **파일명**으로
+    (파트·공정·구분·일자)를 판단한다 → 하위 폴더를 재귀 탐색하고 위치는 따지지 않는다.
+    Excel 임시파일(~$…)은 건너뛴다.
+    반환: (파일수, 총건수, 상세[(상대경로, 건수, errors)])."""
     detail, files, total = [], 0, 0
-    for fn in sorted(os.listdir(folder)):
-        if not fn.lower().endswith((".xlsx", ".xlsm")):
-            continue
-        if not _DAILY_RE.match(os.path.splitext(fn)[0]):
-            continue
-        n, errs = ingest_daily_defect_file(conn, os.path.join(folder, fn), user)
-        files += 1
-        total += n
-        detail.append((fn, n, errs))
+    for root, _dirs, names in os.walk(folder):
+        for fn in sorted(names):
+            if fn.startswith("~$") or not fn.lower().endswith((".xlsx", ".xlsm")):
+                continue
+            if not _DAILY_RE.match(os.path.splitext(fn)[0]):
+                continue
+            path = os.path.join(root, fn)
+            n, errs = ingest_daily_defect_file(conn, path, user)
+            files += 1
+            total += n
+            detail.append((os.path.relpath(path, folder), n, errs))
     return files, total, detail
 
 
