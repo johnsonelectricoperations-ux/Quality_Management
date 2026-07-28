@@ -12,7 +12,7 @@ import datetime
 import io
 from openpyxl import load_workbook
 
-from .calc import parse_alloc_rule, base_tmno
+from .calc import parse_alloc_rule, base_tmno, largest_remainder
 from . import db
 
 # CSV 제품목록의 공정 컬럼 (좌→우 = 공정 순서)
@@ -766,9 +766,27 @@ def ingest_outsource_xlsm(conn, path, quarantine_100=True):
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)
 
 
+def _weekdays_in_range(d1, d2):
+    """[d1,d2] 사이 평일(월~금)만 날짜 리스트(ISO 문자열)로. 평일이 하나도 없으면(범위가
+    전부 토·일) 데이터 유실을 막기 위해 전체 달력일로 폴백한다."""
+    days, cur = [], d1
+    while cur <= d2:
+        if cur.weekday() < 5:                      # 0=월 ... 4=금
+            days.append(cur.isoformat())
+        cur += datetime.timedelta(days=1)
+    if days:
+        return days
+    cur = d1
+    while cur <= d2:
+        days.append(cur.isoformat())
+        cur += datetime.timedelta(days=1)
+    return days
+
+
 def ingest_production_xlsx(conn, path):
     """생산수량 xlsx(ERP 제품창고재고금액조회) 적재.
-    파일명 {1part|2part}_{시작}_{종료}.xlsx → 파트·일자(시작일 기준).
+    파일명 {1part|2part}_{시작}_{종료}.xlsx → 파트, 대상일자는 시작~종료 범위 중 **평일(월~금)만
+    균등 분배**(토·일 제외 — 예: 목~일 범위면 목·금 2일로 분해). 하루짜리 파일이면 그대로 100%.
     C열=규격=TM-NO, I열=입고수량=생산수량, J열=입고금액(원)→÷1000=천원.
     변형 TM-NO는 base로 합산. 반환: (건수, errors)."""
     stem = os.path.splitext(os.path.basename(path))[0]
@@ -776,7 +794,10 @@ def ingest_production_xlsx(conn, path):
     if not mo:
         return 0, [f"파일명 형식 오류: {os.path.basename(path)} (예: 1part_20260723_20260723.xlsx)"]
     part = "VMS PART" if mo.group(1).lower() == "1part" else "TM PART"
-    d = f"{mo.group(2)[:4]}-{mo.group(2)[4:6]}-{mo.group(2)[6:8]}"
+    ymd1, ymd2 = mo.group(2), mo.group(3)
+    d1 = datetime.date(int(ymd1[:4]), int(ymd1[4:6]), int(ymd1[6:8]))
+    d2 = datetime.date(int(ymd2[:4]), int(ymd2[4:6]), int(ymd2[6:8]))
+    target_days = _weekdays_in_range(d1, d2)
 
     wb = load_workbook(path, data_only=True)
     ws = wb.worksheets[0]
@@ -809,11 +830,15 @@ def ingest_production_xlsx(conn, path):
         amt = float(ws.cell(row=r, column=c_amt).value or 0) / 1000.0  # 원 → 천원
         cur = agg.setdefault(tm, [0, 0.0])
         cur[0] += qty; cur[1] += amt
+    n_days = len(target_days)
     for tm, (qty, amt) in agg.items():
-        conn.execute(
-            "INSERT INTO production(d,tm_no,qty,amount,part) VALUES(?,?,?,?,?) "
-            "ON CONFLICT(d,tm_no) DO UPDATE SET qty=excluded.qty, amount=excluded.amount, part=excluded.part",
-            (d, tm, qty, amt, part))
+        qty_split = largest_remainder(qty, [1] * n_days) if n_days > 1 else [qty]
+        amt_split = [amt / n_days] * n_days if n_days > 1 else [amt]
+        for day, q, a in zip(target_days, qty_split, amt_split):
+            conn.execute(
+                "INSERT INTO production(d,tm_no,qty,amount,part) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(d,tm_no) DO UPDATE SET qty=excluded.qty, amount=excluded.amount, part=excluded.part",
+                (day, tm, q, a, part))
     conn.commit()
     return len(agg), []
 
