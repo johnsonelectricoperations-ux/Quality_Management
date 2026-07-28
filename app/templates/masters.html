@@ -15,10 +15,11 @@
   <div class="pbody"><a class="btn btn-p btn-sm" href="/admin/products" style="text-decoration:none;">제품 마스터 관리(등록·수정·CSV 가져오기) →</a></div>
 </div>
 
-<div class="panel"><div class="phead"><h2>불량유형 마스터</h2><span class="tot">{{ dtypes|length }}건</span></div>
-  <table><thead><tr><th>구분</th><th>발생공정</th><th>불량명</th><th>배분기준</th></tr></thead><tbody>
-  {% for r in dtypes %}<tr><td>{{ r.kind }}</td><td>{{ r.process }}</td><td>{{ r.name }}</td>
-    <td class="mono">{{ r.alloc_rule or '(발생공정 100%)' }}</td></tr>{% endfor %}
+<div class="panel"><div class="phead"><h2>불량유형 마스터 (미리보기)</h2><span class="tot">{{ dtypes|length }}건</span></div>
+  <table><thead><tr><th>파트</th><th>구분</th><th>불량명</th><th>배분기준</th></tr></thead><tbody>
+  {% for r in dtypes %}<tr><td>{{ r.part|pl }}</td><td>{{ r.kind }}</td><td>{{ r.name }}</td>
+    <td class="mono">{{ r.alloc_rule or (r.process + ' 100%' if r.process else '입력공정 100%') }}</td></tr>{% endfor %}
   </tbody></table>
+  <div class="pbody"><a class="btn btn-p btn-sm" href="/admin/defect-types" style="text-decoration:none;">불량유형 마스터 관리(등록·수정·삭제) →</a></div>
 </div>
 {% endblock %}

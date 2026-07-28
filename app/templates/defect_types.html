@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+{% if can_edit %}
+<div class="panel"><div class="phead"><h2>{{ '불량유형 수정' if edit_row else '불량유형 추가' }}</h2>
+  {% if edit_row %}<a class="btn btn-s btn-sm" href="/admin/defect-types" style="margin-left:auto;text-decoration:none;">+ 새로 추가</a>{% endif %}</div>
+  <div class="pbody">
+    <form method="post" action="/admin/defect-types/save">
+      <input type="hidden" name="orig_id" value="{{ edit_row.id if edit_row else '' }}">
+      <div class="frow" style="grid-template-columns:140px 120px 1fr;">
+        <div class="f"><label>파트</label><select class="in" name="part">
+          {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
+        <div class="f"><label>구분</label><select class="in" name="kind">
+          {% for k in kinds %}<option value="{{ k }}" {{ 'selected' if edit_row and edit_row.kind==k }}>{{ k }}</option>{% endfor %}</select></div>
+        <div class="f"><label>불량명</label><input class="in" name="name" value="{{ edit_row.name if edit_row else '' }}" placeholder="예: 찍힘" required></div>
+      </div>
+      <div class="f" style="margin-top:12px;"><label>공정 배분(체크한 공정으로 배분. 비율을 비워두면 균등배분, 아무 공정도 안 고르면 입력한 공정 그대로 100%)</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;">
+          {% for pr in agg %}
+          <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if edit_row and pr in edit_row.selected }}>
+            {{ pr }}
+            <input class="in" type="number" step="any" min="0" name="ratio_{{ pr }}" placeholder="비율%"
+                   value="{{ edit_row.ratios.get(pr, '') if edit_row else '' }}" style="width:80px;">
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">저장</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel"><div class="phead"><h2>불량유형 목록</h2><span class="tot">{{ rows|length }}건</span></div>
+  <table>
+    <thead><tr><th>파트</th><th>구분</th><th>불량명</th><th>배분기준</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr {% if edit_row and edit_row.id==r.id %}style="background:var(--bg2);"{% endif %}>
+        <td>{{ r.part|pl }}</td><td>{{ r.kind }}</td><td>{{ r.name }}</td>
+        <td class="mono">{{ r.alloc_rule or (r.process + ' 100%' if r.process else '입력공정 100%') }}</td>
+        {% if can_edit %}<td style="white-space:nowrap;">
+          <a class="btn btn-s btn-sm" href="/admin/defect-types?edit={{ r.id }}" style="text-decoration:none;">수정</a>
+          <form method="post" action="/admin/defect-types/{{ r.id }}/delete" style="display:inline;"
+                onsubmit="return confirm('{{ r.name }} 삭제할까요?');">
+            <button class="btn btn-ghost btn-sm">삭제</button></form>
+        </td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--tx3);">불량유형이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

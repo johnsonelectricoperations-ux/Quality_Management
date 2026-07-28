@@ -509,7 +509,7 @@ def masters(request: Request):
     prod = [dict(r) for r in conn.execute(
         "SELECT p.tm_no,p.name,p.part,COUNT(r.id) steps FROM product p "
         "LEFT JOIN product_route r ON r.tm_no=p.tm_no GROUP BY p.tm_no ORDER BY p.tm_no LIMIT 20")]
-    dtypes = [dict(r) for r in conn.execute("SELECT * FROM defect_type ORDER BY kind,name")]
+    dtypes = [dict(r) for r in conn.execute("SELECT * FROM defect_type ORDER BY part,kind,name")]
     conn.close()
     return render(request, "masters.html", u, active="masters", heading="마스터 조회",
                   crumb="관리", pending=pending_count(), proc=proc, prod=prod, prod_total=prod_total,
@@ -944,6 +944,116 @@ def processes_delete(request: Request, pid: int):
     conn.commit()
     conn.close()
     return RedirectResponse("/admin/processes?msg=삭제됨", status_code=303)
+
+
+# ── 불량유형 마스터 관리 (배분기준: 공정 체크박스 + 비율 표준입력) ──
+DEFECT_KINDS = ["공정", "셋팅"]
+
+
+def _decompose_alloc_rule(process, alloc_rule):
+    """저장된 alloc_rule(+발생공정)을 편집폼 미리채움용으로 분해.
+    반환: (선택된 공정 set, {공정: 비율문자열}) — 비율 dict가 비어있으면 균등/미지정."""
+    rule = (alloc_rule or "").strip()
+    if not rule or rule.replace(" ", "") == calc.INPUT_PROCESS_RULE.replace(" ", ""):
+        return ({process} if process else set()), {}
+    selected, ratios = set(), {}
+    has_ratio = ":" in rule
+    for tok in rule.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if ":" in tok:
+            name, r = tok.split(":", 1)
+            name = name.strip()
+            selected.add(name)
+            ratios[name] = r.strip()
+        else:
+            selected.add(tok)
+    return selected, (ratios if has_ratio else {})
+
+
+def _compose_alloc_rule(form):
+    """체크박스(use_공정)+비율(ratio_공정) 입력 → alloc_rule 문자열.
+    아무 공정도 안 고르면 '' (입력공정 100%). 비율을 하나라도 채우면 전부 채워야 한다."""
+    selected = [p for p in db.AGG_PROCESSES if form.get("use_" + p)]
+    if not selected:
+        return "", None
+    ratios = {p: (form.get("ratio_" + p) or "").strip() for p in selected}
+    filled = {p: v for p, v in ratios.items() if v != ""}
+    if not filled:
+        return ",".join(selected), None
+    if len(filled) != len(selected):
+        return None, "비율은 선택한 공정 전부에 입력하거나, 전부 비워 균등배분으로 두세요"
+    try:
+        for v in filled.values():
+            float(v)
+    except ValueError:
+        return None, "비율은 숫자로 입력하세요"
+    return ",".join(f"{p}:{filled[p]}" for p in selected), None
+
+
+@app.get("/admin/defect-types", response_class=HTMLResponse)
+def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM defect_type ORDER BY part,kind,name")]
+    edit_row = None
+    if edit:
+        r = conn.execute("SELECT * FROM defect_type WHERE id=?", (edit,)).fetchone()
+        if r:
+            selected, ratios = _decompose_alloc_rule(r["process"], r["alloc_rule"])
+            edit_row = dict(r)
+            edit_row["selected"] = selected
+            edit_row["ratios"] = ratios
+    conn.close()
+    return render(request, "defect_types.html", u, active="defect_types", heading="불량유형 마스터 관리",
+                  crumb="관리", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  agg=db.AGG_PROCESSES, kinds=DEFECT_KINDS,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+
+
+@app.post("/admin/defect-types/save")
+async def defect_types_save(request: Request):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/defect-types", status_code=303)
+    form = await request.form()
+    orig_id = (form.get("orig_id") or "").strip()
+    part = form.get("part") or "VMS PART"
+    kind = form.get("kind") or "공정"
+    name = (form.get("name") or "").strip()
+    if not name:
+        return RedirectResponse("/admin/defect-types?err=불량명 필수", status_code=303)
+    alloc_rule, err = _compose_alloc_rule(form)
+    if err:
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/admin/defect-types?err={err}{eq}", status_code=303)
+    conn = db.connect()
+    if orig_id:
+        conn.execute("DELETE FROM defect_type WHERE id=?", (orig_id,))
+    conn.execute(
+        "INSERT INTO defect_type(part,kind,process,name,alloc_rule) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(part,kind,name) DO UPDATE SET process=excluded.process, alloc_rule=excluded.alloc_rule",
+        (part, kind, "", name, alloc_rule))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/admin/defect-types?msg=저장됨: {name}", status_code=303)
+
+
+@app.post("/admin/defect-types/{did}/delete")
+def defect_types_delete(request: Request, did: int):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/admin/defect-types", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM defect_type WHERE id=?", (did,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/defect-types?msg=삭제됨", status_code=303)
 
 
 # ── 목표 관리 ───────────────────────────────────────────
