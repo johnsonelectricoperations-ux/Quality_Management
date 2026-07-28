@@ -505,8 +505,8 @@ def ingest_price_master(conn, path):
                 continue
             rows.append((tm, proc, price))
     conn.executemany(
-        "INSERT INTO product_price(tm_no,process,unit_price) VALUES(?,?,?) "
-        "ON CONFLICT(tm_no,process) DO UPDATE SET unit_price=excluded.unit_price", rows)
+        "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01') "
+        "ON CONFLICT(tm_no,process,effective_from) DO UPDATE SET unit_price=excluded.unit_price", rows)
     conn.commit()
     return len(tms) - skipped, {"정형없음(완제품단가)": len(no_jeonghyeong),
                                 "완제품단가없어_스킵": skipped, "비수치_무시": bad}

@@ -119,19 +119,44 @@ class Masters:
     def __init__(self, conn):
         self.product = {}       # tm -> (name, part)
         self.route = {}         # tm -> [proc,...] (순서)
-        self.price = {}         # (tm, proc) -> 원
+        self.price = {}         # (tm, proc) -> 원 (오늘 기준 현재가, 화면 표시용)
+        self.price_hist = {}    # (tm, proc) -> [(effective_from, 원), ...] 오름차순
         self.defect = {}        # (part, name) -> (kind, proc, rule_list)
         for r in conn.execute("SELECT * FROM product"):
             self.product[r["tm_no"]] = (r["name"], r["part"])
         for r in conn.execute("SELECT * FROM product_route ORDER BY tm_no, seq"):
             self.route.setdefault(r["tm_no"], []).append(r["process"])
             if r["unit_price"]:
-                self.price[(r["tm_no"], db.bucket_of(r["process"]))] = r["unit_price"]
-        # 단가 마스터(집계공정 기준)가 있으면 우선 적용
-        for r in conn.execute("SELECT tm_no,process,unit_price FROM product_price"):
-            self.price[(r["tm_no"], r["process"])] = r["unit_price"]
+                self.price_hist.setdefault((r["tm_no"], db.bucket_of(r["process"])), []).append(
+                    ("2000-01-01", r["unit_price"]))
+        # 단가 마스터(집계공정 기준, 효력시작일별 이력)가 있으면 우선 적용
+        today = date.today().isoformat()
+        for r in conn.execute(
+                "SELECT tm_no,process,unit_price,effective_from FROM product_price ORDER BY effective_from"):
+            key = (r["tm_no"], r["process"])
+            self.price_hist[key] = [x for x in self.price_hist.get(key, [])
+                                    if x[0] != r["effective_from"]]
+            self.price_hist[key].append((r["effective_from"], r["unit_price"]))
+        for key, hist in self.price_hist.items():
+            hist.sort(key=lambda x: x[0])
+            applicable = [p for ef, p in hist if ef <= today]
+            if applicable:
+                self.price[key] = applicable[-1]
         for r in conn.execute("SELECT * FROM defect_type"):
             self.defect[(r["part"], r["name"])] = (r["kind"], r["process"], parse_alloc_rule(r["alloc_rule"]))
+
+    def price_on(self, tm_no, proc, d):
+        """해당 날짜(d) 시점에 유효한 단가. 효력시작일이 d 이전인 것 중 가장 최근 값을 쓴다
+        (미래에 새 단가가 등록돼도 과거 d의 원가는 바뀌지 않는다)."""
+        hist = self.price_hist.get((tm_no, proc))
+        if not hist:
+            return 0
+        val = 0
+        for ef, p in hist:
+            if ef > d:
+                break
+            val = p
+        return val
 
     def allocate(self, part, tm_no, defect_name, qty):
         """→ [(집계공정, alloc_qty)] 정수 배분(최대잉여법, 소수점 없음).
@@ -202,7 +227,7 @@ def compute_daily(conn, m: Masters):
         else:
             cell["proc_qty"] += r["qty"]
         for proc, q in allocs:
-            price = m.price.get((r["tm_no"], proc), 0)
+            price = m.price_on(r["tm_no"], proc, r["d"])
             cost = q * price / 1000.0                      # 원 → 천원
             cell["scrap_cost"] += cost
             cell["scrap_cost_copq"] += cost                # COPQ는 성형 등 별도 제외 없이 전체 반영
@@ -363,7 +388,7 @@ def process_breakdown(conn, m, y, mth, part, kind):
         if rkind != kind:
             continue
         for proc, q in allocs:
-            price = m.price.get((r["tm_no"], proc), 0)
+            price = m.price_on(r["tm_no"], proc, r["d"])
             per[proc]["qty"] += q
             per[proc]["cost"] += q * price / 1000.0
     # 생산수량(파트 합, 월)

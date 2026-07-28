@@ -564,9 +564,12 @@ def _copq_excluded(conn):
 
 
 def _price_map(conn, tm):
-    """{집계공정: 단가|None}"""
-    cur = {r["process"]: r["unit_price"]
-           for r in conn.execute("SELECT process,unit_price FROM product_price WHERE tm_no=?", (tm,))}
+    """{집계공정: 오늘 기준 현재 단가|None}. 효력시작일이 오늘 이전인 것 중 가장 최근 값을 쓴다."""
+    cur = {}
+    for r in conn.execute(
+            "SELECT process,unit_price FROM product_price WHERE tm_no=? AND effective_from<=date('now') "
+            "ORDER BY effective_from", (tm,)):
+        cur[r["process"]] = r["unit_price"]      # 나중에 읽는(더 최근) 값이 이전 값을 덮어씀
     return {p: cur.get(p) for p in db.AGG_PROCESSES}
 
 
@@ -712,9 +715,10 @@ async def product_save(request: Request):
         except ValueError:
             conn.close()
             return RedirectResponse(f"/admin/products?err={proc} 단가가 숫자가 아님", status_code=303)
-        conn.execute("INSERT INTO product_price(tm_no,process,unit_price) VALUES(?,?,?) "
-                     "ON CONFLICT(tm_no,process) DO UPDATE SET unit_price=excluded.unit_price",
-                     (tm, proc, v))
+        conn.execute(
+            "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01') "
+            "ON CONFLICT(tm_no,process,effective_from) DO UPDATE SET unit_price=excluded.unit_price",
+            (tm, proc, v))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/admin/products?msg=저장됨: {tm}&q={tm}", status_code=303)

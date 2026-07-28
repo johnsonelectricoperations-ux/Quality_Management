@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS product_price (
   id INTEGER PRIMARY KEY, tm_no TEXT NOT NULL,
   process TEXT NOT NULL,                   -- 집계공정(성형·소결·정형·가공·기타)
   unit_price REAL NOT NULL DEFAULT 0,      -- 누적단가(원)
-  UNIQUE(tm_no, process)
+  effective_from TEXT NOT NULL DEFAULT '2000-01-01',  -- 이 날짜부터 적용(그 이전 실적은 이전 값 유지)
+  UNIQUE(tm_no, process, effective_from)
 );
 CREATE TABLE IF NOT EXISTS defect_type (
   id INTEGER PRIMARY KEY, part TEXT NOT NULL DEFAULT '',
@@ -158,6 +159,26 @@ def _migrate_target(conn):
         [(r["fy"], r["part"], r["kpi"], r["value"], r["unit"]) for r in old])
 
 
+def _migrate_product_price(conn):
+    """product_price UNIQUE(tm_no,process) → UNIQUE(tm_no,process,effective_from) 로 변경.
+    effective_from 컬럼이 없으면 테이블을 재생성하고 기존 단가를 '2000-01-01'(항상 적용) 기준으로 이관한다."""
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(product_price)")]
+    if not cols or "effective_from" in cols:
+        return
+    old = list(conn.execute("SELECT tm_no,process,unit_price FROM product_price"))
+    conn.execute("DROP TABLE product_price")
+    conn.executescript("""
+    CREATE TABLE product_price (
+      id INTEGER PRIMARY KEY, tm_no TEXT NOT NULL, process TEXT NOT NULL,
+      unit_price REAL NOT NULL DEFAULT 0,
+      effective_from TEXT NOT NULL DEFAULT '2000-01-01',
+      UNIQUE(tm_no, process, effective_from)
+    );""")
+    conn.executemany(
+        "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01')",
+        [(r["tm_no"], r["process"], r["unit_price"]) for r in old])
+
+
 def _migrate_defect_type(conn):
     """defect_type UNIQUE(name) → UNIQUE(part,kind,name) 로 변경.
     ALTER로 UNIQUE를 못 바꾸므로 part 컬럼이 없으면 테이블을 재생성한다.
@@ -188,6 +209,7 @@ def init_db():
     _add_col(conn, "defect_entry", "reviewed", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
+    _migrate_product_price(conn)
     _migrate_target(conn)
     _prune_noncanonical_processes(conn)
     conn.commit()

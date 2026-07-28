@@ -97,6 +97,9 @@ python -m app.setpw viewer <새비밀번호>
 `deploy\register_tasks.bat`를 **관리자 권한으로 실행**:
 - `QMS_Server` : 부팅 시 자동 시작 (로그온 없이 SYSTEM 계정으로 실행)
 - `QMS_Backup` : 매일 02:00 DB 백업
+- `QMS_PriceUpdate` : 매년 4월 1일 03:00, 공정별 단가(성형·소결·정형·가공·기타) 재계산.
+  최근 3개월 입고실적 기준으로 다시 산출하고 **그 해 4월 1일부터만 적용**한다(과거 원가는 불변).
+  자세한 계산 규칙은 `app/price_calc.py` 상단 주석 참고.
 
 지금 바로 시작:  `schtasks /Run /TN "QMS_Server"`
 상태 확인:      `schtasks /Query /TN "QMS_Server"`
