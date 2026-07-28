@@ -132,8 +132,11 @@ def data_freshness(conn):
         row = conn.execute(
             "SELECT MAX(d) m FROM defect_entry WHERE source=? AND status!='rejected'", (src,)).fetchone()
         daily.append({"label": label, "date": row["m"]})
-    row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
-    daily.append({"label": "생산량", "date": row["m"]})
+    prod_date = db.get_setting(conn, ingest.PROD_FRESHNESS_KEY, "") or None
+    if not prod_date:
+        row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
+        prod_date = row["m"]                    # 이 설정이 생기기 전 과거 데이터용 폴백
+    daily.append({"label": "생산량", "date": prod_date})
     ref = max((r["date"] for r in daily if r["date"]), default=None)
     for r in daily:
         r["stale"] = r["date"] != ref if ref else False

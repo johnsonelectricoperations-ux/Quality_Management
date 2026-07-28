@@ -764,6 +764,7 @@ def ingest_outsource_xlsm(conn, path, quarantine_100=True):
 
 
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)
+PROD_FRESHNESS_KEY = "prod_last_file_end"   # 생산량 "데이터 최종입력일"(파일명 종료일 기준) 캐시 키
 
 
 def _weekdays_in_range(d1, d2):
@@ -798,6 +799,12 @@ def ingest_production_xlsx(conn, path):
     d1 = datetime.date(int(ymd1[:4]), int(ymd1[4:6]), int(ymd1[6:8]))
     d2 = datetime.date(int(ymd2[:4]), int(ymd2[4:6]), int(ymd2[6:8]))
     target_days = _weekdays_in_range(d1, d2)
+
+    # 대시보드 "데이터 최종입력일" 참고용: 실제 반영일(주말 제외로 앞당겨질 수 있음)이 아니라
+    # 파일명에 적힌 종료일 자체를 기준으로 삼는다(사용자 확정).
+    prev = db.get_setting(conn, PROD_FRESHNESS_KEY, "")
+    if not prev or d2.isoformat() > prev:
+        db.set_setting(conn, PROD_FRESHNESS_KEY, d2.isoformat())
 
     wb = load_workbook(path, data_only=True)
     ws = wb.worksheets[0]
