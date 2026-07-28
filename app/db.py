@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS defect_entry (
   status TEXT NOT NULL DEFAULT 'confirmed', -- confirmed|pending
   reg_user TEXT DEFAULT '',
   batch_key TEXT DEFAULT '',                -- 폴더 재적재 idempotent 키(파트|공정|구분|일자)
-  reviewed INTEGER NOT NULL DEFAULT 0       -- 100EA 검토화면에서 사람이 승인/수정/반려했으면 1
+  reviewed INTEGER NOT NULL DEFAULT 0,      -- 100EA 검토화면에서 사람이 승인/수정/반려했으면 1
+  exclude_cost INTEGER NOT NULL DEFAULT 0   -- 1=셋팅불량율에는 포함, Scrap Cost·COPQ 계산에서는 제외
 );                                           -- (재스캔 시 reviewed=1 행은 덮어쓰지 않고 보존)
 CREATE TABLE IF NOT EXISTS production (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, tm_no TEXT NOT NULL,
@@ -230,6 +231,8 @@ def init_db():
     _add_col(conn, "defect_entry", "batch_key", "TEXT DEFAULT ''")
     _add_col(conn, "defect_entry", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "reviewed", "INTEGER NOT NULL DEFAULT 0")
+    # 성형 공정 작성 셋팅불량: 셋팅불량율에는 포함하되 Scrap Cost·COPQ 계산에서는 제외.
+    _add_col(conn, "defect_entry", "exclude_cost", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "claim", "reclaim", "REAL NOT NULL DEFAULT 0")
     _add_col(conn, "claim", "use_agg", "INTEGER NOT NULL DEFAULT 1")

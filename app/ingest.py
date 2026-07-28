@@ -6,6 +6,7 @@
 - TM-NO는 문자열로만 취급. 셀이 날짜(datetime)로 변환되어 있으면 오류로 거부.
 - 마스터는 전체 교체(idempotent). 트랜잭션은 삽입(UNIQUE는 UPSERT).
 """
+import calendar
 import csv
 import datetime
 import io
@@ -365,6 +366,121 @@ def ingest_daily_defect_folder(conn, folder, user=""):
                 continue
             path = os.path.join(root, fn)
             n, errs = ingest_daily_defect_file(conn, path, user)
+            files += 1
+            total += n
+            detail.append((os.path.relpath(path, folder), n, errs))
+    return files, total, detail
+
+
+# ── 사내불량 월별 양식(시트=일자 1~31 + 종합) ──────────────
+# 파일명: {YYMM}_{공정}_{공정불량|셋팅불량}_생산{1|2}파트.xlsx  (예: 2607_성형_공정불량_생산1파트.xlsx)
+_MONTHLY_DEFECT_RE = re.compile(r"^(\d{4})_(.+?)_(공정|셋팅)불량_생산([12])파트$")
+_MONTHLY_PART_TOKEN = {"1": "VMS PART", "2": "TM PART"}
+# 불량유형 열 중 집계 제외(폐기·소재불량은 폐기불량/외주소재불량 소스와 중복이라 별도 소스로만 집계, 소계는 합계열)
+_MONTHLY_SKIP_COLS = {"폐기", "소재불량", "소계"}
+
+
+def parse_monthly_defect_filename(fname):
+    """'2607_성형_공정불량_생산1파트.xlsx' → (year,month,part,proc,kind) 또는 None."""
+    stem = os.path.splitext(os.path.basename(fname))[0]
+    mo = _MONTHLY_DEFECT_RE.match(stem)
+    if not mo:
+        return None
+    yymm, proc, kind, partnum = mo.groups()
+    year, month = 2000 + int(yymm[:2]), int(yymm[2:])
+    if not (1 <= month <= 12):
+        return None
+    return year, month, _MONTHLY_PART_TOKEN[partnum], proc, kind
+
+
+def ingest_monthly_defect_file(conn, path, user=""):
+    """사내불량 월별 양식 1개 적재. 시트 `1`~해당월 마지막일=일자별 데이터, `종합`은 무시.
+    행=TM-NO, 열=세부 불량유형(4행 헤더), 셀=수량.
+
+    성형 공정에서 작성한 파일 규칙:
+    - 구분=공정불량 → D/B에 전혀 반영하지 않는다(파일 통째로 skip).
+    - 구분=셋팅불량 → D/B엔 반영해 셋팅불량율에는 포함시키되, Scrap Cost·COPQ 계산에서는
+      제외한다(defect_entry.exclude_cost=1).
+    같은 batch_key(파트|공정|구분|일자)는 일자별로 삭제 후 재적재(idempotent, 기존 일일양식과 동일 방식).
+    반환: (적재건수, errors[list])."""
+    parsed = parse_monthly_defect_filename(path)
+    if not parsed:
+        return 0, [f"파일명 형식 오류: {os.path.basename(path)} "
+                   f"(예: 2607_성형_공정불량_생산1파트.xlsx)"]
+    year, month, part, proc, kind = parsed
+    if proc == "성형" and kind == "공정":
+        return 0, []                                # 성형 작성 공정불량은 D/B 전량 미반영
+    exclude_cost = 1 if (proc == "성형" and kind == "셋팅") else 0
+
+    names = {r["name"] for r in conn.execute(
+        "SELECT name FROM defect_type WHERE part=? AND kind=?", (part, kind))}
+
+    wb = load_workbook(path, data_only=True)
+    days_in_month = calendar.monthrange(year, month)[1]
+    rows, errors = [], []
+
+    for day in range(1, days_in_month + 1):
+        sheet_name = str(day)
+        if sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        d = f"{year:04d}-{month:02d}-{day:02d}"
+        batch_key = f"{part}|{proc}|{kind}|{d}"
+
+        tm_col = None
+        for c in range(1, ws.max_column + 1):
+            if str(ws.cell(row=5, column=c).value or "").strip() == "TM NO.":
+                tm_col = c
+                break
+        if tm_col is None:
+            errors.append(f"{os.path.basename(path)} [{sheet_name}]: 헤더(TM NO.)를 찾을 수 없음")
+            continue
+        # 세부 불량유형 헤더는 4행. 공백/줄바꿈을 모두 제거해 마스터 불량명과 비교한다
+        # (예: xlsm의 "영점 및\n동심도수정" → "영점및동심도수정").
+        dcols = []
+        for c in range(1, ws.max_column + 1):
+            raw = str(ws.cell(row=4, column=c).value or "")
+            name = "".join(raw.split())
+            if not name or name in _MONTHLY_SKIP_COLS or name not in names:
+                continue
+            dcols.append((c, name))
+
+        for r in range(6, ws.max_row + 1):
+            tmv = ws.cell(row=r, column=tm_col).value
+            if isinstance(tmv, (datetime.date, datetime.datetime)):
+                continue
+            tmno = base_tmno(tmv)
+            if not tmno:
+                continue
+            for c, name in dcols:
+                qty = _int(ws.cell(row=r, column=c).value)
+                if qty <= 0:
+                    continue
+                rows.append((d, tmno, name, qty, part, proc, kind, "direct",
+                             "confirmed", user, batch_key, exclude_cost))
+        conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
+
+    conn.executemany(
+        "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,"
+        "reg_user,batch_key,exclude_cost) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    return len(rows), errors
+
+
+def ingest_monthly_defect_folder(conn, folder, user=""):
+    """폴더(하위 포함) 사내불량 월별 양식 전체 스캔 적재. `01_사내불량\\{연도}\\{1파트|2파트}\\{월}\\`
+    아래에 파일들이 섞여 있는 구조(하위폴더로 공정 구분 없음)를 그대로 재귀 탐색한다.
+    Excel 임시파일(~$…)은 건너뛴다.
+    반환: (파일수, 총건수, 상세[(상대경로, 건수, errors)])."""
+    detail, files, total = [], 0, 0
+    for root, _dirs, names in os.walk(folder):
+        for fn in sorted(names):
+            if fn.startswith("~$") or not fn.lower().endswith((".xlsx", ".xlsm")):
+                continue
+            if not _MONTHLY_DEFECT_RE.match(os.path.splitext(fn)[0]):
+                continue
+            path = os.path.join(root, fn)
+            n, errs = ingest_monthly_defect_file(conn, path, user)
             files += 1
             total += n
             detail.append((os.path.relpath(path, folder), n, errs))

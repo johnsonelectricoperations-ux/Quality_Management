@@ -2,7 +2,8 @@
 """서버 공유 폴더 스캔 → DB 적재.
 
 폴더 구조 (루트 = setting 'data_root', 기본 \\carp130001\\...\\Quality_Data):
-    01_사내불량\\{YYYY-MM}\\{1PART|2PART}\\{공정}\\   (재귀, 파일명으로 판단)
+    01_사내불량\\{연도}\\{1파트|2파트}\\{월}\\{YYMM}_{공정}_{공정불량|셋팅불량}_생산{1|2}파트.xlsx
+        (하위폴더는 사람이 찾기용, 시스템은 재귀 탐색 + 파일명으로 판단. 월별 1파일, 시트=일자 1~31)
     02_생산량\\{YYYY-MM}\\
     03_외주소재\\00_sintering_defect.xlsm            (고정 파일 덮어쓰기)
     04_폐기불량\\scrap_data.db                        (고정 파일 덮어쓰기)
@@ -74,7 +75,7 @@ def scan_defect(conn, root):
     folder = os.path.join(root, SUB_DEFECT)
     if not os.path.isdir(folder):
         return {"ok": False, "note": "폴더 없음", "files": 0, "rows": 0, "errors": []}
-    files, rows, detail = ingest.ingest_daily_defect_folder(conn, folder)
+    files, rows, detail = ingest.ingest_monthly_defect_folder(conn, folder)
     errors = [f"{rel}: {'; '.join(errs)}" for rel, _n, errs in detail if errs]
     return {"ok": not errors, "files": files, "rows": rows, "errors": errors,
             "note": f"{files}개 파일 / {rows}건 적재"}

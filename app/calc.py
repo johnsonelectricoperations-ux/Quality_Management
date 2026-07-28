@@ -213,7 +213,8 @@ def compute_daily(conn, m: Masters):
     pdetail = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})  # (part,proc) 누적(전체기간)
 
     for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry WHERE status='confirmed'"):
+            "SELECT d,tm_no,defect_name,qty,part,process,kind,exclude_cost "
+            "FROM defect_entry WHERE status='confirmed'"):
         prod = m.product.get(r["tm_no"])
         part = prod[1] if prod else (r["part"] or "")   # 제품 파트 우선, 없으면 저장된 파트(제품 미지정 폐기)
         if not part:
@@ -226,6 +227,8 @@ def compute_daily(conn, m: Masters):
             cell["set_qty"] += r["qty"]
         else:
             cell["proc_qty"] += r["qty"]
+        if r["exclude_cost"]:
+            continue                            # 성형 작성 셋팅불량: 불량율엔 포함, 비용은 제외
         for proc, q in allocs:
             price = m.price_on(r["tm_no"], proc, r["d"])
             cost = q * price / 1000.0                      # 원 → 천원
