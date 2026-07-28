@@ -22,7 +22,7 @@
     {% for pr in agg %}
       <tr>
         <td><input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if pr in route }}></td>
-        <td>{{ loop.index }}. {{ pr }}{% if pr == '기타' %}<span style="color:var(--tx3);font-size:11px;"> (압입·밴딩·선별)</span>{% endif %}</td>
+        <td>{{ loop.index }}. {{ pr }}{% if pr == '기타' %}<span style="color:var(--tx3);font-size:11px;"> (가공·압입·밴딩·선별)</span>{% endif %}</td>
         <td>{% if pr in excl %}<span class="badge bg-hold">제외</span>{% else %}포함{% endif %}</td>
         <td class="num"><input class="in" type="number" step="any" min="0" name="price_{{ pr }}"
                value="{{ price[pr] if price[pr] is not none else '' }}" style="text-align:right;"></td>

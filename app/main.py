@@ -551,6 +551,35 @@ async def masters_upload(request: Request, kind: str = Form(...), file: UploadFi
 # ── 제품 마스터 관리 (CSV 가져오기 + 등록/수정/삭제) ────
 PAGE_SIZE = 50
 
+# 제품마스터 화면(라우팅·단가) 표시용 4개 공정. 집계는 계속 5종(성형/소결/정형/가공/기타)을
+# 쓰지만(리포트·대시보드·불량배분규칙), 가공·기타는 단가가 항상 같아(price_calc.py 규칙)
+# 제품마스터 화면에서는 '기타' 하나로 묶어 보여준다. 저장 시 내부적으로 가공·기타 둘 다 갱신한다.
+DISPLAY_PROCESSES = ["성형", "소결", "정형", "기타"]
+_OTHER_UNDERLYING = {"성형": ["성형"], "소결": ["소결"], "정형": ["정형"], "기타": ["가공", "기타"]}
+
+
+def _route_display(route_str):
+    """'성형→소결→정형→가공→밴딩→후처리' 같은 원본(물리공정) 라우팅 문자열을 화면표시 4종
+    (성형·소결·정형·기타)으로 접고, 연속 중복은 하나로 합친다."""
+    if not route_str:
+        return route_str
+    out = []
+    for proc in route_str.split("→"):
+        b = db.bucket_of(proc)
+        b = "기타" if b in ("가공", "기타") else b
+        if not out or out[-1] != b:
+            out.append(b)
+    return "→".join(out)
+
+
+def _price_map_display(conn, tm):
+    """{성형·소결·정형·기타: 단가|None}. '기타'는 기타 단가(없으면 가공 단가)를 보여준다."""
+    full = _price_map(conn, tm)
+    other = full.get("기타")
+    if other is None:
+        other = full.get("가공")
+    return {"성형": full.get("성형"), "소결": full.get("소결"), "정형": full.get("정형"), "기타": other}
+
 
 def _proc_options(conn):
     """라우팅 체크박스용: 공정명(고유) 순서·COPQ제외."""
@@ -600,13 +629,14 @@ def products_list(request: Request, q: str = "", part: str = "", miss: str = "",
             f" WHERE tm_no=p.tm_no ORDER BY seq)) route "
             f"FROM product p {wsql} ORDER BY p.tm_no LIMIT ? OFFSET ?", args + [PAGE_SIZE, off]):
         d = dict(r)
-        d["price"] = _price_map(conn, r["tm_no"])
+        d["price"] = _price_map_display(conn, r["tm_no"])
+        d["route"] = _route_display(r["route"])
         rows.append(d)
     conn.close()
     pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
     return render(request, "products.html", u, active="products", heading="제품 마스터",
                   crumb="관리", pending=pending_count(), rows=rows, total=total,
-                  agg=db.AGG_PROCESSES, q=q, part=part, miss=miss, page=page, pages=pages,
+                  agg=DISPLAY_PROCESSES, q=q, part=part, miss=miss, page=page, pages=pages,
                   can_edit=(u["role"] == "admin"), msg=msg, err=err)
 
 
@@ -645,8 +675,8 @@ def product_new(request: Request):
     return render(request, "product_form.html", u, active="products", heading="제품 등록",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="new",
                   p={"tm_no": "", "name": "", "part": "VMS PART"},
-                  agg=db.AGG_PROCESSES, excl=excl,
-                  route=set(), price={pr: None for pr in db.AGG_PROCESSES})
+                  agg=DISPLAY_PROCESSES, excl=excl,
+                  route=set(), price={pr: None for pr in DISPLAY_PROCESSES})
 
 
 @app.get("/admin/products/{tm}/edit", response_class=HTMLResponse)
@@ -663,15 +693,16 @@ def product_edit(request: Request, tm: str):
     if not p:
         conn.close()
         return RedirectResponse("/admin/products?err=제품 없음", status_code=303)
-    # 라우팅은 집계공정(5종) 기준으로 표시 — 압입·밴딩·후처리는 '기타'로 모임
-    route = {db.bucket_of(r["process"]) for r in conn.execute(
+    # 라우팅은 화면표시 4종 기준 — 압입·밴딩·후처리·가공은 전부 '기타'로 모임
+    route_raw = {db.bucket_of(r["process"]) for r in conn.execute(
         "SELECT process FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
-    price = _price_map(conn, tm)
+    route = {("기타" if b == "가공" else b) for b in route_raw}
+    price = _price_map_display(conn, tm)
     excl = _copq_excluded(conn)
     conn.close()
     return render(request, "product_form.html", u, active="products", heading="제품 수정",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="edit",
-                  p=dict(p), agg=db.AGG_PROCESSES, excl=excl, route=route, price=price)
+                  p=dict(p), agg=DISPLAY_PROCESSES, excl=excl, route=route, price=price)
 
 
 @app.post("/admin/products/save")
@@ -694,31 +725,40 @@ async def product_save(request: Request):
     conn.execute("INSERT INTO product(tm_no,name,part) VALUES(?,?,?) "
                  "ON CONFLICT(tm_no) DO UPDATE SET name=excluded.name, part=excluded.part",
                  (tm, name, part))
-    # 라우팅(집계공정 5종, 표준 순서). 기존 op_code는 공정별로 보존한다.
+    # 라우팅(화면 4종 → 내부 집계공정 5종으로 전개). 기존 op_code는 공정별로 보존한다.
+    # '기타' 체크 시 원래 '가공' 버킷이 있던 제품만 가공+기타 둘 다 유지하고(불량배분규칙이
+    # 그대로 동작하도록), 원래 없던 제품에 이 화면 저장만으로 '가공'을 새로 만들지는 않는다
+    # (그러면 "찍힘" 같이 가공을 포함하는 배분규칙이 조용히 적용 대상에 끼어드는 부작용이 생김).
     codes = {db.bucket_of(r["process"]): (r["op_code"] or "") for r in conn.execute(
         "SELECT process,op_code FROM product_route WHERE tm_no=? ORDER BY seq", (tm,))}
+    had_gagong = "가공" in codes
     conn.execute("DELETE FROM product_route WHERE tm_no=?", (tm,))
     seq = 0
-    for pr in db.AGG_PROCESSES:
+    for pr in DISPLAY_PROCESSES:
         if form.get("use_" + pr):
-            seq += 1
-            conn.execute("INSERT INTO product_route(tm_no,seq,process,unit_price,op_code) "
-                         "VALUES(?,?,?,0,?)", (tm, seq, pr, codes.get(pr, "")))
-    # 공정별 단가(집계공정) — 빈칸이면 삭제
-    for proc in db.AGG_PROCESSES:
+            real_list = (["가공", "기타"] if had_gagong else ["기타"]) if pr == "기타" else [pr]
+            for real_pr in real_list:
+                seq += 1
+                conn.execute("INSERT INTO product_route(tm_no,seq,process,unit_price,op_code) "
+                             "VALUES(?,?,?,0,?)", (tm, seq, real_pr, codes.get(real_pr, "")))
+    # 공정별 단가 — 화면 '기타' 입력값을 가공·기타 둘 다에 동일하게 저장(빈칸이면 둘 다 삭제)
+    for proc in DISPLAY_PROCESSES:
         raw = (form.get("price_" + proc) or "").replace(",", "").strip()
+        real_procs = _OTHER_UNDERLYING[proc]
         if raw == "":
-            conn.execute("DELETE FROM product_price WHERE tm_no=? AND process=?", (tm, proc))
+            for real_pr in real_procs:
+                conn.execute("DELETE FROM product_price WHERE tm_no=? AND process=?", (tm, real_pr))
             continue
         try:
             v = float(raw)
         except ValueError:
             conn.close()
             return RedirectResponse(f"/admin/products?err={proc} 단가가 숫자가 아님", status_code=303)
-        conn.execute(
-            "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01') "
-            "ON CONFLICT(tm_no,process,effective_from) DO UPDATE SET unit_price=excluded.unit_price",
-            (tm, proc, v))
+        for real_pr in real_procs:
+            conn.execute(
+                "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01') "
+                "ON CONFLICT(tm_no,process,effective_from) DO UPDATE SET unit_price=excluded.unit_price",
+                (tm, real_pr, v))
     conn.commit()
     conn.close()
     return RedirectResponse(f"/admin/products?msg=저장됨: {tm}&q={tm}", status_code=303)
