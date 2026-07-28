@@ -593,7 +593,9 @@ def top5_defect(conn, m, date_from, date_to, part, limit=5):
     rows = []
     for tm, a in agg.items():
         by = sorted(a["by"].items(), key=lambda x: x[1], reverse=True)[:3]
+        prod = prod_by_tm.get(tm, 0)
+        ppm = round(a["defect"] / prod * 1_000_000) if prod else None
         rows.append({"tm": tm, "name": m.product.get(tm, ("?",))[0],
-                     "prod": prod_by_tm.get(tm, 0), "defect": a["defect"], "by": by})
+                     "prod": prod, "defect": a["defect"], "ppm": ppm, "by": by})
     rows.sort(key=lambda x: x["defect"], reverse=True)
     return rows[:limit]
