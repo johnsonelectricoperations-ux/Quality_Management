@@ -38,6 +38,10 @@ def base_tmno(tm):
 CLAIM_COPQ_ITEMS = ["Warranty", "3rd Party Containment", "Quality Special Freight",
                     "Customer Incident Cost", "Unplanned Inspection & Sorting", "Variance"]
 
+# 외주소재불량 Scrap Cost 단가 = 완제품(기타)단가 × 이 배수 (2026-07-29 확정).
+# 외주에서 받은 소재 상태의 불량이라 공정단가(성형 0.5배 등)가 아니라 별도 배수를 쓴다.
+OUTSOURCE_PRICE_RATIO = 0.8
+
 
 # ── FY 유틸 ─────────────────────────────────────────────
 def fy_of(y, m):
@@ -164,6 +168,16 @@ class Masters:
             val = p
         return val
 
+    def scrap_price(self, tm_no, stored_process, source, d):
+        """Scrap Cost용 단가 — **불량을 발견한 공정(입력공정)** 기준 (2026-07-29 확정).
+        불량유형 마스터의 배분규칙은 '공정별 불량수량' 분석에만 쓰고, 비용은 재배분하지 않는다
+        (재배분하면 후처리에서 발견된 불량이 성형 0.5배 단가로 계산돼 실패비용이 과소평가된다).
+        외주소재불량은 공정단가가 아니라 **완제품(기타)단가 × 0.8**로 계산한다."""
+        if source == "outsource":
+            return self.price_on(tm_no, "기타", d) * OUTSOURCE_PRICE_RATIO
+        proc = db.bucket_of(stored_process) if stored_process else ""
+        return self.price_on(tm_no, proc, d) if proc else 0
+
     def allocate(self, part, tm_no, defect_name, qty):
         """→ [(집계공정, alloc_qty)] 정수 배분(최대잉여법, 소수점 없음).
         마스터에 발생공정/배분기준이 없으면 제품 라우팅의 첫 공정으로 폴백."""
@@ -185,6 +199,11 @@ class Masters:
     def kind_of(self, part, defect_name):
         dt = self.defect.get((part, defect_name))
         return dt[0] if dt else "공정"
+
+    def kind_from(self, part, defect_name, stored_kind=""):
+        """공정|셋팅 판정만 (resolve()의 배분 계산 없이). 저장된 kind가 있으면 그대로,
+        없으면 불량유형 마스터에서 유추한다."""
+        return (stored_kind or "").strip() or self.kind_of(part, defect_name)
 
     def resolve(self, part, tm_no, defect_name, qty, stored_process="", stored_kind=""):
         """→ (kind, [(집계공정, qty)]).
@@ -228,7 +247,7 @@ def compute_daily(conn, m: Masters):
     pdetail = defaultdict(lambda: {"qty": 0, "cost": 0.0, "excl": False})  # (part,proc) 누적(전체기간)
 
     for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,part,process,kind,exclude_cost "
+            "SELECT d,tm_no,defect_name,qty,part,process,kind,source,exclude_cost "
             "FROM defect_entry WHERE status='confirmed'"):
         prod = m.product.get(r["tm_no"])
         part = prod[1] if prod else (r["part"] or "")   # 제품 파트 우선, 없으면 저장된 파트(제품 미지정 폐기)
@@ -236,8 +255,7 @@ def compute_daily(conn, m: Masters):
             continue
         if r["d"] > prod_cutoff.get(part, "0000-00-00"):
             continue                            # 그 파트의 생산량이 아직 등록 안 된 날짜 → 지표 제외
-        kind, allocs = m.resolve(part, r["tm_no"], r["defect_name"], r["qty"],
-                                 r["process"], r["kind"])
+        kind = m.kind_from(part, r["defect_name"], r["kind"])
         cell = daily[r["d"]][part]
         cell["scrap_qty"] += r["qty"]
         if kind == "셋팅":
@@ -246,11 +264,11 @@ def compute_daily(conn, m: Masters):
             cell["proc_qty"] += r["qty"]
         if r["exclude_cost"]:
             continue                            # 성형 작성 셋팅불량: 불량율엔 포함, 비용은 제외
-        for proc, q in allocs:
-            price = m.price_on(r["tm_no"], proc, r["d"])
-            cost = q * price / 1000.0                      # 원 → 천원
-            cell["scrap_cost"] += cost
-            cell["scrap_cost_copq"] += cost                # COPQ는 성형 등 별도 제외 없이 전체 반영
+        # 비용은 배분규칙을 쓰지 않고 **발견(입력) 공정** 단가로 계산한다
+        price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"])
+        cost = r["qty"] * price / 1000.0                   # 원 → 천원
+        cell["scrap_cost"] += cost
+        cell["scrap_cost_copq"] += cost                    # COPQ는 성형 등 별도 제외 없이 전체 반영
 
     for r in conn.execute("SELECT d,tm_no,qty,amount FROM production"):
         prod = m.product.get(r["tm_no"])
@@ -394,12 +412,17 @@ def target_map(conn, fy, part):
 
 # ── 공정별 집계 (한 달) ─────────────────────────────────
 def process_breakdown(conn, m, y, mth, part, kind):
-    """공정별 불량수량·생산·ppm·ScrapCost. part는 VMS/TM (통합 아님)."""
+    """공정별 불량수량·생산·ppm·ScrapCost. part는 VMS/TM (통합 아님).
+
+    **수량**은 불량유형 마스터의 배분규칙대로 원인공정에 배분하고,
+    **비용**은 불량을 발견한 입력공정에 그대로 물린다(2026-07-29 확정, compute_daily와 동일 기준).
+    두 열의 기준이 다르므로 화면에서 이 점을 안내한다."""
     parts = _parts_for(part)
     dates = set(_dates_in_month(y, mth))
     per = defaultdict(lambda: {"qty": 0, "cost": 0.0})
     for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry WHERE status='confirmed'"):
+            "SELECT d,tm_no,defect_name,qty,part,process,kind,source,exclude_cost "
+            "FROM defect_entry WHERE status='confirmed'"):
         if r["d"] not in dates:
             continue
         prod = m.product.get(r["tm_no"])
@@ -411,9 +434,13 @@ def process_breakdown(conn, m, y, mth, part, kind):
         if rkind != kind:
             continue
         for proc, q in allocs:
-            price = m.price_on(r["tm_no"], proc, r["d"])
             per[proc]["qty"] += q
-            per[proc]["cost"] += q * price / 1000.0
+        if r["exclude_cost"]:
+            continue                    # 성형 작성 셋팅불량: 수량만 반영, 비용 제외
+        cost_proc = "기타" if r["source"] == "outsource" else db.bucket_of(r["process"] or "")
+        if cost_proc:
+            price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"])
+            per[cost_proc]["cost"] += r["qty"] * price / 1000.0
     # 생산수량(파트 합, 월)
     prod_qty = 0
     for r in conn.execute("SELECT tm_no, SUM(qty) s FROM production WHERE substr(d,1,7)=? GROUP BY tm_no",
