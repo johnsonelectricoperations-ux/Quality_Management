@@ -209,7 +209,8 @@ def build_dashboard(conn, m, daily, part):
         "copq": {"amt": cur["copq_cost"], "pct": cur["copq_pct"],
                  "target": target_val(conn, cur_fy, part, "copq"),
                  "delta": round(cur["copq_pct"] - prev["copq_pct"], 2)},
-        "incident": {"val": cur["incident"], "target": target_val(conn, cur_fy, part, "incident")},
+        "incident": {"val": cur["incident"], "target": target_val(conn, cur_fy, part, "incident"),
+                     "delta": cur["incident"] - prev["incident"]},
         "warranty": {"val": cur["warranty"], "target": target_val(conn, cur_fy, part, "warranty"),
                      "delta": cur["warranty"] - prev["warranty"]},
         "proc_ppm": {"val": cur["proc_ppm"],
@@ -218,7 +219,7 @@ def build_dashboard(conn, m, daily, part):
         "set_ppm": {"val": cur["set_ppm"],
                     "target": target_val(conn, cur_fy, ppm_part, "set_ppm", cm),
                     "delta": cur["set_ppm"] - prev["set_ppm"]},
-        "prod_qty": {"val": cur["prod_qty"]},
+        "prod_qty": {"val": cur["prod_qty"], "delta": cur["prod_qty"] - prev["prod_qty"]},
         "denom_est": cur["denom_est"],
     }
 

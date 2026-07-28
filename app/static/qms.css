@@ -102,6 +102,7 @@
   .kpi .pct .tg { font:500 11.5px/1 inherit; color:var(--tx3); margin-left:6px; }
   .kpi .ft { margin-top:6px; font:600 11.5px/1 inherit; display:flex; gap:8px; flex-wrap:wrap; }
   .up{color:var(--ok);} .dn{color:var(--err);} .gl{color:var(--tx3);font-weight:500;}
+  .mom{margin-left:10px;}
   .est { font:700 9px/1 inherit; background:var(--warn-bg); color:var(--warn); padding:2px 6px; border-radius:9999px; }
   .fix { font:700 9px/1 inherit; background:var(--ok-bg); color:var(--ok); padding:2px 6px; border-radius:9999px; }
 

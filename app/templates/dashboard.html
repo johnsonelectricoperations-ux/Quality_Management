@@ -67,22 +67,24 @@
 </style>
 
 <div class="kpis">
+  {% macro mom(delta, dec) %}{% if delta is not none %}<span class="mom"><span class="gl">전월대비</span> <span class="{{ 'dn' if delta>0 else ('up' if delta<0 else 'gl') }}">{{ '▲' if delta>0 else ('▼' if delta<0 else '-') }}{% if delta!=0 %} {{ delta|abs|cf2 if dec else delta|abs|cf }}{% endif %}</span></span>{% endif %}{% endmacro %}
   <div class="kpi" data-metric="scrap_cost"><div class="lb">Scrap cost</div><div class="vl">{{ d.cards.scrap_cost.amt|cf }}<small> 천원</small></div>
-    <div class="pct">{{ d.cards.scrap_cost.pct|cf2 }}%{% if d.cards.scrap_cost.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_cost.target|cf2 }}%</span>{% endif %}</div></div>
+    <div class="pct">{{ d.cards.scrap_cost.pct|cf2 }}%{% if d.cards.scrap_cost.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_cost.target|cf2 }}%</span>{% endif %}{{ mom(d.cards.scrap_cost.delta, 1) }}</div></div>
   <div class="kpi sec2" data-metric="scrap_qty"><div class="lb">Scrap quantity</div><div class="vl">{{ d.cards.scrap_qty.amt|cf }}<small> EA</small></div>
-    <div class="pct">{{ d.cards.scrap_qty.pct|cf2 }}%{% if d.cards.scrap_qty.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_qty.target|cf2 }}%</span>{% endif %}</div></div>
+    <div class="pct">{{ d.cards.scrap_qty.pct|cf2 }}%{% if d.cards.scrap_qty.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.scrap_qty.target|cf2 }}%</span>{% endif %}{{ mom(d.cards.scrap_qty.delta, 1) }}</div></div>
   <div class="kpi" data-metric="copq"><div class="lb">COPQ {% if d.cards.denom_est %}<span class="est">추정 SVP</span>{% else %}<span class="fix">SVP확정</span>{% endif %}</div>
     <div class="vl">{{ d.cards.copq.amt|cf }}<small> 천원</small></div>
-    <div class="pct">{{ d.cards.copq.pct|cf2 }}%{% if d.cards.copq.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.copq.target|cf2 }}%</span>{% endif %}</div></div>
+    <div class="pct">{{ d.cards.copq.pct|cf2 }}%{% if d.cards.copq.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.copq.target|cf2 }}%</span>{% endif %}{{ mom(d.cards.copq.delta, 1) }}</div></div>
   <div class="kpi sec2" data-metric="incident"><div class="lb">Customer incident</div><div class="vl">{{ d.cards.incident.val }}<small> 건</small></div>
-    <div class="ft"><span class="gl">목표 {{ d.cards.incident.target|cf if d.cards.incident.target is not none else '-' }}건</span></div></div>
+    <div class="ft"><span class="gl">목표 {{ d.cards.incident.target|cf if d.cards.incident.target is not none else '-' }}건</span>{{ mom(d.cards.incident.delta, 0) }}</div></div>
   <div class="kpi sec2" data-metric="warranty"><div class="lb">Warranty</div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
-    <div class="ft"><span class="gl">전월대비</span><span class="{{ 'dn' if d.cards.warranty.delta>0 else 'up' }}">{{ '▲' if d.cards.warranty.delta>0 else '▼' }} {{ d.cards.warranty.delta|abs|cf }}</span>{% if d.cards.warranty.target is not none %}<span class="gl">목표 {{ d.cards.warranty.target|cf }}</span>{% endif %}</div></div>
+    <div class="ft">{% if d.cards.warranty.target is not none %}<span class="gl">목표 {{ d.cards.warranty.target|cf }}</span>{% endif %}{{ mom(d.cards.warranty.delta, 0) }}</div></div>
   <div class="kpi" data-metric="proc_ppm"><div class="lb">공정불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
-    <div class="ft"><span class="gl">전월대비</span><span class="{{ 'dn' if d.cards.proc_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.proc_ppm.delta>0 else '▼' }} {{ d.cards.proc_ppm.delta|abs|cf }}</span>{% if d.cards.proc_ppm.target is not none %}<span class="gl">목표 {{ d.cards.proc_ppm.target|cf }} ppm</span>{% endif %}</div></div>
+    <div class="ft">{% if d.cards.proc_ppm.target is not none %}<span class="gl">목표 {{ d.cards.proc_ppm.target|cf }} ppm</span>{% endif %}{{ mom(d.cards.proc_ppm.delta, 0) }}</div></div>
   <div class="kpi" data-metric="set_ppm"><div class="lb">셋팅불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.set_ppm.val|cf }}<small> ppm</small></div>
-    <div class="ft"><span class="gl">전월대비</span><span class="{{ 'dn' if d.cards.set_ppm.delta>0 else 'up' }}">{{ '▲' if d.cards.set_ppm.delta>0 else '▼' }} {{ d.cards.set_ppm.delta|abs|cf }}</span>{% if d.cards.set_ppm.target is not none %}<span class="gl">목표 {{ d.cards.set_ppm.target|cf }} ppm</span>{% endif %}</div></div>
-  <div class="kpi sec2" data-metric="prod_qty"><div class="lb">생산수량</div><div class="vl">{{ d.cards.prod_qty.val|cf }}<small> EA</small></div><div class="ft"><span class="gl">당월 누계</span></div></div>
+    <div class="ft">{% if d.cards.set_ppm.target is not none %}<span class="gl">목표 {{ d.cards.set_ppm.target|cf }} ppm</span>{% endif %}{{ mom(d.cards.set_ppm.delta, 0) }}</div></div>
+  <div class="kpi sec2" data-metric="prod_qty"><div class="lb">생산수량</div><div class="vl">{{ d.cards.prod_qty.val|cf }}<small> EA</small></div>
+    <div class="ft"><span class="gl">당월 누계</span>{{ mom(d.cards.prod_qty.delta, 0) }}</div></div>
 </div>
 
 <div class="charts2">
