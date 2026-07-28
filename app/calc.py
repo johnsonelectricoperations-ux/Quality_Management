@@ -306,8 +306,10 @@ def claim_sum(conn, ym, parts, items=None):
 
 
 def incident_count(conn, ym, parts):
+    """공식(is_official=1) 건만 KPI 집계에 반영."""
     like = ym + "%"
-    q = "SELECT COUNT(*) c FROM incident WHERE d LIKE ? AND part IN (%s)" % ",".join("?" * len(parts))
+    q = ("SELECT COUNT(*) c FROM incident WHERE is_official=1 AND d LIKE ? AND part IN (%s)"
+         % ",".join("?" * len(parts)))
     return conn.execute(q, [like] + list(parts)).fetchone()["c"]
 
 

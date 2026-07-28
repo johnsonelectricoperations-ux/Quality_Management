@@ -449,6 +449,24 @@
 
 ## 최근 로그
 
+### 2026-07-28 (13) — Customer Incident에 TM-NO·품명·공식/비공식 체크박스 추가
+- 목표: Incident 등록란에 고객명 옆에 TM-NO·품명 입력 추가, 공식/비공식 체크박스 추가,
+  **공식(체크)만 KPI에 반영**, Claim처럼 삭제 기능도 확인(이미 존재).
+- `incident` 테이블에 `tm_no`·`product_name`·`is_official`(기본 1) 컬럼 추가(`_add_col`).
+- `calc.incident_count()`: `WHERE is_official=1` 조건 추가 — 비공식 건은 Customer Incident
+  KPI 집계에서 자동 제외.
+- `main.py`: `incident_save()`가 TM-NO(`calc.base_tmno()`로 정규화)·품명·공식여부를 저장,
+  신규 라우트 `/input/incident/{id}/toggle-official` 추가(Claim의 `toggle-agg`와 동일 패턴,
+  이력표에서 체크박스로 즉시 토글).
+- `incident.html`: 등록폼에 TM-NO·품명 입력 행, "공식" 체크박스(기본 체크) 추가. 이력표에
+  TM-NO·품명·공식(토글 체크박스) 컬럼 추가, 비공식 행은 회색으로 표시.
+- 검증: TM-NO·품명·공식 체크 상태로 Incident 등록 → DB에 정확히 저장 확인. 공식 체크 해제
+  (toggle 라우트 직접 호출) → `calc.incident_count()`가 1→0으로 즉시 반영되는 것 확인.
+  삭제 라우트 정상 동작(등록→삭제 후 DB에서 사라짐 확인). `/`, `/report/detail`,
+  `/input/incident`, `/input/claim` 전부 200 응답, 서버 로그에 에러 없음, Playwright로
+  화면 렌더링·JS 콘솔 오류 0 확인. 테스트 데이터 정리 완료. 작업 전 백업
+  (`backups/qms_backup_..._before_incident_tmno_migration.db`).
+
 ### 2026-07-28 (12) — Claim 이력표 컴팩트하게 (년월만, 금액 천원 단위)
 - 목표: 컬럼이 많아져(TM-NO·품명 등) 이력표가 좁아 보임 → 날짜는 년월까지만,
   금액은 천원 단위로 표시해 폭을 줄인다.

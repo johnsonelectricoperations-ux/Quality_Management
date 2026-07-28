@@ -11,23 +11,38 @@
         <div class="f"><label>고객명</label><input class="in" name="customer" placeholder="예: 현대모비스"></div>
         <div class="f"><label>내용</label><input class="in" name="content" placeholder="발생 내용"></div>
       </div>
+      <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
+        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" placeholder="예: 1545-01"></div>
+        <div class="f"><label>품명</label><input class="in" name="product_name" placeholder="품명"></div>
+        <div class="f" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:6px;">
+          <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="is_official" checked> 공식</label>
+        </div>
+      </div>
       <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">등록</button></div>
     </form>
   </div>
 </div>
 {% endif %}
 
-<div class="panel"><div class="phead"><h2>Incident 이력</h2><span class="tot">{{ rows|length }}건</span></div>
+<div class="panel"><div class="phead"><h2>Incident 이력</h2><span class="tot">{{ rows|length }}건 · 공식 건만 KPI 집계</span></div>
   <table>
-    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>내용</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>TM-NO</th><th>품명</th><th>내용</th><th style="width:60px;">공식</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr><td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td><td>{{ r.content or '-' }}</td>
+      <tr {% if not r.is_official %}style="color:var(--tx3);"{% endif %}>
+        <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
+        <td class="mono">{{ r.tm_no or '-' }}</td><td>{{ r.product_name or '-' }}</td>
+        <td>{{ r.content or '-' }}</td>
+        <td>
+          <form method="post" action="/input/incident/{{ r.id }}/toggle-official" style="display:inline;">
+            <input type="checkbox" onchange="this.form.submit()" {{ 'checked' if r.is_official }} {{ 'disabled' if not can_edit }}>
+          </form>
+        </td>
         {% if can_edit %}<td>
           <form method="post" action="/input/incident/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}
-      <tr><td colspan="5" style="color:var(--tx3);">등록된 Incident가 없습니다.</td></tr>
+      <tr><td colspan="8" style="color:var(--tx3);">등록된 Incident가 없습니다.</td></tr>
     {% endfor %}
     </tbody>
   </table>

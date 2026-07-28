@@ -1338,7 +1338,8 @@ def incident_page(request: Request, msg: str = "", err: str = ""):
         return g
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,part,customer,content FROM incident ORDER BY d DESC,id DESC LIMIT 200")]
+        "SELECT id,d,part,customer,tm_no,product_name,content,is_official FROM incident "
+        "ORDER BY d DESC,id DESC LIMIT 200")]
     conn.close()
     return render(request, "incident.html", u, active="incident", heading="Customer Incident 관리",
                   crumb="데이터 입력", pending=pending_count(), rows=rows,
@@ -1354,16 +1355,33 @@ async def incident_save(request: Request):
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     customer = (form.get("customer") or "").strip()
+    tm_no = calc.base_tmno((form.get("tm_no") or "").strip())
+    product_name = (form.get("product_name") or "").strip()
     content = (form.get("content") or "").strip()
+    is_official = 1 if form.get("is_official") else 0
     if not d:
         return RedirectResponse("/input/incident?err=날짜는 필수입니다", status_code=303)
     conn = db.connect()
     conn.execute(
-        "INSERT INTO incident(d,part,customer,content,reg_user) VALUES(?,?,?,?,?)",
-        (d, part, customer, content, u["name"]))
+        "INSERT INTO incident(d,part,customer,tm_no,product_name,content,is_official,reg_user) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        (d, part, customer, tm_no, product_name, content, is_official, u["name"]))
     conn.commit()
     conn.close()
     return RedirectResponse("/input/incident?msg=등록됨", status_code=303)
+
+
+@app.post("/input/incident/{iid}/toggle-official")
+def incident_toggle_official(request: Request, iid: int):
+    """이력표의 '공식' 체크박스: 공식(is_official=1) 건만 Customer Incident KPI에 반영."""
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/incident", status_code=303)
+    conn = db.connect()
+    conn.execute("UPDATE incident SET is_official=1-is_official WHERE id=?", (iid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/incident", status_code=303)
 
 
 @app.post("/input/incident/{iid}/delete")
