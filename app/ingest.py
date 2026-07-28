@@ -451,6 +451,58 @@ def ingest_scrap_db(conn, path, quarantine_100=True):
               "검토대기": pend}
 
 
+_MISSING_PRICE_PART = {"1part": "VMS PART", "2part": "TM PART"}
+
+
+def ingest_missing_price_xlsx(conn, path):
+    """단가마스터에 단가가 아예 없던 TM-NO를 채우는 보정 파일 적재.
+    헤더: TM-NO, 품명, PART, 성형단가, 소결단가, 정형단가, 기타단가(1행).
+    정형단가가 0(또는 공란)이면 그 제품은 정형공정이 없는 것으로 보고 정형 행을 넣지 않는다.
+    기타단가는 가공·기타 버킷 둘 다에 동일하게 저장한다(price_calc.py 규칙과 동일).
+    제품 마스터에 없는 TM-NO는 건너뛴다. 반환: (반영 TM-NO수, note[dict])."""
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+    headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    need = ["TM-NO", "성형단가", "소결단가", "정형단가", "기타단가"]
+    miss = [h for h in need if h not in headers]
+    if miss:
+        return 0, {"error": f"헤더 누락: {', '.join(miss)}"}
+    idx = {h: headers.index(h) + 1 for h in need}
+
+    rows, skipped_no_product, bad = [], [], 0
+    for r in range(2, ws.max_row + 1):
+        tmv = ws.cell(row=r, column=idx["TM-NO"]).value
+        if tmv in (None, ""):
+            continue
+        tm = base_tmno(tmv)
+        if not tm:
+            continue
+        if not conn.execute("SELECT 1 FROM product WHERE tm_no=?", (tm,)).fetchone():
+            skipped_no_product.append(tm)
+            continue
+        try:
+            sh = float(ws.cell(row=r, column=idx["성형단가"]).value or 0)
+            so = float(ws.cell(row=r, column=idx["소결단가"]).value or 0)
+            jh = float(ws.cell(row=r, column=idx["정형단가"]).value or 0)
+            gi = float(ws.cell(row=r, column=idx["기타단가"]).value or 0)
+        except (TypeError, ValueError):
+            bad += 1
+            continue
+        rows.append((tm, "성형", sh))
+        rows.append((tm, "소결", so))
+        if jh:
+            rows.append((tm, "정형", jh))
+        rows.append((tm, "가공", gi))
+        rows.append((tm, "기타", gi))
+    conn.executemany(
+        "INSERT INTO product_price(tm_no,process,unit_price,effective_from) VALUES(?,?,?,'2000-01-01') "
+        "ON CONFLICT(tm_no,process,effective_from) DO UPDATE SET unit_price=excluded.unit_price",
+        [(tm, proc, v) for tm, proc, v in rows])
+    conn.commit()
+    tm_count = len({tm for tm, _p, _v in rows})
+    return tm_count, {"제품마스터없어_스킵": skipped_no_product, "비수치_무시": bad}
+
+
 # 제품별 단가 Master(단가산출 시트) 블록: (블록명, TM열, 단가열)
 _PRICE_BLOCKS = [("성형", 2, 4), ("소결", 6, 8), ("정형", 10, 12), ("완제품", 14, 16)]
 _PRICE_SHEET = "단가산출"
