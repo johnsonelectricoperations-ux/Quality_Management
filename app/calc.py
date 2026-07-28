@@ -70,10 +70,16 @@ def trailing_months(end_y, end_m, n):
             m, y = 12, y - 1
     return list(reversed(out))
 
-def iso_week_of_month(dstr):
-    """해당 날짜가 그 달의 몇 주차인지(1~).  단순 (일-1)//7 + 1."""
+def week_of_month(dstr):
+    """해당 날짜가 그 달의 몇 주차인지(1~). 한 주는 **월요일~일요일**이 기준이지만,
+    월 경계를 넘지 않도록 첫 주·마지막 주는 달 안쪽으로 잘라낸다.
+    (예: 1일이 수요일이면 1주=수~일(5일), 마지막날이 화요일이면 마지막주=월~화.
+    다음 달 1일이 수요일이면 그 달의 1주는 다시 수~일로 새로 시작한다 — 주가 월을 넘어가지 않음.)"""
     d = date.fromisoformat(dstr)
-    return (d.day - 1) // 7 + 1
+    first = d.replace(day=1)
+    first_monday = first - timedelta(days=first.weekday())   # weekday(): 월=0 ... 일=6
+    d_monday = d - timedelta(days=d.weekday())
+    return (d_monday - first_monday).days // 7 + 1
 
 
 # ── 배분기준 파싱 ───────────────────────────────────────

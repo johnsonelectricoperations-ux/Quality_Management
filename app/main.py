@@ -284,9 +284,8 @@ def build_dashboard(conn, m, daily, part):
     top_parts = "VMS PART" if part == "통합" else part
     top_month = calc.top5_defect(conn, m, mstart, mend, top_parts)
     cur_week = weekly[-1]["week"] if weekly else 1
-    wk_lo = (cur_week - 1) * 7 + 1
-    ws = f"{cy:04d}-{cm:02d}-{wk_lo:02d}"
-    we = f"{cy:04d}-{cm:02d}-{min(wk_lo+6,31):02d}"
+    ws = weekly[-1]["start"] if weekly else mstart
+    we = weekly[-1]["end"] if weekly else mend
     top_week = calc.top5_defect(conn, m, ws, we, top_parts)
     return {"cy": cy, "cm": cm, "cur_fy": calc.fy_label(cur_fy), "cards": cards,
             "charts": charts, "top_month": top_month, "top_week": top_week,
@@ -297,13 +296,16 @@ def build_weekly(conn, m, daily, cy, cm, part):
     parts = calc._parts_for(part)
     ym = f"{cy:04d}-{cm:02d}"
     claim_total = calc.claim_sum(conn, ym, parts, calc.CLAIM_COPQ_ITEMS)
-    wk = defaultdict(lambda: {"copq_cost": 0.0, "prod_amt": 0.0})
+    wk = defaultdict(lambda: {"copq_cost": 0.0, "prod_amt": 0.0, "start": None, "end": None})
     from datetime import date, timedelta
     d = date(cy, cm, 1)
     month_prod = 0.0
     while d.month == cm and d.year == cy:
         ds = d.isoformat()
-        w = calc.iso_week_of_month(ds)
+        w = calc.week_of_month(ds)
+        if wk[w]["start"] is None:
+            wk[w]["start"] = ds
+        wk[w]["end"] = ds                           # 월~일 기준, 월 경계에서 잘린 첫/마지막 주 포함
         for p in parts:
             c = daily.get(ds, {}).get(p)
             if c:
@@ -317,7 +319,7 @@ def build_weekly(conn, m, daily, cy, cm, part):
         claim_w = claim_total * (pa / month_prod) if month_prod else 0
         cost = wk[w]["copq_cost"] + claim_w
         pct = round(cost / pa * 100, 2) if pa else 0
-        out.append({"week": w, "copq_pct": pct})
+        out.append({"week": w, "copq_pct": pct, "start": wk[w]["start"], "end": wk[w]["end"]})
     return out
 
 
