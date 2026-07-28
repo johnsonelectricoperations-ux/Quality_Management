@@ -75,9 +75,9 @@
   <div class="kpi" data-metric="copq"><div class="lb">COPQ {% if d.cards.denom_est %}<span class="est">추정 SVP</span>{% else %}<span class="fix">SVP확정</span>{% endif %}</div>
     <div class="vl">{{ d.cards.copq.amt|cf }}<small> 천원</small></div>
     <div class="pct">{{ d.cards.copq.pct|cf2 }}%{% if d.cards.copq.target is not none %}<span class="tg" style="font:500 11.5px/1 inherit;color:var(--tx3);margin-left:6px;">목표 {{ d.cards.copq.target|cf2 }}%</span>{% endif %}{{ mom(d.cards.copq.delta, 1) }}</div></div>
-  <div class="kpi sec2" data-metric="incident"><div class="lb">Customer incident</div><div class="vl">{{ d.cards.incident.val }}<small> 건</small></div>
+  <div class="kpi sec2" data-metric="incident"><div class="lb">Customer incident <span class="est">FY 누적</span></div><div class="vl">{{ d.cards.incident.val }}<small> 건</small></div>
     <div class="ft"><span class="gl">목표 {{ d.cards.incident.target|cf if d.cards.incident.target is not none else '-' }}건</span>{{ mom(d.cards.incident.delta, 0) }}</div></div>
-  <div class="kpi sec2" data-metric="warranty"><div class="lb">Warranty</div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
+  <div class="kpi sec2" data-metric="warranty"><div class="lb">Warranty <span class="est">FY 누적</span></div><div class="vl">{{ d.cards.warranty.val|cf }}<small> 천원</small></div>
     <div class="ft">{% if d.cards.warranty.target is not none %}<span class="gl">목표 {{ d.cards.warranty.target|cf }}</span>{% endif %}{{ mom(d.cards.warranty.delta, 0) }}</div></div>
   <div class="kpi" data-metric="proc_ppm"><div class="lb">공정불량율 <span class="est">파트별</span></div><div class="vl">{{ d.cards.proc_ppm.val|cf }}<small> ppm</small></div>
     <div class="ft">{% if d.cards.proc_ppm.target is not none %}<span class="gl">목표 {{ d.cards.proc_ppm.target|cf }} ppm</span>{% endif %}{{ mom(d.cards.proc_ppm.delta, 0) }}</div></div>

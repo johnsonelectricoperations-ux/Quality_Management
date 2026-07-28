@@ -233,6 +233,8 @@ def init_db():
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "claim", "reclaim", "REAL NOT NULL DEFAULT 0")
     _add_col(conn, "claim", "use_agg", "INTEGER NOT NULL DEFAULT 1")
+    _add_col(conn, "claim", "tm_no", "TEXT DEFAULT ''")
+    _add_col(conn, "claim", "product_name", "TEXT DEFAULT ''")
     _migrate_defect_type(conn)
     _migrate_product_price(conn)
     _migrate_claim(conn)

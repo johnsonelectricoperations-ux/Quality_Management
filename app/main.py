@@ -200,6 +200,16 @@ def build_dashboard(conn, m, daily, part):
                 "good": (delta <= 0) if better_down else (delta >= 0)}
 
     ppm_part = part if part != "통합" else "VMS PART"     # 불량율 목표는 파트별만 존재
+
+    # Warranty·Incident는 목표 자체가 FY 누적합계라, 카드 값도 FY 시작(4월)부터 당월까지
+    # 누적으로 계산해야 목표와 비교가 된다(전월대비는 그대로 당월 단독 증감).
+    fy_all_months = calc.fy_months(cur_fy)
+    ytd_months = fy_all_months[:fy_all_months.index((cy, cm)) + 1] if (cy, cm) in fy_all_months else fy_all_months
+    ytd_parts = calc._parts_for(part)
+    warranty_ytd = round(sum(calc.claim_sum(conn, "%04d-%02d" % (y, mm), ytd_parts, ["Warranty"])
+                             for y, mm in ytd_months))
+    incident_ytd = sum(calc.incident_count(conn, "%04d-%02d" % (y, mm), ytd_parts) for y, mm in ytd_months)
+
     cards = {
         "scrap_cost": {"amt": cur["scrap_cost"], "pct": cur["scrap_cost_pct"],
                        "target": target_val(conn, cur_fy, part, "scrap_cost"),
@@ -210,9 +220,9 @@ def build_dashboard(conn, m, daily, part):
         "copq": {"amt": cur["copq_cost"], "pct": cur["copq_pct"],
                  "target": target_val(conn, cur_fy, part, "copq"),
                  "delta": round(cur["copq_pct"] - prev["copq_pct"], 2)},
-        "incident": {"val": cur["incident"], "target": target_val(conn, cur_fy, part, "incident"),
+        "incident": {"val": incident_ytd, "target": target_val(conn, cur_fy, part, "incident"),
                      "delta": cur["incident"] - prev["incident"]},
-        "warranty": {"val": cur["warranty"], "target": target_val(conn, cur_fy, part, "warranty"),
+        "warranty": {"val": warranty_ytd, "target": target_val(conn, cur_fy, part, "warranty"),
                      "delta": cur["warranty"] - prev["warranty"]},
         "proc_ppm": {"val": cur["proc_ppm"],
                      "target": target_val(conn, cur_fy, ppm_part, "proc_ppm", cm),
@@ -1248,7 +1258,7 @@ def claim_page(request: Request, msg: str = "", err: str = ""):
         return g
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,part,customer,item,amount,reclaim,use_agg,content FROM claim "
+        "SELECT id,d,part,customer,tm_no,product_name,item,amount,reclaim,use_agg,content FROM claim "
         "ORDER BY d DESC,id DESC LIMIT 200")]
     conn.close()
     return render(request, "claim.html", u, active="claim", heading="Claim 입력",
@@ -1266,6 +1276,8 @@ async def claim_save(request: Request):
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     customer = (form.get("customer") or "").strip()
+    tm_no = calc.base_tmno((form.get("tm_no") or "").strip())
+    product_name = (form.get("product_name") or "").strip()
     item = form.get("item") or ""
     if item == "기타":
         item = (form.get("item_etc") or "").strip() or "기타"
@@ -1284,8 +1296,9 @@ async def claim_save(request: Request):
     reclaim = reclaim_won / 1000.0
     conn = db.connect()
     conn.execute(
-        "INSERT INTO claim(d,part,customer,item,amount,reclaim,content,reg_user) VALUES(?,?,?,?,?,?,?,?)",
-        (d, part, customer, item, amount, reclaim, content, u["name"]))
+        "INSERT INTO claim(d,part,customer,tm_no,product_name,item,amount,reclaim,content,reg_user) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (d, part, customer, tm_no, product_name, item, amount, reclaim, content, u["name"]))
     conn.commit()
     conn.close()
     return RedirectResponse("/input/claim?msg=등록됨", status_code=303)

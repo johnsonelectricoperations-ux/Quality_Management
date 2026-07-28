@@ -449,6 +449,27 @@
 
 ## 최근 로그
 
+### 2026-07-28 (11) — Claim에 TM-NO·품명 추가 + Warranty/Incident 카드를 FY 누적으로 변경
+- 목표: ① Claim 입력에 TM-NO·품명 필드 추가. ② Claim에서 항목=Warranty로 등록한 건이
+  Warranty 지표에 반영되는지 확인/보장. ③ Warranty·Incident의 "목표"는 FY 누적합계라는
+  사용자 설명에 따라, 대시보드 카드 값도 월별 단일값이 아니라 **FY 시작(4월)부터 당월까지
+  누적**으로 바꿔 목표와 실제 비교가 되게 한다.
+- ① `claim` 테이블에 `tm_no`·`product_name` 컬럼 추가(`_add_col`), 등록폼·이력표에 노출.
+  TM-NO는 다른 화면과 동일하게 `calc.base_tmno()`로 정규화해 저장.
+- ② 확인 결과 **이미 자동으로 연결돼 있었음** — `calc.month_kpi()`가
+  `claim_sum(..., ["Warranty"])`로 그 달 Warranty 항목 합계를 그대로 Warranty 카드 값에
+  쓰고 있었다(새로 만들 필요 없이 기존 로직이 커버). 실제로 Warranty 클레임 50만원 등록 후
+  카드가 0→500(천원)으로 바뀌는 것 확인.
+- ③ `main.py build_dashboard()`: `calc.fy_months(cur_fy)`로 FY 전체 월 목록을 구해 당월까지의
+  구간만 잘라, 그 구간의 `claim_sum(...,["Warranty"])`/`incident_count()`를 각각 합산해
+  `cards.warranty.val`/`cards.incident.val`로 사용(기존 "전월대비"는 당월 단독 증감 그대로 유지
+  — 누적이 이번 달에 얼마나 늘었는지를 보여주는 의미로 그대로 둠). 카드 라벨에 "FY 누적"
+  배지 추가해 월별 값이 아님을 명시.
+- 검증: Warranty 클레임 1건(50만원) 등록 → Warranty 카드 0→500(목표 1,000 대비), COPQ 카드도
+  동반 상승(19,966→20,466천원) 확인. Customer Incident 카드에도 "FY 누적" 배지 정상 표시.
+  TM-NO·품명 입력 후 이력표에 정확히 표시됨을 Playwright로 확인. 서버 렌더링·JS 오류 0.
+  작업 전/후 백업(`backups/qms_backup_..._after_claim_tmno_migration.db`).
+
 ### 2026-07-28 (10) — Claim 입력 개선: 원 단위, 전표금액/Re-claim 분리, 집계포함 체크박스
 - 목표: Claim 화면 후속 개선 4가지.
   1. 입력 단위를 천원→원으로.

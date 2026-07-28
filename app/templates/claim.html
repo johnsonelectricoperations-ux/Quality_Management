@@ -11,6 +11,10 @@
         <div class="f"><label>고객명</label><input class="in" name="customer" placeholder="예: 현대모비스"></div>
         <div class="f"><label>내용</label><input class="in" name="content" placeholder="클레임 내용"></div>
       </div>
+      <div class="frow" style="grid-template-columns:180px 1fr;margin-top:10px;">
+        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" placeholder="예: 1545-01"></div>
+        <div class="f"><label>품명</label><input class="in" name="product_name" placeholder="품명"></div>
+      </div>
       <div class="frow" style="grid-template-columns:220px 160px 140px 140px;margin-top:10px;">
         <div class="f"><label>항목</label><select class="in" name="item" id="claimItem">
           {% for it in item_options %}<option value="{{ it }}">{{ it }}</option>{% endfor %}</select></div>
@@ -26,13 +30,14 @@
 
 <div class="panel"><div class="phead"><h2>Claim 이력</h2><span class="tot">{{ rows|length }}건 · 집계금액 = 전표금액 − Re-claim (집계포함 체크된 건만)</span></div>
   <table>
-    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>항목</th>
+    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>TM-NO</th><th>품명</th><th>항목</th>
       <th class="num">전표금액(원)</th><th class="num">Re-claim(원)</th><th class="num">집계금액(원)</th>
       <th>내용</th><th style="width:60px;">집계포함</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
       <tr {% if not r.use_agg %}style="color:var(--tx3);"{% endif %}>
         <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
+        <td class="mono">{{ r.tm_no or '-' }}</td><td>{{ r.product_name or '-' }}</td>
         <td>{{ r.item }}</td>
         <td class="num">{{ (r.amount*1000)|cf }}</td>
         <td class="num">{{ (r.reclaim*1000)|cf }}</td>
@@ -47,7 +52,7 @@
           <form method="post" action="/input/claim/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}
-      <tr><td colspan="10" style="color:var(--tx3);">등록된 Claim이 없습니다.</td></tr>
+      <tr><td colspan="12" style="color:var(--tx3);">등록된 Claim이 없습니다.</td></tr>
     {% endfor %}
     </tbody>
   </table>
