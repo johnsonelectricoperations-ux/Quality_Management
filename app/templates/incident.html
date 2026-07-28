@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+{% if can_edit %}
+<div class="panel"><div class="phead"><h2>Customer Incident 등록</h2></div>
+  <div class="pbody">
+    <form method="post" action="/input/incident/save">
+      <div class="frow" style="grid-template-columns:150px 120px 200px 1fr;">
+        <div class="f"><label>날짜</label><input class="in" type="date" name="d" required></div>
+        <div class="f"><label>파트</label><select class="in" name="part">
+          {% for pv, pl in PARTS %}<option value="{{ pv }}">{{ pl }}</option>{% endfor %}</select></div>
+        <div class="f"><label>고객명</label><input class="in" name="customer" placeholder="예: 현대모비스"></div>
+        <div class="f"><label>내용</label><input class="in" name="content" placeholder="발생 내용"></div>
+      </div>
+      <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">등록</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel"><div class="phead"><h2>Incident 이력</h2><span class="tot">{{ rows|length }}건</span></div>
+  <table>
+    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>내용</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td><td>{{ r.content or '-' }}</td>
+        {% if can_edit %}<td>
+          <form method="post" action="/input/incident/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
+            <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--tx3);">등록된 Incident가 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

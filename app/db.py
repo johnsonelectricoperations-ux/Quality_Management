@@ -65,9 +65,10 @@ CREATE TABLE IF NOT EXISTS svp (
   UNIQUE(ym, part)
 );
 CREATE TABLE IF NOT EXISTS claim (
-  id INTEGER PRIMARY KEY, ym TEXT NOT NULL, part TEXT NOT NULL,
-  item TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
-  UNIQUE(ym, part, item)
+  -- 건별 등록(원장). 같은 달에 같은 항목이 여러 건 있어도 서로 덮어쓰지 않는다(incident와 동일 방식).
+  id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
+  customer TEXT DEFAULT '', item TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
+  content TEXT DEFAULT '', reg_user TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS incident (
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
@@ -179,6 +180,26 @@ def _migrate_product_price(conn):
         [(r["tm_no"], r["process"], r["unit_price"]) for r in old])
 
 
+def _migrate_claim(conn):
+    """claim: 월단위 엑셀 집계(ym,part,item,amount, UNIQUE) → 건별 직접입력 원장(d,part,customer,
+    item,amount,content)으로 변경. d 컬럼이 없으면 테이블을 재생성하고, 기존 월별 집계는
+    그 달 1일(d=ym-01)로, 고객명·내용은 빈칸으로 이관한다."""
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(claim)")]
+    if not cols or "d" in cols:
+        return
+    old = list(conn.execute("SELECT ym,part,item,amount FROM claim"))
+    conn.execute("DROP TABLE claim")
+    conn.executescript("""
+    CREATE TABLE claim (
+      id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
+      customer TEXT DEFAULT '', item TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
+      content TEXT DEFAULT '', reg_user TEXT DEFAULT ''
+    );""")
+    conn.executemany(
+        "INSERT INTO claim(d,part,item,amount) VALUES(?,?,?,?)",
+        [(f"{r['ym']}-01", r["part"], r["item"], r["amount"]) for r in old])
+
+
 def _migrate_defect_type(conn):
     """defect_type UNIQUE(name) → UNIQUE(part,kind,name) 로 변경.
     ALTER로 UNIQUE를 못 바꾸므로 part 컬럼이 없으면 테이블을 재생성한다.
@@ -210,6 +231,7 @@ def init_db():
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _migrate_defect_type(conn)
     _migrate_product_price(conn)
+    _migrate_claim(conn)
     _migrate_target(conn)
     _prune_noncanonical_processes(conn)
     conn.commit()

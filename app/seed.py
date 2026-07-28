@@ -54,7 +54,7 @@ def main():
     print("  폐기   :", ingest.ingest_defect_entries(conn, _p("폐기불량.xlsx"), "discard"))
     print("  생산실적:", ingest.ingest_production(conn, _p("생산실적.xlsx")))
     print("  SVP    :", ingest.ingest_svp(conn, _p("SVP.xlsx")))
-    print("  Claim  :", ingest.ingest_claim(conn, _p("Claim.xlsx")))
+    print("  Claim  : (직접입력 전용, 시드 데이터 없음)")
     print("  Incident:", ingest.ingest_incident(conn, _p("Incident.xlsx")))
     seed_targets(conn)
     print("  목표   : seeded")

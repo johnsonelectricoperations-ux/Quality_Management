@@ -139,9 +139,10 @@ def data_freshness(conn):
         r["stale"] = r["date"] != ref if ref else False
 
     monthly = []
-    for label, table in [("SVP", "svp"), ("Claim", "claim")]:
-        row = conn.execute(f"SELECT MAX(ym) m FROM {table}").fetchone()
-        monthly.append({"label": label, "date": row["m"]})
+    row = conn.execute("SELECT MAX(ym) m FROM svp").fetchone()
+    monthly.append({"label": "SVP", "date": row["m"]})
+    row = conn.execute("SELECT MAX(d) m FROM claim").fetchone()
+    monthly.append({"label": "Claim", "date": row["m"]})
     inc = conn.execute("SELECT MAX(d) m FROM incident").fetchone()
     return {"daily": daily, "ref_date": ref, "monthly": monthly, "incident": inc["m"]}
 
@@ -1140,13 +1141,16 @@ def admin_users(request: Request):
                   can_edit=(u["role"] == "admin"))
 
 
-# ── 데이터 입력/업로드 (공통 트랜잭션 업로드) ───────────
+# ── 데이터 입력 ─────────────────────────────────────────
 # 사내불량·외주·폐기·생산은 '폴더 반영'(/admin/scan)으로 수집하므로 업로드 화면을 두지 않는다.
-# 수기 입력만 존재하는 소스(SVP·Claim·Incident)만 남긴다.
-INPUT_PAGES = {
-    "claim": ("Claim 입력", "Claim Excel — 년월·파트·항목·금액(천원)"),
-    "incident": ("Customer Incident 관리", "Incident Excel — 일자·파트·고객·내용"),
-}
+# SVP는 FY 표(아래), Claim·Customer Incident는 건별 직접 등록(원장) 화면.
+@app.get("/input/outsource-review", response_class=HTMLResponse)
+def outsource_review_page(request: Request):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    return outsource_review(request, u)
 
 
 # ── SVP 입력 (FY 가로 표) ───────────────────────────────
@@ -1232,76 +1236,114 @@ async def svp_save(request: Request):
     return RedirectResponse(f"/input/svp?fy={fy}&msg=저장됨", status_code=303)
 
 
-@app.get("/input/{page}", response_class=HTMLResponse)
-def input_page(request: Request, page: str, msg: str = "", err: str = ""):
+# ── Claim 입력 (건별 직접 등록) ──────────────────────────
+CLAIM_ITEM_OPTIONS = calc.CLAIM_COPQ_ITEMS + ["기타"]
+
+
+@app.get("/input/claim", response_class=HTMLResponse)
+def claim_page(request: Request, msg: str = "", err: str = ""):
     u = current_user(request)
     g = _guard(u)
     if g:
         return g
-    if page == "outsource-review":
-        return outsource_review(request, u)
-    if page not in INPUT_PAGES:
-        return RedirectResponse("/", status_code=303)
-    title, desc = INPUT_PAGES[page]
     conn = db.connect()
-    recent = _recent_rows(conn, page)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id,d,part,customer,item,amount,content FROM claim ORDER BY d DESC,id DESC LIMIT 200")]
     conn.close()
-    return render(request, "input.html", u, active=page, heading=title, crumb="데이터 입력",
-                  pending=pending_count(), page=page, desc=desc, recent=recent, msg=msg, err=err,
-                  can_edit=(u["role"] in ("editor", "admin")))
+    return render(request, "claim.html", u, active="claim", heading="Claim 입력",
+                  crumb="데이터 입력", pending=pending_count(), rows=rows,
+                  item_options=CLAIM_ITEM_OPTIONS,
+                  can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
 
 
-def _recent_rows(conn, page):
-    if page in ("defect", "outsource", "discard"):
-        src = {"defect": "direct", "outsource": "outsource", "discard": "discard"}[page]
-        return [dict(r) for r in conn.execute(
-            "SELECT d,tm_no,defect_name,qty,status FROM defect_entry WHERE source=? "
-            "ORDER BY id DESC LIMIT 12", (src,))]
-    if page == "production":
-        return [dict(r) for r in conn.execute(
-            "SELECT d,tm_no,qty,amount FROM production ORDER BY d DESC,tm_no LIMIT 12")]
-    if page == "claim":
-        return [dict(r) for r in conn.execute(
-            "SELECT ym,part,item,amount FROM claim ORDER BY ym DESC LIMIT 12")]
-    if page == "incident":
-        return [dict(r) for r in conn.execute(
-            "SELECT d,part,customer,content FROM incident ORDER BY d DESC LIMIT 12")]
-    return []
-
-
-@app.post("/input/{page}/upload")
-async def input_upload(request: Request, page: str, file: UploadFile = File(...)):
+@app.post("/input/claim/save")
+async def claim_save(request: Request):
     u = current_user(request)
     if u is None or u["role"] not in ("editor", "admin"):
-        return RedirectResponse(f"/input/{page}", status_code=303)
-    path = os.path.join("/tmp", "qms_tx_" + secrets.token_hex(4) + ".xlsx")
-    with open(path, "wb") as f:
-        f.write(await file.read())
-    conn = db.connect()
-    msg = err = ""
+        return RedirectResponse("/input/claim", status_code=303)
+    form = await request.form()
+    d = (form.get("d") or "").strip()
+    part = form.get("part") or "VMS PART"
+    customer = (form.get("customer") or "").strip()
+    item = form.get("item") or ""
+    if item == "기타":
+        item = (form.get("item_etc") or "").strip() or "기타"
+    content = (form.get("content") or "").strip()
+    raw = (form.get("amount") or "").replace(",", "").strip()
+    if not d or not item or raw == "":
+        return RedirectResponse("/input/claim?err=날짜·항목·금액은 필수입니다", status_code=303)
     try:
-        if page == "defect":
-            n, _ = ingest.ingest_defect_entries(conn, path, "direct", u["name"])
-            msg = f"불량입력 {n}건"
-        elif page == "outsource":
-            n, pend = ingest.ingest_defect_entries(conn, path, "outsource", u["name"], quarantine_100=True)
-            msg = f"외주소재불량 {n}건 (검토 격리 {pend}건)"
-        elif page == "discard":
-            n, _ = ingest.ingest_defect_entries(conn, path, "discard", u["name"])
-            msg = f"폐기불량 {n}건"
-        elif page == "production":
-            msg = f"생산실적 {ingest.ingest_production(conn, path)}건"
-        elif page == "claim":
-            msg = f"Claim {ingest.ingest_claim(conn, path)}건"
-        elif page == "incident":
-            msg = f"Incident {ingest.ingest_incident(conn, path)}건"
-    except Exception as e:
-        err = f"업로드 실패: {e}"
-    finally:
-        conn.close()
-        os.remove(path)
-    q = ("?msg=" + msg) if msg else ("?err=" + err)
-    return RedirectResponse(f"/input/{page}{q}", status_code=303)
+        amount = float(raw)
+    except ValueError:
+        return RedirectResponse("/input/claim?err=금액이 숫자가 아닙니다", status_code=303)
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO claim(d,part,customer,item,amount,content,reg_user) VALUES(?,?,?,?,?,?,?)",
+        (d, part, customer, item, amount, content, u["name"]))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/claim?msg=등록됨", status_code=303)
+
+
+@app.post("/input/claim/{cid}/delete")
+def claim_delete(request: Request, cid: int):
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/claim", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM claim WHERE id=?", (cid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/claim?msg=삭제됨", status_code=303)
+
+
+# ── Customer Incident 관리 (건별 직접 등록) ──────────────
+@app.get("/input/incident", response_class=HTMLResponse)
+def incident_page(request: Request, msg: str = "", err: str = ""):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    conn = db.connect()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id,d,part,customer,content FROM incident ORDER BY d DESC,id DESC LIMIT 200")]
+    conn.close()
+    return render(request, "incident.html", u, active="incident", heading="Customer Incident 관리",
+                  crumb="데이터 입력", pending=pending_count(), rows=rows,
+                  can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
+
+
+@app.post("/input/incident/save")
+async def incident_save(request: Request):
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/incident", status_code=303)
+    form = await request.form()
+    d = (form.get("d") or "").strip()
+    part = form.get("part") or "VMS PART"
+    customer = (form.get("customer") or "").strip()
+    content = (form.get("content") or "").strip()
+    if not d:
+        return RedirectResponse("/input/incident?err=날짜는 필수입니다", status_code=303)
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO incident(d,part,customer,content,reg_user) VALUES(?,?,?,?,?)",
+        (d, part, customer, content, u["name"]))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/incident?msg=등록됨", status_code=303)
+
+
+@app.post("/input/incident/{iid}/delete")
+def incident_delete(request: Request, iid: int):
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/incident", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM incident WHERE id=?", (iid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/incident?msg=삭제됨", status_code=303)
 
 
 SOURCE_LABEL = {"outsource": "외주소재불량", "discard": "폐기불량"}

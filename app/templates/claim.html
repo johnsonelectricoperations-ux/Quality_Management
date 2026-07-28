@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+{% if can_edit %}
+<div class="panel"><div class="phead"><h2>Claim 등록</h2></div>
+  <div class="pbody">
+    <form method="post" action="/input/claim/save">
+      <div class="frow" style="grid-template-columns:150px 120px 160px 1fr;">
+        <div class="f"><label>날짜</label><input class="in" type="date" name="d" required></div>
+        <div class="f"><label>파트</label><select class="in" name="part">
+          {% for pv, pl in PARTS %}<option value="{{ pv }}">{{ pl }}</option>{% endfor %}</select></div>
+        <div class="f"><label>고객명</label><input class="in" name="customer" placeholder="예: 현대모비스"></div>
+        <div class="f"><label>내용</label><input class="in" name="content" placeholder="클레임 내용"></div>
+      </div>
+      <div class="frow" style="grid-template-columns:220px 160px 150px;margin-top:10px;">
+        <div class="f"><label>항목</label><select class="in" name="item" id="claimItem">
+          {% for it in item_options %}<option value="{{ it }}">{{ it }}</option>{% endfor %}</select></div>
+        <div class="f"><label>기타 항목명(항목=기타일 때)</label><input class="in" name="item_etc" id="claimItemEtc" placeholder="직접 입력"></div>
+        <div class="f"><label>금액(천원)</label><input class="in" name="amount" type="number" step="any" required style="text-align:right;"></div>
+      </div>
+      <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">등록</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel"><div class="phead"><h2>Claim 이력</h2><span class="tot">{{ rows|length }}건</span></div>
+  <table>
+    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>항목</th><th class="num">금액(천원)</th><th>내용</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
+        <td>{{ r.item }}</td><td class="num">{{ r.amount|cf }}</td><td>{{ r.content or '-' }}</td>
+        {% if can_edit %}<td>
+          <form method="post" action="/input/claim/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
+            <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="7" style="color:var(--tx3);">등록된 Claim이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var sel = document.getElementById("claimItem");
+  var etc = document.getElementById("claimItemEtc");
+  if (!sel || !etc) return;
+  function sync() { etc.disabled = sel.value !== "기타"; if (etc.disabled) etc.value = ""; }
+  sel.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

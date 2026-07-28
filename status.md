@@ -449,6 +449,34 @@
 
 ## 최근 로그
 
+### 2026-07-28 (9) — Claim·Customer Incident를 엑셀 업로드 → 건별 직접 등록으로 전환
+- 목표: Claim 입력화면의 엑셀 업로드를 없애고 직접 등록(년월일·파트·고객명·항목·금액·내용)
+  + 하단 이력표로 바꾼다. 사용자 확인 후 Customer Incident도 동일하게 전환.
+- **스키마 변경**: `claim`이 기존엔 `(년월,파트,항목)` 유니크의 **월별 집계** 테이블이라
+  같은 달·같은 항목을 두 번 넣으면 서로 덮어썼음. `incident`와 같은 **건별 원장** 방식으로
+  변경 — `ym`→`d`(전체 날짜), `customer`·`content` 컬럼 추가, UNIQUE 제약 제거(여러 건 누적
+  가능). `db._migrate_claim()`: 기존 월별 데이터는 각 월 1일로, 고객명/내용은 빈칸으로 이관
+  (실제로는 claim 데이터가 비어있어서 이관 대상 0건).
+- `calc.claim_sum()`: `WHERE ym=?` → `WHERE d LIKE ?`(년-월 접두 매칭)로 변경, incident_count와
+  동일한 패턴. COPQ 계산(claim_total, warranty)에 영향 없음을 검증.
+- **항목(item) 드롭다운**: COPQ 계산에 실제 쓰이는 6개 고정 항목(Warranty·3rd Party
+  Containment·Quality Special Freight·Customer Incident Cost·Unplanned Inspection &
+  Sorting·Variance) + "기타"(선택 시 직접입력 칸 활성화, JS로 토글) — 오타로 COPQ 집계에서
+  누락되는 걸 방지.
+- 새 화면: `/input/claim`(`claim.html`), `/input/incident`(`incident.html`) — 상단 등록 폼 +
+  하단 이력 표(삭제만 지원, 수정은 삭제 후 재등록). `/input/outsource-review`도 기존 범용
+  `/input/{page}` 라우트에 얹혀 있었어서 전용 라우트로 분리.
+- **정리**: 이제 쓸모없어진 범용 엑셀업로드 라우트(`/input/{page}`, `/input/{page}/upload`,
+  `INPUT_PAGES`, `_recent_rows()`, `app/templates/input.html`)와 `ingest.ingest_claim()`
+  전부 삭제(dead code 방지). `seed.py`는 Claim 시드를 건너뛰도록 수정(직접입력 전용이라
+  샘플 엑셀 적재 대상에서 제외), `ingest_incident`는 seed.py용으로 유지.
+- 검증: Playwright로 Claim 등록(일반 항목/기타 항목 직접입력 둘 다) → DB 값 정확히 일치,
+  삭제 확인. Incident 등록도 확인. 대시보드 프레시바에 "Claim 2026-07-16" 정상 반영.
+  COPQ/Warranty 카드 계산 크래시 없음 확인. 전 화면(대시보드·세부지표·SVP·불량검토·마스터조회)
+  렌더 정상, JS 오류 0. 작업 전/후 백업
+  (`backups/qms_backup_20260728_..._after_claim_schema_migration.db`, claim 테이블이
+  원래 비어있어 마이그레이션으로 인한 데이터 손실 없음 확인).
+
 ### 2026-07-28 (8) — KPI 카드 전체에 전월대비 표시(목표 오른쪽, 간격)
 - 목표: 지난 회차에서 Warranty·공정불량율·셋팅불량율 3개에만 붙였던 "전월대비"를
   **KPI 카드 8개 전부**에 붙이고, 위치를 **목표 값 오른쪽**(간격을 두고)으로 통일.

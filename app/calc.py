@@ -296,9 +296,9 @@ def svp_of(conn, ym, parts):
 
 
 def claim_sum(conn, ym, parts, items=None):
-    q = "SELECT COALESCE(SUM(amount),0) s FROM claim WHERE ym=? AND part IN (%s)" % \
+    q = "SELECT COALESCE(SUM(amount),0) s FROM claim WHERE d LIKE ? AND part IN (%s)" % \
         ",".join("?" * len(parts))
-    args = [ym] + list(parts)
+    args = [ym + "%"] + list(parts)
     if items:
         q += " AND item IN (%s)" % ",".join("?" * len(items)); args += list(items)
     return conn.execute(q, args).fetchone()["s"]

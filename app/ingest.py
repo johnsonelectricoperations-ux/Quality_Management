@@ -756,17 +756,6 @@ def ingest_svp(conn, path):
     return n
 
 
-def ingest_claim(conn, path):
-    _, rows = _rows(path)
-    n = 0
-    for i, r in rows:
-        conn.execute("INSERT INTO claim(ym,part,item,amount) VALUES(?,?,?,?) "
-                     "ON CONFLICT(ym,part,item) DO UPDATE SET amount=excluded.amount",
-                     (_ym(r.get("년월")), str(r.get("파트", "")).strip(),
-                      str(r.get("항목", "")).strip(), float(r.get("금액(천원)") or 0)))
-        n += 1
-    conn.commit()
-    return n
 
 
 # ── 과거(Low_data/Low_Inventory) 이력 일괄 적재 ──────────
