@@ -30,18 +30,18 @@
 
 <div class="panel"><div class="phead"><h2>Claim 이력</h2><span class="tot">{{ rows|length }}건 · 집계금액 = 전표금액 − Re-claim (집계포함 체크된 건만)</span></div>
   <table>
-    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>TM-NO</th><th>품명</th><th>항목</th>
-      <th class="num">전표금액(원)</th><th class="num">Re-claim(원)</th><th class="num">집계금액(원)</th>
+    <thead><tr><th>년월</th><th>파트</th><th>고객명</th><th>TM-NO</th><th>품명</th><th>항목</th>
+      <th class="num">전표금액(천원)</th><th class="num">Re-claim(천원)</th><th class="num">집계금액(천원)</th>
       <th>내용</th><th style="width:60px;">집계포함</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
       <tr {% if not r.use_agg %}style="color:var(--tx3);"{% endif %}>
-        <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
+        <td class="mono">{{ r.d[:7] }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
         <td class="mono">{{ r.tm_no or '-' }}</td><td>{{ r.product_name or '-' }}</td>
         <td>{{ r.item }}</td>
-        <td class="num">{{ (r.amount*1000)|cf }}</td>
-        <td class="num">{{ (r.reclaim*1000)|cf }}</td>
-        <td class="num" style="font-weight:700;">{{ ((r.amount-r.reclaim)*1000)|cf }}</td>
+        <td class="num">{{ r.amount|cf }}</td>
+        <td class="num">{{ r.reclaim|cf }}</td>
+        <td class="num" style="font-weight:700;">{{ (r.amount-r.reclaim)|cf }}</td>
         <td>{{ r.content or '-' }}</td>
         <td>
           <form method="post" action="/input/claim/{{ r.id }}/toggle-agg" style="display:inline;">
