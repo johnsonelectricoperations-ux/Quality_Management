@@ -600,8 +600,8 @@ def ingest_production_xlsx(conn, path):
         if not tm:
             continue
         qty = _int(ws.cell(row=r, column=c_qty).value)
-        if qty <= 0:
-            continue
+        if qty == 0:
+            continue                                    # 반품 등 마이너스 수량은 순증감에 포함(스킵 X)
         amt = float(ws.cell(row=r, column=c_amt).value or 0) / 1000.0  # 원 → 천원
         cur = agg.setdefault(tm, [0, 0.0])
         cur[0] += qty; cur[1] += amt
@@ -853,8 +853,8 @@ def ingest_history_inventory_xlsx(conn, path, year=2026):
         if not tm:
             continue
         qty = _int(ws.cell(row=r, column=c_qty).value)
-        if qty <= 0:
-            continue
+        if qty == 0:
+            continue                                    # 반품 등 마이너스 수량은 순증감에 포함(스킵 X)
         amt = float(ws.cell(row=r, column=c_amt).value or 0) / 1000.0
         cur = agg.setdefault(tm, [0, 0.0])
         cur[0] += qty; cur[1] += amt
