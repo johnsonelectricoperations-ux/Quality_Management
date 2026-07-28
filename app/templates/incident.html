@@ -1,24 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 {% if can_edit %}
-<div class="panel"><div class="phead"><h2>Customer Incident 등록</h2></div>
+<div class="panel"><div class="phead"><h2>{{ 'Customer Incident 수정' if edit_row else 'Customer Incident 등록' }}</h2>
+  {% if edit_row %}<a class="btn btn-s btn-sm" href="/input/incident" style="margin-left:auto;text-decoration:none;">취소</a>{% endif %}</div>
   <div class="pbody">
     <form method="post" action="/input/incident/save">
+      {% if edit_row %}<input type="hidden" name="orig_id" value="{{ edit_row.id }}">{% endif %}
       <div class="frow" style="grid-template-columns:150px 120px 200px 1fr;">
-        <div class="f"><label>날짜</label><input class="in" type="date" name="d" required></div>
+        <div class="f"><label>날짜</label><input class="in" type="date" name="d" value="{{ edit_row.d if edit_row }}" required></div>
         <div class="f"><label>파트</label><select class="in" name="part">
-          {% for pv, pl in PARTS %}<option value="{{ pv }}">{{ pl }}</option>{% endfor %}</select></div>
-        <div class="f"><label>고객명</label><input class="in" name="customer" placeholder="예: 현대모비스"></div>
-        <div class="f"><label>내용</label><input class="in" name="content" placeholder="발생 내용"></div>
+          {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
+        <div class="f"><label>고객명</label><input class="in" name="customer" value="{{ edit_row.customer if edit_row }}" placeholder="예: 현대모비스"></div>
+        <div class="f"><label>내용</label><input class="in" name="content" value="{{ edit_row.content if edit_row }}" placeholder="발생 내용"></div>
       </div>
       <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
-        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" placeholder="예: 1545-01"></div>
-        <div class="f"><label>품명</label><input class="in" name="product_name" placeholder="품명"></div>
+        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1545-01"></div>
+        <div class="f"><label>품명</label><input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}" placeholder="품명"></div>
         <div class="f" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:6px;">
-          <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="is_official" checked> 공식</label>
+          <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" name="is_official" {{ 'checked' if (not edit_row) or edit_row.is_official }}> 공식</label>
         </div>
       </div>
-      <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">등록</button></div>
+      <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">{{ '수정 저장' if edit_row else '등록' }}</button></div>
     </form>
   </div>
 </div>
@@ -38,7 +41,8 @@
             <input type="checkbox" onchange="this.form.submit()" {{ 'checked' if r.is_official }} {{ 'disabled' if not can_edit }}>
           </form>
         </td>
-        {% if can_edit %}<td>
+        {% if can_edit %}<td style="white-space:nowrap;">
+          <a class="btn btn-ghost btn-sm" href="/input/incident?edit={{ r.id }}" style="text-decoration:none;">수정</a>
           <form method="post" action="/input/incident/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}

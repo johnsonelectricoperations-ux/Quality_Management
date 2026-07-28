@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan, init_data
+from . import db, calc, ingest, scan, init_data, price_calc
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -619,6 +619,76 @@ def _price_map(conn, tm):
     return {p: cur.get(p) for p in db.AGG_PROCESSES}
 
 
+def _data_check(conn):
+    """TM-NO 미등록 / 공정별 단가 누락 점검. 반환: (미등록 목록, 단가누락 목록)."""
+    unreg = {}
+    for r in conn.execute(
+            "SELECT tm_no,d,part FROM defect_entry WHERE tm_no!='' AND tm_no NOT IN (SELECT tm_no FROM product)"):
+        cur = unreg.setdefault(r["tm_no"], {"last_d": r["d"], "part": r["part"] or "", "src": set()})
+        if r["d"] > cur["last_d"]:
+            cur["last_d"] = r["d"]
+        if r["part"] and not cur["part"]:
+            cur["part"] = r["part"]
+        cur["src"].add("사내/외주/폐기불량")
+    for r in conn.execute(
+            "SELECT tm_no,d,part FROM production WHERE tm_no NOT IN (SELECT tm_no FROM product)"):
+        cur = unreg.setdefault(r["tm_no"], {"last_d": r["d"], "part": r["part"] or "", "src": set()})
+        if r["d"] > cur["last_d"]:
+            cur["last_d"] = r["d"]
+        if r["part"] and not cur["part"]:
+            cur["part"] = r["part"]
+        cur["src"].add("생산량")
+    unreg_rows = [{"tm_no": tm, "part": v["part"], "last_d": v["last_d"], "src": "·".join(sorted(v["src"]))}
+                  for tm, v in unreg.items()]
+    unreg_rows.sort(key=lambda r: r["last_d"], reverse=True)
+
+    routes = {}
+    for r in conn.execute("SELECT tm_no,process FROM product_route"):
+        b = db.bucket_of(r["process"])
+        b = "기타" if b in ("가공", "기타") else b
+        routes.setdefault(r["tm_no"], set()).add(b)
+    prices = {}
+    for r in conn.execute(
+            "SELECT tm_no,process,unit_price FROM product_price WHERE effective_from<=date('now') "
+            "ORDER BY effective_from"):
+        prices.setdefault(r["tm_no"], {})[r["process"]] = r["unit_price"]
+
+    def other_price(pmap):
+        v = pmap.get("기타")
+        return v if v is not None else pmap.get("가공")
+
+    missing_rows = []
+    for r in conn.execute("SELECT tm_no,name,part FROM product ORDER BY tm_no"):
+        tm = r["tm_no"]
+        route = routes.get(tm, set())
+        pmap = prices.get(tm, {})
+        if not route:
+            missing_rows.append({"tm_no": tm, "name": r["name"], "part": r["part"], "missing": "(라우팅 없음)"})
+            continue
+        missing = [pr for pr in DISPLAY_PROCESSES if pr in route
+                  and (other_price(pmap) if pr == "기타" else pmap.get(pr)) is None]
+        if missing:
+            missing_rows.append({"tm_no": tm, "name": r["name"], "part": r["part"], "missing": ", ".join(missing)})
+    return unreg_rows, missing_rows
+
+
+@app.get("/admin/data-check", response_class=HTMLResponse)
+def data_check_page(request: Request):
+    """TM-NO 미등록·공정별 단가 누락 점검 화면. 관리자가 바로 등록 화면으로 이동해 채울 수 있다."""
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    conn = db.connect()
+    unreg_rows, missing_rows = _data_check(conn)
+    conn.close()
+    return render(request, "data_check.html", u, active="data_check", heading="데이터 점검",
+                  crumb="관리", pending=pending_count(), unreg_rows=unreg_rows, missing_rows=missing_rows,
+                  can_edit=(u["role"] == "admin"))
+
+
 @app.get("/admin/products", response_class=HTMLResponse)
 def products_list(request: Request, q: str = "", part: str = "", miss: str = "",
                   page: int = 1, msg: str = "", err: str = ""):
@@ -679,7 +749,7 @@ async def products_import(request: Request, part: str = Form(...), file: UploadF
 
 
 @app.get("/admin/products/new", response_class=HTMLResponse)
-def product_new(request: Request):
+def product_new(request: Request, tm: str = ""):
     u = current_user(request)
     g = _guard(u)
     if g:
@@ -688,11 +758,21 @@ def product_new(request: Request):
         return RedirectResponse("/admin/products", status_code=303)
     conn = db.connect()
     excl = _copq_excluded(conn)
+    tm = calc.base_tmno(tm) if tm else ""
+    part_guess = "VMS PART"
+    suggest = {"rest": None, "with_jh": None, "no_jh": None}
+    if tm:
+        r = conn.execute("SELECT part FROM defect_entry WHERE tm_no=? AND part!='' LIMIT 1", (tm,)).fetchone()
+        if not r:
+            r = conn.execute("SELECT part FROM production WHERE tm_no=? AND part!='' LIMIT 1", (tm,)).fetchone()
+        if r:
+            part_guess = r["part"]
+        suggest = price_calc.suggest_prices(conn, tm)
     conn.close()
     return render(request, "product_form.html", u, active="products", heading="제품 등록",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="new",
-                  p={"tm_no": "", "name": "", "part": "VMS PART"},
-                  agg=DISPLAY_PROCESSES, excl=excl,
+                  p={"tm_no": tm, "name": "", "part": part_guess},
+                  agg=DISPLAY_PROCESSES, excl=excl, suggest=suggest,
                   route=set(), price={pr: None for pr in DISPLAY_PROCESSES})
 
 
@@ -716,10 +796,12 @@ def product_edit(request: Request, tm: str):
     route = {("기타" if b == "가공" else b) for b in route_raw}
     price = _price_map_display(conn, tm)
     excl = _copq_excluded(conn)
+    suggest = price_calc.suggest_prices(conn, tm)
     conn.close()
     return render(request, "product_form.html", u, active="products", heading="제품 수정",
                   crumb="관리 / 제품 마스터", pending=pending_count(), mode="edit",
-                  p=dict(p), agg=DISPLAY_PROCESSES, excl=excl, route=route, price=price)
+                  p=dict(p), agg=DISPLAY_PROCESSES, excl=excl, route=route, price=price,
+                  suggest=suggest)
 
 
 @app.post("/admin/products/save")
@@ -1256,7 +1338,7 @@ CLAIM_ITEM_OPTIONS = calc.CLAIM_COPQ_ITEMS + ["기타"]
 
 
 @app.get("/input/claim", response_class=HTMLResponse)
-def claim_page(request: Request, msg: str = "", err: str = ""):
+def claim_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
     u = current_user(request)
     g = _guard(u)
     if g:
@@ -1265,10 +1347,21 @@ def claim_page(request: Request, msg: str = "", err: str = ""):
     rows = [dict(r) for r in conn.execute(
         "SELECT id,d,part,customer,tm_no,product_name,item,amount,reclaim,use_agg,content FROM claim "
         "ORDER BY d DESC,id DESC LIMIT 200")]
+    edit_row = None
+    if edit:
+        r = conn.execute(
+            "SELECT id,d,part,customer,tm_no,product_name,item,amount,reclaim,content FROM claim WHERE id=?",
+            (edit,)).fetchone()
+        if r:
+            edit_row = dict(r)
+            # 원 단위 화면 입력에 맞춰 천원 저장값을 다시 ×1000 해서 채운다
+            edit_row["amount_won"] = edit_row["amount"] * 1000
+            edit_row["reclaim_won"] = edit_row["reclaim"] * 1000
+            edit_row["item_is_custom"] = edit_row["item"] not in CLAIM_ITEM_OPTIONS
     conn.close()
     return render(request, "claim.html", u, active="claim", heading="Claim 입력",
                   crumb="데이터 입력", pending=pending_count(), rows=rows,
-                  item_options=CLAIM_ITEM_OPTIONS,
+                  item_options=CLAIM_ITEM_OPTIONS, edit_row=edit_row,
                   can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
 
 
@@ -1278,6 +1371,7 @@ async def claim_save(request: Request):
     if u is None or u["role"] not in ("editor", "admin"):
         return RedirectResponse("/input/claim", status_code=303)
     form = await request.form()
+    orig_id = (form.get("orig_id") or "").strip()
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     customer = (form.get("customer") or "").strip()
@@ -1290,23 +1384,33 @@ async def claim_save(request: Request):
     raw = (form.get("amount") or "").replace(",", "").strip()
     raw_reclaim = (form.get("reclaim") or "").replace(",", "").strip()
     if not d or not item or raw == "":
-        return RedirectResponse("/input/claim?err=날짜·항목·전표금액은 필수입니다", status_code=303)
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/input/claim?err=날짜·항목·전표금액은 필수입니다{eq}", status_code=303)
     try:
         amount_won = float(raw)
         reclaim_won = float(raw_reclaim) if raw_reclaim else 0.0
     except ValueError:
-        return RedirectResponse("/input/claim?err=금액이 숫자가 아닙니다", status_code=303)
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/input/claim?err=금액이 숫자가 아닙니다{eq}", status_code=303)
     # 입력은 원 단위, 저장은 다른 COPQ 계산과 맞춰 천원 단위
     amount = amount_won / 1000.0
     reclaim = reclaim_won / 1000.0
     conn = db.connect()
-    conn.execute(
-        "INSERT INTO claim(d,part,customer,tm_no,product_name,item,amount,reclaim,content,reg_user) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?)",
-        (d, part, customer, tm_no, product_name, item, amount, reclaim, content, u["name"]))
+    if orig_id:
+        conn.execute(
+            "UPDATE claim SET d=?,part=?,customer=?,tm_no=?,product_name=?,item=?,amount=?,reclaim=?,content=? "
+            "WHERE id=?",
+            (d, part, customer, tm_no, product_name, item, amount, reclaim, content, orig_id))
+        msg = "수정됨"
+    else:
+        conn.execute(
+            "INSERT INTO claim(d,part,customer,tm_no,product_name,item,amount,reclaim,content,reg_user) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (d, part, customer, tm_no, product_name, item, amount, reclaim, content, u["name"]))
+        msg = "등록됨"
     conn.commit()
     conn.close()
-    return RedirectResponse("/input/claim?msg=등록됨", status_code=303)
+    return RedirectResponse(f"/input/claim?msg={msg}", status_code=303)
 
 
 @app.post("/input/claim/{cid}/toggle-agg")
@@ -1336,7 +1440,7 @@ def claim_delete(request: Request, cid: int):
 
 # ── Customer Incident 관리 (건별 직접 등록) ──────────────
 @app.get("/input/incident", response_class=HTMLResponse)
-def incident_page(request: Request, msg: str = "", err: str = ""):
+def incident_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
     u = current_user(request)
     g = _guard(u)
     if g:
@@ -1345,9 +1449,16 @@ def incident_page(request: Request, msg: str = "", err: str = ""):
     rows = [dict(r) for r in conn.execute(
         "SELECT id,d,part,customer,tm_no,product_name,content,is_official FROM incident "
         "ORDER BY d DESC,id DESC LIMIT 200")]
+    edit_row = None
+    if edit:
+        r = conn.execute(
+            "SELECT id,d,part,customer,tm_no,product_name,content,is_official FROM incident WHERE id=?",
+            (edit,)).fetchone()
+        if r:
+            edit_row = dict(r)
     conn.close()
     return render(request, "incident.html", u, active="incident", heading="Customer Incident 관리",
-                  crumb="데이터 입력", pending=pending_count(), rows=rows,
+                  crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
                   can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
 
 
@@ -1357,6 +1468,7 @@ async def incident_save(request: Request):
     if u is None or u["role"] not in ("editor", "admin"):
         return RedirectResponse("/input/incident", status_code=303)
     form = await request.form()
+    orig_id = (form.get("orig_id") or "").strip()
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     customer = (form.get("customer") or "").strip()
@@ -1365,15 +1477,24 @@ async def incident_save(request: Request):
     content = (form.get("content") or "").strip()
     is_official = 1 if form.get("is_official") else 0
     if not d:
-        return RedirectResponse("/input/incident?err=날짜는 필수입니다", status_code=303)
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/input/incident?err=날짜는 필수입니다{eq}", status_code=303)
     conn = db.connect()
-    conn.execute(
-        "INSERT INTO incident(d,part,customer,tm_no,product_name,content,is_official,reg_user) "
-        "VALUES(?,?,?,?,?,?,?,?)",
-        (d, part, customer, tm_no, product_name, content, is_official, u["name"]))
+    if orig_id:
+        conn.execute(
+            "UPDATE incident SET d=?,part=?,customer=?,tm_no=?,product_name=?,content=?,is_official=? "
+            "WHERE id=?",
+            (d, part, customer, tm_no, product_name, content, is_official, orig_id))
+        msg = "수정됨"
+    else:
+        conn.execute(
+            "INSERT INTO incident(d,part,customer,tm_no,product_name,content,is_official,reg_user) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (d, part, customer, tm_no, product_name, content, is_official, u["name"]))
+        msg = "등록됨"
     conn.commit()
     conn.close()
-    return RedirectResponse("/input/incident?msg=등록됨", status_code=303)
+    return RedirectResponse(f"/input/incident?msg={msg}", status_code=303)
 
 
 @app.post("/input/incident/{iid}/toggle-official")

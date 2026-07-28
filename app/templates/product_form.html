@@ -14,7 +14,15 @@
   </div>
 </div>
 
-<div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2></div>
+<div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2>
+  {% if suggest and suggest.rest %}
+  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">
+    최근 3개월 평균단가 추정 {{ '%.0f'|format(suggest.rest) }}원 —
+    <button type="button" class="btn btn-ghost btn-sm" id="fillWithJh">정형 있음 규칙으로 채우기</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="fillNoJh">정형 없음 규칙으로 채우기</button>
+  </span>
+  {% endif %}
+  </div>
   <table>
     <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th style="width:100px;">COPQ</th>
       <th class="num" style="width:200px;">기준단가 (원, 누적)</th></tr></thead>
@@ -24,7 +32,7 @@
         <td><input type="checkbox" name="use_{{ pr }}" value="1" {{ 'checked' if pr in route }}></td>
         <td>{{ loop.index }}. {{ pr }}{% if pr == '기타' %}<span style="color:var(--tx3);font-size:11px;"> (가공·압입·밴딩·선별)</span>{% endif %}</td>
         <td>{% if pr in excl %}<span class="badge bg-hold">제외</span>{% else %}포함{% endif %}</td>
-        <td class="num"><input class="in" type="number" step="any" min="0" name="price_{{ pr }}"
+        <td class="num"><input class="in" type="number" step="any" min="0" name="price_{{ pr }}" id="price_{{ pr }}"
                value="{{ price[pr] if price[pr] is not none else '' }}" style="text-align:right;"></td>
       </tr>
     {% endfor %}
@@ -43,4 +51,31 @@
   {% endif %}
 </div></div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+{% if suggest and suggest.rest %}
+<script>
+(function () {
+  var withJh = {{ suggest.with_jh|tojson }};
+  var noJh = {{ suggest.no_jh|tojson }};
+  function fill(vals, jeonghyeong) {
+    for (var pr in vals) {
+      var el = document.getElementById("price_" + pr);
+      if (el) el.value = vals[pr];
+    }
+    var jh = document.querySelector('input[name="use_정형"]');
+    if (jh) jh.checked = jeonghyeong;
+    if (!jeonghyeong) {
+      var el = document.getElementById("price_정형");
+      if (el) el.value = "";
+    }
+  }
+  var b1 = document.getElementById("fillWithJh");
+  var b2 = document.getElementById("fillNoJh");
+  if (b1) b1.addEventListener("click", function () { fill(withJh, true); });
+  if (b2) b2.addEventListener("click", function () { fill(noJh, false); });
+})();
+</script>
+{% endif %}
 {% endblock %}

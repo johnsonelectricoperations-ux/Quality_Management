@@ -60,6 +60,29 @@ def compute_process_prices(conn, months=3):
     return out
 
 
+def suggest_prices(conn, tm, months=3):
+    """제품마스터 화면(단가 입력 보조)용: 특정 TM-NO 하나에 대해 최근 N개월 production 실적으로
+    '나머지공정단가'를 추정하고, 정형 유무 두 경우 모두의 화면표시 4종(성형/소결/정형/기타) 제안값을
+    함께 반환한다(실제 라우팅 저장 여부와 무관 — 화면에서 정형 체크박스 상태에 맞는 쪽을 쓰면 됨).
+    반환: {"rest": 나머지공정단가|None, "with_jh": {...}|None, "no_jh": {...}}.
+    최근 실적이 없으면 rest=None, with_jh/no_jh도 None."""
+    cy, cm = _latest_month(conn)
+    ym_set = {f"{y:04d}-{m:02d}" for y, m in calc.trailing_months(cy, cm, months)}
+    qty_sum, amt_sum = 0, 0.0
+    for r in conn.execute("SELECT d,qty,amount FROM production WHERE tm_no=?", (tm,)):
+        if r["d"][:7] not in ym_set:
+            continue
+        qty_sum += r["qty"]; amt_sum += r["amount"]
+    if qty_sum <= 0:
+        return {"rest": None, "with_jh": None, "no_jh": None}
+    rest = amt_sum * 1000.0 / qty_sum                  # 천원 → 원, 개당
+    with_jh = {p: round(rest * r) for p, r in RATIO_WITH_JEONGHYEONG.items()}
+    with_jh["기타"] = round(rest)
+    no_jh = {p: round(rest * r) for p, r in RATIO_NO_JEONGHYEONG.items()}
+    no_jh["기타"] = round(rest)
+    return {"rest": round(rest), "with_jh": with_jh, "no_jh": no_jh}
+
+
 def _latest_month(conn):
     row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
     d = row["m"] or date.today().isoformat()
