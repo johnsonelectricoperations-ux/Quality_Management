@@ -103,11 +103,15 @@ def scan_outsource(conn, root):
     if not p:
         return {"ok": False, "note": "대상 파일 없음", "files": 0, "rows": 0, "errors": []}
     try:
-        n, pend, errs = ingest.ingest_outsource_xlsm(conn, p)
+        n, pend, skip_no_tm, errs = ingest.ingest_outsource_xlsm(conn, p)
     except Exception as e:
         return {"ok": False, "note": str(e), "files": 1, "rows": 0, "errors": [str(e)]}
-    return {"ok": not errs, "files": 1, "rows": n, "errors": errs,
-            "note": f"{os.path.basename(p)} / {n}건 적재" + (f" (검토대기 {pend})" if pend else "")}
+    note = f"{os.path.basename(p)} / {n}건 적재"
+    if pend:
+        note += f" (검토대기 {pend})"
+    if skip_no_tm:
+        note += f" (TM-NO없음 {skip_no_tm}건 제외)"
+    return {"ok": not errs, "files": 1, "rows": n, "errors": errs, "note": note}
 
 
 def scan_scrap(conn, root):

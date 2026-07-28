@@ -221,18 +221,24 @@ def ingest_defect_master(conn, path):
 
 # ── 100EA 검토(외주/폐기 공통) ──────────────────────────
 def _reingest_preserve_reviewed(conn, source, rows):
-    """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행은 보존한다.
+    """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행과 **이번 달 이전(지난달까지) 행**은
+    원본이 바뀌어도 건드리지 않고 그대로 보존한다(마감된 과거월 데이터 잠금).
 
     rows: [(d,tm_no,defect_name,qty,part,proc,kind,status,reg_user), ...] (source는 고정값으로 별도 처리)
-    reviewed=1인 기존 행(사람이 결정 완료)과 (d,tm_no,defect_name) 키가 같은 신규행은 버리고,
-    reviewed=0인 기존 행만 삭제 후 나머지를 재적재한다.
-    반환: (적재건수, 검토완료라 건너뛴 건수)."""
+    이번 달 1일 이전 날짜의 신규행은 통째로 무시(DB에 이미 있는 값 유지), reviewed=1인 기존 행과
+    (d,tm_no,defect_name) 키가 같은 신규행도 버린다. reviewed=0이면서 이번 달 이후인 기존 행만
+    삭제 후 나머지를 재적재한다.
+    반환: (적재건수, 검토완료라 건너뛴 건수, 과거월 잠금이라 건너뛴 건수)."""
+    cur_month_start = datetime.date.today().replace(day=1).isoformat()
     reviewed_keys = {(r["d"], r["tm_no"], r["defect_name"]) for r in conn.execute(
         "SELECT d,tm_no,defect_name FROM defect_entry WHERE source=? AND reviewed=1", (source,))}
-    conn.execute("DELETE FROM defect_entry WHERE source=? AND reviewed=0", (source,))
-    keep, skipped = [], 0
+    conn.execute("DELETE FROM defect_entry WHERE source=? AND reviewed=0 AND d>=?", (source, cur_month_start))
+    keep, skipped, locked = [], 0, 0
     for row in rows:
         d, tm_no, defect_name = row[0], row[1], row[2]
+        if d < cur_month_start:
+            locked += 1
+            continue
         if (d, tm_no, defect_name) in reviewed_keys:
             skipped += 1
             continue
@@ -241,7 +247,7 @@ def _reingest_preserve_reviewed(conn, source, rows):
         "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,reg_user) "
         "VALUES(?,?,?,?,?,?,?,?,?,?)", [(*row[:7], source, row[7], row[8]) for row in keep])
     conn.commit()
-    return len(keep), skipped
+    return len(keep), skipped, locked
 
 
 # ── 사내불량 일일 양식(폴더 스캔) ──────────────────────
@@ -413,15 +419,17 @@ _SCRAP_PART = {"1part": "VMS PART", "2part": "TM PART"}
 def ingest_scrap_db(conn, path, quarantine_100=True):
     """폐기 scrap_data.db 적재. defect_category='해당' 만, defect_process→집계공정(수량 합산).
     폐기는 공정불량(kind='공정'). TM-NO 없는 공정단위 폐기(소결로_산화 등)는 part만으로 집계.
+    불량명이 '기타_불량'이고 remark(비고)에 사유가 적혀있으면, '기타_불량' 대신 그 remark 내용을
+    불량명으로 사용한다(TOP5 등 집계에도 세부 사유 그대로 반영).
     단일 TM×단일 불량명 ≥100 → pending(검토 대기, /input/outsource-review 화면에서 외주와 함께 관리).
-    전체 재스캔 idempotent(source='discard' 삭제 후 재적재) — 사람이 검토(승인/수정/반려)한
-    행(reviewed=1)은 재스캔해도 보존한다.
+    전체 재스캔 idempotent(source='discard' 삭제 후 재적재) — 사람이 검토(승인/수정/반려)한 행과
+    이번 달 이전(지난달까지) 행은 재스캔해도 보존(잠금)한다.
     반환: (건수, note[dict])."""
     src = sqlite3.connect(path)
     src.row_factory = sqlite3.Row
     rows, unmapped = [], {}
     skip_noqty = skip_nopart = 0
-    for r in src.execute("SELECT date,part,tmno,scrap_reason,quantity,defect_process "
+    for r in src.execute("SELECT date,part,tmno,scrap_reason,quantity,defect_process,remark "
                          "FROM scrap_data WHERE defect_category='해당'"):
         part = _SCRAP_PART.get(str(r["part"] or "").strip().lower(), "")
         if not part:
@@ -441,12 +449,14 @@ def ingest_scrap_db(conn, path, quarantine_100=True):
         if raw_proc not in _SCRAP_KNOWN_PROC:
             unmapped[raw_proc] = unmapped.get(raw_proc, 0) + 1
             proc = "기타"                                   # 비표준 공정은 기타로(경고)
-        name = str(r["scrap_reason"] or "").strip() or "기타"
+        reason = str(r["scrap_reason"] or "").strip() or "기타"
+        remark = str(r["remark"] or "").strip()
+        name = remark if (reason == "기타_불량" and remark) else reason
         status = "pending" if (quarantine_100 and qty >= 100) else "confirmed"
         rows.append((d, tm, name, qty, part, proc, "공정", status, ""))
     src.close()
     pend = sum(1 for row in rows if row[7] == "pending")
-    n, _skipped = _reingest_preserve_reviewed(conn, "discard", rows)
+    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows)
     return n, {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped,
               "검토대기": pend}
 
@@ -565,27 +575,46 @@ def ingest_price_master(conn, path):
 
 
 _OUTSOURCE_PART = {"1part": "VMS PART", "2part": "TM PART"}
-# 외주 합계 컬럼(헤더명) → 집계공정. 파일이 VBA로 미리 계산한 값을 그대로 사용.
-_OUTSOURCE_SUMS = [("성형불량 합계", "성형"), ("소결불량 합계", "소결"), ("기타 합계", "기타")]
+
+# 세부 불량명(xlsm 컬럼) → 집계공정. VBA의 "성형/소결 합계" 그룹 중 공정이 명확한 항목만 직접 매핑.
+_OUTSOURCE_DETAIL_DIRECT = {
+    "깨짐": "성형", "크랙": "성형", "기포": "성형", "뜯김": "성형", "밸런스NG": "성형",
+    "변형(촥좌)": "소결", "변형(Window)": "소결", "변형(쏠림)": "소결", "브레이징": "소결",
+    "조립불량": "소결", "변형(편가공)": "소결", "산화": "소결", "용침불량": "소결", "소결붙음": "소결",
+}
+# VBA에서 소결·기타에 50%씩 임의 분배하던 애매 항목 → TM-NO 라우팅에 정형이 있으면 정형, 없으면 소결.
+_OUTSOURCE_DETAIL_AMBIGUOUS = ["찍힘.눌림", "이종혼입", "녹", "이물소착", "소재돌출"]
+_OUTSOURCE_DETAIL_COLS = list(_OUTSOURCE_DETAIL_DIRECT) + _OUTSOURCE_DETAIL_AMBIGUOUS
 
 
 def ingest_outsource_xlsm(conn, path, quarantine_100=True):
-    """외주소재불량 xlsm(Sheet1) 적재. 파일이 계산한 성형/소결/기타 합계를 그대로
-    집계공정 공정불량 수량으로 반영(별도 외주불량율 없음). 공정불량(kind='공정').
-    단일 TM×단일 공정합계 ≥100 → pending(검토 대기, /input/outsource-review 화면).
-    전체 재스캔 idempotent(source='outsource' 삭제 후 재적재) — 단, 사람이 검토(승인/수정/반려)한
-    행(reviewed=1)은 재스캔해도 덮어쓰지 않고 보존한다.
-    반환: (건수, pending수, errors)."""
+    """외주소재불량 xlsm(Sheet1) 적재. 파일이 미리 뭉쳐놓은 성형/소결/기타 합계 대신,
+    19개 세부 불량명 컬럼을 그대로 불량명으로 반영해 TOP5 등에도 세부 사유가 나타나게 한다.
+    애매 5종(찍힘.눌림/이종혼입/녹/이물소착/소재돌출)은 TM-NO의 제품 라우팅에 정형이 있으면 정형,
+    없으면 소결로 배분. TM-NO 없는 행(제품 미지정, 날짜로 오인식된 경우 포함)은 라우팅 판단이
+    불가능하므로 집계에서 제외한다. 공정불량(kind='공정').
+    단일 TM×단일 불량명 ≥100 → pending(검토 대기, /input/outsource-review 화면).
+    전체 재스캔 idempotent(source='outsource' 삭제 후 재적재) — 사람이 검토(승인/수정/반려)한 행과
+    이번 달 이전(지난달까지) 행은 재스캔해도 덮어쓰지 않고 보존(잠금)한다.
+    반환: (건수, pending수, TM-NO없어 제외된 건수, errors)."""
     wb = load_workbook(path, data_only=True)
     ws = wb["Sheet1"] if "Sheet1" in wb.sheetnames else wb.worksheets[0]
     headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
     idx = {h: j + 1 for j, h in enumerate(headers)}
-    need = ["반입예정일자", "TM-NO", "Part"] + [h for h, _ in _OUTSOURCE_SUMS]
+    need = ["반입예정일자", "TM-NO", "Part"] + _OUTSOURCE_DETAIL_COLS
     miss = [h for h in need if h not in idx]
     if miss:
-        return 0, 0, [f"Sheet1 헤더 누락: {', '.join(miss)}"]
+        return 0, 0, 0, [f"Sheet1 헤더 누락: {', '.join(miss)}"]
 
-    rows, pend = [], 0
+    route_cache = {}
+
+    def has_jeonghyeong(tm):
+        if tm not in route_cache:
+            route_cache[tm] = conn.execute(
+                "SELECT 1 FROM product_route WHERE tm_no=? AND process='정형'", (tm,)).fetchone() is not None
+        return route_cache[tm]
+
+    rows, pend, skip_no_tm = [], 0, 0
     for r in range(2, ws.max_row + 1):
         dv = ws.cell(row=r, column=idx["반입예정일자"]).value
         if dv in (None, ""):
@@ -596,19 +625,26 @@ def ingest_outsource_xlsm(conn, path, quarantine_100=True):
             continue
         tmv = ws.cell(row=r, column=idx["TM-NO"]).value
         if isinstance(tmv, (datetime.date, datetime.datetime)):
-            tm = ""                                   # TM-NO 날짜변환 → 제품 미지정(파트집계)
+            tm = ""                                   # TM-NO 날짜변환 → 제품 미지정
         else:
-            tm = base_tmno(tmv)                       # 없으면 '' → 폐기처럼 파트 단위 집계
-        for hdr, proc in _OUTSOURCE_SUMS:
+            tm = base_tmno(tmv)
+        if not tm:
+            skip_no_tm += 1
+            continue                                  # TM-NO 없는 행은 라우팅 판단 불가 → 집계 제외
+        for hdr in _OUTSOURCE_DETAIL_COLS:
             qty = _int(ws.cell(row=r, column=idx[hdr]).value)
             if qty <= 0:
                 continue
+            if hdr in _OUTSOURCE_DETAIL_DIRECT:
+                proc = _OUTSOURCE_DETAIL_DIRECT[hdr]
+            else:
+                proc = "정형" if has_jeonghyeong(tm) else "소결"
             status = "pending" if (quarantine_100 and qty >= 100) else "confirmed"
             if status == "pending":
                 pend += 1
-            rows.append((d, tm, f"외주 {proc}불량", qty, part, proc, "공정", status, ""))
-    n, _skipped = _reingest_preserve_reviewed(conn, "outsource", rows)
-    return n, pend, []
+            rows.append((d, tm, hdr, qty, part, proc, "공정", status, ""))
+    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "outsource", rows)
+    return n, pend, skip_no_tm, []
 
 
 _PROD_RE = re.compile(r"^(1part|2part)_(\d{8})_(\d{8})$", re.IGNORECASE)
