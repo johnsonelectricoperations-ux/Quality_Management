@@ -211,7 +211,16 @@ class Masters:
 
 # ── 일 단위 집계 (배분·비용 포함) ───────────────────────
 def compute_daily(conn, m: Masters):
-    """daily[d][part] = 지표 dict. proc[(part,proc)] 상세도 포함."""
+    """daily[d][part] = 지표 dict. proc[(part,proc)] 상세도 포함.
+
+    파트별 생산량 데이터가 등록된 마지막 날짜(그 파트 production 테이블의 MAX(d))보다 이후 날짜의
+    불량은 아직 분모(생산량)가 확정되지 않은 것이므로 집계에서 제외한다 — 생산량이 나중에 등록되면
+    다음 계산 시 자동으로 반영된다. 생산량이 아예 없는 파트는 전부 제외(컷오프 없음=집계 안 함)."""
+    prod_cutoff = {}
+    for p in ("VMS PART", "TM PART"):
+        row = conn.execute("SELECT MAX(d) m FROM production WHERE part=?", (p,)).fetchone()
+        prod_cutoff[p] = row["m"] or "0000-00-00"
+
     daily = defaultdict(lambda: defaultdict(lambda: {
         "scrap_qty": 0, "scrap_cost": 0.0, "scrap_cost_copq": 0.0,
         "proc_qty": 0, "set_qty": 0, "prod_qty": 0, "prod_amount": 0.0,
@@ -225,6 +234,8 @@ def compute_daily(conn, m: Masters):
         part = prod[1] if prod else (r["part"] or "")   # 제품 파트 우선, 없으면 저장된 파트(제품 미지정 폐기)
         if not part:
             continue
+        if r["d"] > prod_cutoff.get(part, "0000-00-00"):
+            continue                            # 그 파트의 생산량이 아직 등록 안 된 날짜 → 지표 제외
         kind, allocs = m.resolve(part, r["tm_no"], r["defect_name"], r["qty"],
                                  r["process"], r["kind"])
         cell = daily[r["d"]][part]
