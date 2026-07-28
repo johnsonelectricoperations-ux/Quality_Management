@@ -66,8 +66,10 @@ CREATE TABLE IF NOT EXISTS svp (
 );
 CREATE TABLE IF NOT EXISTS claim (
   -- 건별 등록(원장). 같은 달에 같은 항목이 여러 건 있어도 서로 덮어쓰지 않는다(incident와 동일 방식).
+  -- amount=전표금액, reclaim=협력사 Re-claim(공제분). 집계(COPQ 등)는 amount-reclaim, use_agg=1인 건만.
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
   customer TEXT DEFAULT '', item TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
+  reclaim REAL NOT NULL DEFAULT 0, use_agg INTEGER NOT NULL DEFAULT 1,
   content TEXT DEFAULT '', reg_user TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS incident (
@@ -229,6 +231,8 @@ def init_db():
     _add_col(conn, "defect_entry", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "defect_entry", "reviewed", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "claim", "reclaim", "REAL NOT NULL DEFAULT 0")
+    _add_col(conn, "claim", "use_agg", "INTEGER NOT NULL DEFAULT 1")
     _migrate_defect_type(conn)
     _migrate_product_price(conn)
     _migrate_claim(conn)

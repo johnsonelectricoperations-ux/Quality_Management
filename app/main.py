@@ -1248,7 +1248,8 @@ def claim_page(request: Request, msg: str = "", err: str = ""):
         return g
     conn = db.connect()
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,part,customer,item,amount,content FROM claim ORDER BY d DESC,id DESC LIMIT 200")]
+        "SELECT id,d,part,customer,item,amount,reclaim,use_agg,content FROM claim "
+        "ORDER BY d DESC,id DESC LIMIT 200")]
     conn.close()
     return render(request, "claim.html", u, active="claim", heading="Claim 입력",
                   crumb="데이터 입력", pending=pending_count(), rows=rows,
@@ -1270,19 +1271,37 @@ async def claim_save(request: Request):
         item = (form.get("item_etc") or "").strip() or "기타"
     content = (form.get("content") or "").strip()
     raw = (form.get("amount") or "").replace(",", "").strip()
+    raw_reclaim = (form.get("reclaim") or "").replace(",", "").strip()
     if not d or not item or raw == "":
-        return RedirectResponse("/input/claim?err=날짜·항목·금액은 필수입니다", status_code=303)
+        return RedirectResponse("/input/claim?err=날짜·항목·전표금액은 필수입니다", status_code=303)
     try:
-        amount = float(raw)
+        amount_won = float(raw)
+        reclaim_won = float(raw_reclaim) if raw_reclaim else 0.0
     except ValueError:
         return RedirectResponse("/input/claim?err=금액이 숫자가 아닙니다", status_code=303)
+    # 입력은 원 단위, 저장은 다른 COPQ 계산과 맞춰 천원 단위
+    amount = amount_won / 1000.0
+    reclaim = reclaim_won / 1000.0
     conn = db.connect()
     conn.execute(
-        "INSERT INTO claim(d,part,customer,item,amount,content,reg_user) VALUES(?,?,?,?,?,?,?)",
-        (d, part, customer, item, amount, content, u["name"]))
+        "INSERT INTO claim(d,part,customer,item,amount,reclaim,content,reg_user) VALUES(?,?,?,?,?,?,?,?)",
+        (d, part, customer, item, amount, reclaim, content, u["name"]))
     conn.commit()
     conn.close()
     return RedirectResponse("/input/claim?msg=등록됨", status_code=303)
+
+
+@app.post("/input/claim/{cid}/toggle-agg")
+def claim_toggle_agg(request: Request, cid: int):
+    """이력표의 '집계 포함' 체크박스: 체크된 건만 COPQ 등 집계에 반영."""
+    u = current_user(request)
+    if u is None or u["role"] not in ("editor", "admin"):
+        return RedirectResponse("/input/claim", status_code=303)
+    conn = db.connect()
+    conn.execute("UPDATE claim SET use_agg=1-use_agg WHERE id=?", (cid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/claim", status_code=303)
 
 
 @app.post("/input/claim/{cid}/delete")

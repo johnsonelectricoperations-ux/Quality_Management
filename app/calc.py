@@ -296,8 +296,9 @@ def svp_of(conn, ym, parts):
 
 
 def claim_sum(conn, ym, parts, items=None):
-    q = "SELECT COALESCE(SUM(amount),0) s FROM claim WHERE d LIKE ? AND part IN (%s)" % \
-        ",".join("?" * len(parts))
+    """집계 대상(use_agg=1) 건만, 전표금액에서 협력사 Re-claim을 뺀 순금액으로 합산."""
+    q = ("SELECT COALESCE(SUM(amount-reclaim),0) s FROM claim "
+         "WHERE use_agg=1 AND d LIKE ? AND part IN (%s)") % ",".join("?" * len(parts))
     args = [ym + "%"] + list(parts)
     if items:
         q += " AND item IN (%s)" % ",".join("?" * len(items)); args += list(items)
