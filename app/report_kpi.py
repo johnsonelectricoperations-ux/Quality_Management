@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """세부지표현황(신규, 2026-07-29) — 사용자 제공 `세부지표현황.xlsx` 양식과 동일한 FY(4월~3월)
-월별 표를 계산한다. Scrap Cost/COPQ와 마찬가지로 **배분규칙(원인공정 재배분)은 쓰지 않고,
-불량을 발견한(입력) 공정 기준으로 집계**한다(2026-07-29 확정 원칙과 일관).
+월별 표를 계산한다.
+
+- 총액(합계)·raw(종합) 구간: **불량을 발견한(입력) 공정 기준**(Scrap Cost 총액 계산과 동일).
+- 성형/소결/정형/가공/기타 5개 행 배분(bucket): **단가는 발견공정 그대로 쓰되, 그 비용이
+  집계되는 행은 불량유형 마스터가 정의한 귀책(원인)공정**을 따른다(2026-07-29 확정,
+  `month_process()` 참고). 총액은 바뀌지 않고 5행 사이의 분배만 달라진다.
 """
 from collections import defaultdict
 
@@ -12,13 +16,20 @@ COPQ_ITEM_ORDER = ["Scrap cost"] + calc.CLAIM_COPQ_ITEMS + ["기타"]
 
 
 def month_process(conn, m, y, mth, parts):
-    """해당 월 + 파트(들)의 불량을 공정/셋팅으로 나눠 raw(입력 그대로)·bucket(5종 집계공정)
-    두 기준으로 동시 집계한다(배분규칙 미적용).
+    """해당 월 + 파트(들)의 불량을 공정/셋팅으로 나눠 raw(입력 그대로)·bucket(5종 집계공정,
+    귀책공정 기준) 두 기준으로 동시 집계한다.
     반환: {"공정": {"raw":{cat:{"qty","cost"}}, "bucket":{buck:{"qty","cost"}}}, "셋팅": {...}}
-    raw 카테고리: 사내불량은 저장된 물리공정(성형/소결/정형/가공/압입/후처리) 그대로,
-    외주소재불량은 '외주소재', 폐기불량은 '폐기불량'으로 묶는다.
-    bucket: 표준 5종(성형/소결/정형/가공/기타). 외주소재불량은 전부 '기타'(비용 산정 기준과 동일),
-    폐기·사내불량은 물리공정을 bucket_of()로 접어 넣는다."""
+
+    raw: 사내불량은 저장된 물리공정(성형/소결/정형/가공/압입/후처리) 그대로, 외주소재불량은
+    '외주소재', 폐기불량은 '폐기불량'으로 묶는다 — **불량이 어디서 발견됐는지**를 그대로 보여준다.
+
+    bucket(2026-07-29 수정): **단가는 발견(입력)공정 기준 그대로**(Scrap Cost 총액과 동일하게
+    계산)이지만, 그 비용이 집계되는 **행(성형/소결/정형/가공/기타)은 불량유형 마스터에 정의된
+    귀책(원인)공정**을 따른다(`Masters.resolve()`가 마스터 배분규칙+제품 라우팅으로 판단, 마스터에
+    규칙이 없으면 발견공정 그대로). 즉 "후처리 시트에서 발견된 깨짐(귀책=성형, 후처리단가 500원)"
+    이면 수량×500원의 비용 그대로 '성형' 행에 집계된다. 배분(수량 쪼개짐)이 있어도 단가를 공정별로
+    다시 매기지 않고 발견공정 단가로 비례배분하므로, 이 재배정은 **총 수량·총 비용에는 영향이 없고
+    5개 행 사이의 분배만 달라진다**. 마스터에 없는 TM-NO 등으로 배분이 '?'가 되면 '기타'로 접는다."""
     ym = "%04d-%02d" % (y, mth)
     out = {k: {"raw": defaultdict(lambda: {"qty": 0, "cost": 0.0}),
                "bucket": defaultdict(lambda: {"qty": 0, "cost": 0.0})}
@@ -30,33 +41,33 @@ def month_process(conn, m, y, mth, parts):
         part = prod[1] if prod else (r["part"] or "")
         if part not in parts:
             continue
-        k = m.kind_from(part, r["defect_name"], r["kind"])
-        if k not in out:
+        kind, allocs = m.resolve(part, r["tm_no"], r["defect_name"], r["qty"], r["process"], r["kind"])
+        if kind not in out:
             continue
         qty = r["qty"]
         cost = 0.0
         if not r["exclude_cost"]:
             price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"], part)
             cost = qty * price / 1000.0
-        slot = out[k]
+        slot = out[kind]
+        # raw: 발견(입력) 그대로 — 귀책 배분과 무관, 그대로 둔다
         if r["source"] == "outsource":
             slot["raw"]["외주소재"]["qty"] += qty
             slot["raw"]["외주소재"]["cost"] += cost
-            slot["bucket"]["기타"]["qty"] += qty
-            slot["bucket"]["기타"]["cost"] += cost
         elif r["source"] == "discard":
             slot["raw"]["폐기불량"]["qty"] += qty
             slot["raw"]["폐기불량"]["cost"] += cost
-            b = db.bucket_of(r["process"] or "기타")
-            slot["bucket"][b]["qty"] += qty
-            slot["bucket"][b]["cost"] += cost
         else:
             cat = r["process"] or "후처리"
             slot["raw"][cat]["qty"] += qty
             slot["raw"][cat]["cost"] += cost
-            b = db.bucket_of(cat)
-            slot["bucket"][b]["qty"] += qty
-            slot["bucket"][b]["cost"] += cost
+        # bucket: 귀책공정으로 수량 배분, 비용은 발견공정 단가로 계산한 총액을 그 비율대로 배분
+        for b, q in allocs:
+            if b not in BUCKETS:
+                b = "기타"
+            slot["bucket"][b]["qty"] += q
+            if qty:
+                slot["bucket"][b]["cost"] += cost * (q / qty)
     return out
 
 
@@ -235,12 +246,12 @@ def warranty_table(conn, m, fy):
             for lbl, part in (("Total", "통합"), ("1Part", "VMS PART"), ("2Part", "TM PART"))}
 
 
-# 공정불량-1PART/2PART 탭: raw(종합) 표시용 행 순서. 압입은 1PART에만 존재.
+# 공정불량-1PART/2PART 탭: raw(종합, 발견 그대로) 표시용 행 순서. 압입은 1PART에만 존재.
 RAW_ROWS_1PART = ["성형", "소결", "정형", "가공", "압입", "후처리", "외주소재", "폐기불량"]
 RAW_ROWS_2PART = ["성형", "소결", "정형", "가공", "후처리", "외주소재", "폐기불량"]
-# 공정별(발생기준) 행: 1PART는 압입을 기타에서 분리해서 따로 보여준다.
-BUCKET_ROWS_1PART = ["성형", "소결", "정형", "가공", "압입", "기타"]
-BUCKET_ROWS_2PART = ["성형", "소결", "정형", "가공", "기타"]
+# 공정별(발생=귀책기준) 행: 표준 5버킷. 압입은 그 자체가 집계공정이 아니라(귀책 배분 결과 성형 등
+# 실제 원인 공정으로 흩어짐), 여기서는 별도로 떼어 보여주지 않는다.
+BUCKET_ROWS = BUCKETS
 
 
 def process_table(conn, m, fy, part):
@@ -249,12 +260,11 @@ def process_table(conn, m, fy, part):
     months = calc.fy_months(fy)
     is1 = part == "VMS PART"
     raw_rows = RAW_ROWS_1PART if is1 else RAW_ROWS_2PART
-    bucket_rows = BUCKET_ROWS_1PART if is1 else BUCKET_ROWS_2PART
 
     raw = {row: [] for row in raw_rows}
     raw_sub = []
     prod_qty = []
-    bucket_ppm = {row: [] for row in bucket_rows}
+    bucket_ppm = {row: [] for row in BUCKET_ROWS}
     for (y, mo) in months:
         mp = month_process(conn, m, y, mo, parts)["공정"]
         month_total = 0
@@ -266,28 +276,15 @@ def process_table(conn, m, fy, part):
         pq, _pa = month_prod(conn, m, y, mo, parts)
         prod_qty.append(pq)
 
-        bucket = dict(mp["bucket"])
-        if is1:
-            apid_qty = mp["raw"].get("압입", {}).get("qty", 0)
-            gita = bucket.get("기타", {"qty": 0}).get("qty", 0) - apid_qty
-            for row in bucket_rows:
-                if row == "압입":
-                    v = apid_qty
-                elif row == "기타":
-                    v = gita
-                else:
-                    v = bucket.get(row, {"qty": 0}).get("qty", 0)
-                bucket_ppm[row].append(round(v / pq * 1_000_000) if pq else 0)
-        else:
-            for row in bucket_rows:
-                v = bucket.get(row, {"qty": 0}).get("qty", 0)
-                bucket_ppm[row].append(round(v / pq * 1_000_000) if pq else 0)
+        for row in BUCKET_ROWS:
+            v = mp["bucket"].get(row, {"qty": 0}).get("qty", 0)
+            bucket_ppm[row].append(round(v / pq * 1_000_000) if pq else 0)
 
     target = [calc_target_val(conn, fy, part, "proc_ppm", mo) for (_y, mo) in months]
     actual = [round(t / p * 1_000_000) if p else 0 for t, p in zip(raw_sub, prod_qty)]
     return {"raw_rows": raw_rows, "raw": raw, "raw_sub": raw_sub, "prod_qty": prod_qty,
            "target": target, "actual": actual,
-           "bucket_rows": bucket_rows, "bucket_ppm": bucket_ppm}
+           "bucket_rows": BUCKET_ROWS, "bucket_ppm": bucket_ppm}
 
 
 # ── 불량유형별 추이 (탭 8, 일 단위) ────────────────────────
