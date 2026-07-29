@@ -1707,21 +1707,30 @@ def outsource_review(request, u):
         r["no_tm"] = not (r["tm_no"] or "").strip()      # TM-NO 없는 건 = 공정 단위로만 집계
     conn.close()
     return render(request, "review.html", u, active="oreview", heading="불량 검토 (100EA 이상)",
-                  crumb="데이터 입력", pending=len(rows), rows=rows,
+                  crumb="데이터 입력", pending=len(rows), rows=rows, agg_processes=db.AGG_PROCESSES,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "oreview", "edit")))
 
 
 @app.post("/input/outsource-review/{eid}")
-async def review_action(request: Request, eid: int, action: str = Form(...), qty: int = Form(None)):
-    """검토 대기 건 처리: approve(그대로/수정 반영)·reject(삭제).
+async def review_action(request: Request, eid: int, action: str = Form(...), qty: int = Form(None),
+                        process: str = Form("")):
+    """검토 대기 건 처리: approve(수량·집계공정 그대로/수정 반영)·reject(삭제).
+    집계공정을 수정해도 원본 파일(외주소재 xlsm·폐기 scrap_data.db)은 건드리지 않는다 —
+    defect_entry.process(이 시스템의 사본)만 바뀌고, 이후 집계는 이 값을 기준으로 계산된다.
     사람이 결정한 건은 reviewed=1로 표시해 다음 폴더 반영(재스캔) 때도 덮어써지지 않는다."""
     u = current_user(request)
     if u is None or not (u["role"] == "admin" or has_perm(u["role"], "oreview", "edit")):
         return RedirectResponse("/input/outsource-review", status_code=303)
     conn = db.connect()
     if action == "approve":
-        if qty is not None:
+        proc = process.strip() if process and process.strip() in db.AGG_PROCESSES else None
+        if qty is not None and proc:
+            conn.execute("UPDATE defect_entry SET qty=?, process=?, status='confirmed', reviewed=1 WHERE id=?",
+                        (qty, proc, eid))
+        elif qty is not None:
             conn.execute("UPDATE defect_entry SET qty=?, status='confirmed', reviewed=1 WHERE id=?", (qty, eid))
+        elif proc:
+            conn.execute("UPDATE defect_entry SET process=?, status='confirmed', reviewed=1 WHERE id=?", (proc, eid))
         else:
             conn.execute("UPDATE defect_entry SET status='confirmed', reviewed=1 WHERE id=?", (eid,))
     elif action == "reject":
