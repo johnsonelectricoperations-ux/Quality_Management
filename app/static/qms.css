@@ -37,6 +37,7 @@
   .nav.on { color:var(--p-600); border-left-color:var(--p-500); background:var(--p-50); font-weight:600; }
   .nav .cnt { margin-left:auto; font:700 10px/1 inherit; background:var(--err-bg); color:var(--err); padding:2px 6px; border-radius:9999px; }
   .nav .role { margin-left:auto; font:600 9px/1 inherit; color:var(--tx3); }
+  .nav .warn-ic { margin-left:6px; font:700 10px/1 inherit; background:var(--err-bg); color:var(--err); padding:2px 6px; border-radius:9999px; }
 
   /* Topbar */
   .main { min-width:0; display:flex; flex-direction:column; }

@@ -15,13 +15,22 @@
 </div>
 
 <div class="panel"><div class="phead"><h2>공정 라우팅 · 공정별 단가</h2>
-  {% if suggest and suggest.rest %}
-  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">
+  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);display:flex;align-items:center;gap:6px;">
+    {% if suggest and suggest.rest %}
     최근 3개월 평균단가 추정 {{ '%.0f'|format(suggest.rest) }}원 —
     <button type="button" class="btn btn-ghost btn-sm" id="fillWithJh">정형 있음 규칙으로 채우기</button>
     <button type="button" class="btn btn-ghost btn-sm" id="fillNoJh">정형 없음 규칙으로 채우기</button>
+    <span style="width:1px;height:16px;background:var(--bd);margin:0 4px;"></span>
+    {% endif %}
+    기준단가(최종가격, 원)
+    <input class="in" type="number" step="any" min="0" id="baseUnitPrice" placeholder="예: 500" style="width:120px;text-align:right;">
   </span>
-  {% endif %}
+  </div>
+  <div class="pbody" style="padding-top:0;padding-bottom:0;">
+    <div style="color:var(--tx3);font-size:11.5px;margin:-2px 0 8px;">
+      기준단가를 입력하고 아래 "사용" 체크박스를 선택하면, 파트·정형 유무에 따른 배분 비율로 해당 공정 단가가 자동 입력됩니다
+      (성형·소결·정형 = 기준단가×비율, 가공·기타 = 기준단가 그대로). 자동 입력 후에도 직접 값을 수정할 수 있습니다.
+    </div>
   </div>
   <table>
     <thead><tr><th style="width:60px;">사용</th><th>공정 (순서)</th><th style="width:100px;">COPQ</th>
@@ -78,4 +87,42 @@
 })();
 </script>
 {% endif %}
+<script>
+// 기준단가(최종가격) 입력 → "사용" 체크된 공정에 파트·정형유무 배분비율로 자동 입력
+(function () {
+  var RATIO_WITH_JH = {"성형": 0.5, "소결": 0.6, "정형": 0.8};
+  var RATIO_NO_JH = {"성형": 0.6, "소결": 0.8};
+  var RATIO_TM_PART_JH = {"성형": 0.5, "소결": 0.8, "정형": 0.8};
+  var RATIO_TM_PART_NOJH = {"성형": 0.5, "소결": 0.8};
+  var REST = ["가공", "기타"];
+  function ratiosFor(part, hasJh) {
+    if (part === "TM PART") return hasJh ? RATIO_TM_PART_JH : RATIO_TM_PART_NOJH;
+    return hasJh ? RATIO_WITH_JH : RATIO_NO_JH;
+  }
+  var baseEl = document.getElementById("baseUnitPrice");
+  var partEl = document.querySelector('select[name="part"]');
+  var jhEl = document.querySelector('input[name="use_정형"]');
+  if (!baseEl) return;
+  function recalc() {
+    var base = parseFloat(baseEl.value);
+    if (!base || base <= 0) return;
+    var part = partEl ? partEl.value : "";
+    var hasJh = jhEl ? jhEl.checked : false;
+    var ratios = ratiosFor(part, hasJh);
+    document.querySelectorAll('input[name^="use_"]').forEach(function (cb) {
+      if (!cb.checked) return;
+      var pr = cb.name.slice(4);
+      var el = document.getElementById("price_" + pr);
+      if (!el) return;
+      var ratio = ratios[pr] !== undefined ? ratios[pr] : (REST.indexOf(pr) !== -1 ? 1.0 : null);
+      if (ratio != null) el.value = Math.round(base * ratio);
+    });
+  }
+  baseEl.addEventListener("input", recalc);
+  if (partEl) partEl.addEventListener("change", recalc);
+  document.querySelectorAll('input[name^="use_"]').forEach(function (cb) {
+    cb.addEventListener("change", recalc);
+  });
+})();
+</script>
 {% endblock %}

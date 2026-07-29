@@ -33,9 +33,9 @@
   <span class="fitem">Customer Incident <b>{{ fresh.incident or '-' }}</b></span>
 </div>
 
-{% macro top_table(title, sub, rows) %}
+{% macro top_table(title, sub, rows, part_label) %}
 <div class="panel">
-  <div class="phead"><h2>{{ title }}</h2><span class="tot">{{ sub }} · {{ d.top_part|pl }}</span></div>
+  <div class="phead"><h2>{{ title }}</h2><span class="tot">{{ sub }} · {{ part_label|pl }}</span></div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th class="num">불량율(ppm)</th><th>불량유형별 수량</th></tr></thead>
     <tbody>
@@ -97,20 +97,28 @@
       data-targets="{{ c.copq_targets }}" data-labels="{{ c.labels }}" data-values="{{ c.copq_values }}"></div>
   </div>
   <div class="mcard">
-    <div class="mh"><div><div class="mt"><span class="dot" style="background:var(--sec)"></span>당월 주별 COPQ <span class="est" style="margin-left:2px;">추정 SVP</span></div>
-      <div class="mv">{{ d.cards.copq.pct|cf2 }}<small>%</small></div>
+    <div class="mh"><div><div class="mt"><span class="dot" id="wDot" style="background:var(--sec)"></span><span id="wTitle">당월 주별 COPQ</span> <span class="est" style="margin-left:2px;">추정 SVP</span></div>
+      <div class="mv" id="wVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div>
       <div class="msub">{{ '%d월'|format(d.cm) }} · {{ d.cur_week }}주 진행</div></div></div>
-    <div class="jchart" data-type="bar" data-color="--sec" data-unit="%" data-dec="2" data-cur="{{ c.wk_cur }}"
+    <div class="jchart" id="wChart" data-type="bar" data-color="--sec" data-unit="%" data-dec="2" data-cur="{{ c.wk_cur }}"
       {% if c.wk_target is not none %}data-target="{{ c.wk_target }}"{% endif %}
       data-labels="{{ c.wk_labels }}" data-values="{{ c.wk_values }}"></div>
   </div>
 </div>
 
 <div class="toph"><h2>공정불량 TOP 5</h2>
-  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">{{ d.top_part|pl }} · 발생 수량 순 · 불량유형별 수량</span></div>
-<div class="grid2">
-  {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top_month) }}
-  {{ top_table("해당주 누적", '%d월 %d주차'|format(d.cm, d.cur_week), d.top_week) }}
+  <div class="seg" id="topPartSeg" style="margin-left:14px;">
+    <a class="segb {{ 'on' if d.top_part_default=='VMS PART' }}" data-tp="VMS PART" href="javascript:void(0)">1PART</a>
+    <a class="segb {{ 'on' if d.top_part_default=='TM PART' }}" data-tp="TM PART" href="javascript:void(0)">2PART</a>
+  </div>
+  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">발생 수량 순 · 불량유형별 수량</span></div>
+<div class="grid2" data-topgrid="VMS PART" style="{{ '' if d.top_part_default=='VMS PART' else 'display:none;' }}">
+  {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top5['VMS PART'].month, 'VMS PART') }}
+  {{ top_table("해당주 누적", '%d월 %d주차'|format(d.cm, d.cur_week), d.top5['VMS PART'].week, 'VMS PART') }}
+</div>
+<div class="grid2" data-topgrid="TM PART" style="{{ '' if d.top_part_default=='TM PART' else 'display:none;' }}">
+  {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top5['TM PART'].month, 'TM PART') }}
+  {{ top_table("해당주 누적", '%d월 %d주차'|format(d.cm, d.cur_week), d.top5['TM PART'].week, 'TM PART') }}
 </div>
 {% endblock %}
 
@@ -121,13 +129,18 @@
   var METRICS = {
   {%- for mt in d.charts.metrics %}
     "{{ mt.key }}": {label: "{{ mt.label }}", unit: "{{ mt.unit }}", dec: {{ mt.dec }},
-                     color: "{{ mt.color }}", values: "{{ mt.vseries }}", targets: "{{ mt.targets }}"}{{ "," if not loop.last }}
+                     color: "{{ mt.color }}", values: "{{ mt.vseries }}", targets: "{{ mt.targets }}",
+                     wkValues: "{{ mt.wk_values }}", wkTarget: {{ mt.wk_target|tojson }}}{{ "," if not loop.last }}
   {%- endfor %}
   };
   var chart = document.getElementById("mChart");
   var title = document.getElementById("mTitle");
   var dot = document.getElementById("mDot");
   var valEl = document.getElementById("mVal");
+  var wchart = document.getElementById("wChart");
+  var wtitle = document.getElementById("wTitle");
+  var wdot = document.getElementById("wDot");
+  var wvalEl = document.getElementById("wVal");
   if (!chart) return;
 
   function fmt(v, dec) {
@@ -147,6 +160,20 @@
     var last = m.values.split(",").pop().trim();
     valEl.innerHTML = fmt(last === "" ? null : Number(last), m.dec) + "<small>" + m.unit + "</small>";
     window.renderChart(chart);
+
+    if (wchart) {
+      wchart.dataset.values = m.wkValues;
+      if (m.wkTarget == null) { delete wchart.dataset.target; } else { wchart.dataset.target = m.wkTarget; }
+      wchart.dataset.unit = m.unit;
+      wchart.dataset.dec = m.dec;
+      wchart.dataset.color = m.color;
+      wtitle.textContent = "당월 주별 " + m.label;
+      wdot.style.background = "var(" + m.color + ")";
+      var wlast = m.wkValues.split(",").pop().trim();
+      wvalEl.innerHTML = fmt(wlast === "" ? null : Number(wlast), m.dec) + "<small>" + m.unit + "</small>";
+      window.renderChart(wchart);
+    }
+
     document.querySelectorAll(".kpi[data-metric]").forEach(function (el) {
       el.classList.toggle("sel", el.dataset.metric === key);
     });
@@ -160,6 +187,17 @@
   var saved = null;
   try { saved = localStorage.getItem("qms_metric"); } catch (e) {}
   select(METRICS[saved] ? saved : "copq");
+
+  // 공정불량 TOP5: 1PART/2PART 선택바
+  document.querySelectorAll("#topPartSeg .segb").forEach(function (el) {
+    el.addEventListener("click", function () {
+      var tp = el.dataset.tp;
+      document.querySelectorAll("#topPartSeg .segb").forEach(function (s) { s.classList.toggle("on", s === el); });
+      document.querySelectorAll("[data-topgrid]").forEach(function (g) {
+        g.style.display = g.dataset.topgrid === tp ? "" : "none";
+      });
+    });
+  });
 })();
 </script>
 {% endblock %}

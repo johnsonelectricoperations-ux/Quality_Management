@@ -1,14 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="panel"><div class="phead"><h2>TM-NO 미등록</h2><span class="tot">{{ unreg_rows|length }}건</span></div>
+<div class="panel"><div class="phead"><h2>TM-NO 미등록</h2><span class="tot">{{ unreg_rows|length }}건</span>
+  <label style="margin-left:auto;display:flex;align-items:center;gap:5px;font:600 12px/1 inherit;color:var(--tx3);cursor:pointer;">
+    <input type="checkbox" id="showHiddenChk" {{ 'checked' if show_hidden }}> 숨긴 항목 보기{% if hidden_count %} ({{ hidden_count }}){% endif %}
+  </label>
+  </div>
   <table>
-    <thead><tr><th>TM-NO</th><th>파트(추정)</th><th>최근 발생일</th><th>출처</th><th style="width:100px;"></th></tr></thead>
+    <thead><tr><th>TM-NO</th><th>파트(추정)</th><th>최근 발생일</th><th>출처</th><th style="width:170px;"></th></tr></thead>
     <tbody>
     {% for r in unreg_rows %}
-      <tr>
+      <tr{{ ' style="opacity:.55;"' if r.hidden }}>
         <td class="mono">{{ r.tm_no }}</td><td>{{ r.part|pl if r.part else '-' }}</td>
         <td class="mono">{{ r.last_d }}</td><td>{{ r.src }}</td>
-        <td>{% if can_edit %}<a class="btn btn-p btn-sm" href="/admin/products/new?tm={{ r.tm_no }}" style="text-decoration:none;">등록</a>{% endif %}</td>
+        <td style="display:flex;gap:6px;">
+          {% if can_edit %}<a class="btn btn-p btn-sm" href="/admin/products/new?tm={{ r.tm_no }}" style="text-decoration:none;">등록</a>
+          {% if r.hidden %}
+          <form method="post" action="/admin/data-check/unhide" style="display:inline;">
+            <input type="hidden" name="tm_no" value="{{ r.tm_no }}">
+            <button type="submit" class="btn btn-s btn-sm">보이기</button>
+          </form>
+          {% else %}
+          <form method="post" action="/admin/data-check/hide" style="display:inline;">
+            <input type="hidden" name="tm_no" value="{{ r.tm_no }}">
+            <button type="submit" class="btn btn-ghost btn-sm">숨기기</button>
+          </form>
+          {% endif %}
+          {% endif %}
+        </td>
       </tr>
     {% else %}
       <tr><td colspan="5" style="color:var(--tx3);">제품 마스터에 없는 TM-NO가 없습니다.</td></tr>
@@ -33,4 +51,11 @@
     </tbody>
   </table>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("showHiddenChk").addEventListener("change", function () {
+  location.href = "/admin/data-check" + (this.checked ? "?show_hidden=1" : "");
+});
+</script>
 {% endblock %}

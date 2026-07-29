@@ -377,16 +377,20 @@ erDiagram
 
 ```
 개요
-  /                          대시보드 — KPI 카드 클릭 시 아래 그래프 전환(막대+목표선)
+  /                          대시보드 — KPI 카드 클릭 시 아래 월별·주별 그래프 모두 전환(막대+목표선)
+  /report/detail             ★ 세부지표현황 (아래 상세, 2026-07-29부터 개요 그룹으로 이동)
 데이터 입력
   /input/svp                 SVP 입력 (FY 가로 표, 단위 원, 합계 직접 입력)
   /input/claim               Claim 입력
   /input/incident            Customer Incident 관리
   /input/outsource-review    불량 검토(100EA↑) — 승인/수정/삭제  ※대기 건 있을 때만 노출
-집계 / 리포트
-  /report/detail             ★ 세부지표현황 (아래 상세)
+리포트                        (2026-07-29 "집계/리포트"에서 개명, 현재 하위 메뉴 없음 — 추후 결정)
 관리
-  /admin/products            제품 마스터 (단가 포함) — 추가/수정/삭제
+  /admin/data-check          데이터 점검 — TM-NO 미등록 있으면 메뉴에 경고 뱃지(⚠N),
+                              미등록 행 "숨기기"(data_check_hidden 테이블) 가능         [관리자]
+  /admin/products            제품 마스터 (단가 포함) — 추가/수정/삭제.
+                              공정별단가는 "기준단가(최종가격)" 입력 후 사용 체크박스를
+                              토글하면 배분비율(price_calc.ratios_for와 동일 규칙)로 자동입력
   /admin/processes           공정 관리
   /admin/scan                폴더 반영 — 초기 구축 / 스캔 실행 / 루트 설정     [관리자]
   /masters                   마스터 조회

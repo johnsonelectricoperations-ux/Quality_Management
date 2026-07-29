@@ -61,6 +61,10 @@ def require(role="viewer"):
 
 def render(request, template, user, **ctx):
     ctx.setdefault("crumb", "")
+    if user["role"] == "admin":
+        ctx.setdefault("unreg_alert", unreg_alert_count())
+    else:
+        ctx.setdefault("unreg_alert", 0)
     return tpl.TemplateResponse(request, template, {
         "user": user, "role_ko": ROLE_KO.get(user["role"], ""), **ctx})
 
@@ -249,6 +253,20 @@ def build_dashboard(conn, m, daily, part):
         return _join([target_val(conn, calc.fy_of(y, mm), tpart or part, kpi, mm if monthly else 0)
                       for (y, mm) in months])
 
+    # 당월 주별 지표 (추정 SVP, claim/Warranty 생산액 비례배분) — 카드 클릭 전환 시 이 차트도 함께 바뀌도록
+    # 월별 metrics와 동일한 key 세트로 준비해둔다.
+    weekly = build_weekly(conn, m, daily, cy, cm, part)
+    wk_field = {"copq": "copq_pct", "scrap_cost": "scrap_cost_pct", "scrap_qty": "scrap_qty_pct",
+               "incident": "incident", "warranty": "warranty", "proc_ppm": "proc_ppm",
+               "set_ppm": "set_ppm", "prod_qty": "prod_qty"}
+    wk_target = {"copq": target_val(conn, cur_fy, part, "copq"),
+                "scrap_cost": target_val(conn, cur_fy, part, "scrap_cost"),
+                "scrap_qty": target_val(conn, cur_fy, part, "scrap_qty"),
+                "incident": None, "warranty": None,
+                "proc_ppm": target_val(conn, cur_fy, ppm_part, "proc_ppm", cm),
+                "set_ppm": target_val(conn, cur_fy, ppm_part, "set_ppm", cm),
+                "prod_qty": None}
+
     metrics = [
         {"key": "copq", "label": "COPQ", "unit": "%", "dec": 2, "color": "--p-500",
          "vseries": _join([s["copq_pct"] for s in series]), "targets": targets("copq")},
@@ -271,58 +289,96 @@ def build_dashboard(conn, m, daily, part):
     ]
     for mt in metrics:
         mt["targets"] = _join(mt["targets"]) if isinstance(mt["targets"], list) else mt["targets"]
+        mt["wk_values"] = _join([w[wk_field[mt["key"]]] for w in weekly])
+        mt["wk_target"] = wk_target[mt["key"]]
     charts["metrics"] = metrics
 
-    # 당월 주별 COPQ (추정 SVP, claim 생산액 비례배분)
-    weekly = build_weekly(conn, m, daily, cy, cm, part)
     charts["wk_labels"] = ",".join(f"{w['week']}주" for w in weekly)
     charts["wk_values"] = _join([w["copq_pct"] for w in weekly])
-    charts["wk_target"] = target_val(conn, cur_fy, part, "copq")
+    charts["wk_target"] = wk_target["copq"]
     charts["wk_cur"] = len(weekly) - 1
 
-    # TOP5
-    from datetime import date, timedelta
+    # TOP5 — 1PART/2PART 각각 항상 계산해두고, 화면에서 선택바로 전환한다(페이지 전체 파트 필터와 무관).
     mstart = f"{cy:04d}-{cm:02d}-01"
     mend = f"{cy:04d}-{cm:02d}-31"
-    top_parts = "VMS PART" if part == "통합" else part
-    top_month = calc.top5_defect(conn, m, mstart, mend, top_parts)
     cur_week = weekly[-1]["week"] if weekly else 1
     ws = weekly[-1]["start"] if weekly else mstart
     we = weekly[-1]["end"] if weekly else mend
-    top_week = calc.top5_defect(conn, m, ws, we, top_parts)
+    top5 = {}
+    for tp in ("VMS PART", "TM PART"):
+        top5[tp] = {"month": calc.top5_defect(conn, m, mstart, mend, tp),
+                    "week": calc.top5_defect(conn, m, ws, we, tp)}
+    top_part_default = "TM PART" if part == "TM PART" else "VMS PART"
     return {"cy": cy, "cm": cm, "cur_fy": calc.fy_label(cur_fy), "cards": cards,
-            "charts": charts, "top_month": top_month, "top_week": top_week,
-            "top_part": top_parts, "cur_week": cur_week}
+            "charts": charts, "top5": top5, "top_part_default": top_part_default,
+            "cur_week": cur_week}
 
 
 def build_weekly(conn, m, daily, cy, cm, part):
+    """당월 주별(월~일) 지표. COPQ 외 카드 클릭 전환에 맞춰 전 지표를 계산한다.
+    SVP·Warranty·claim은 월 단위로만 존재하므로, 그 주의 생산금액 비중만큼 월값을 비례배분한다
+    (기존 COPQ 주별 계산과 동일한 방식을 전 지표로 확장)."""
     parts = calc._parts_for(part)
     ym = f"{cy:04d}-{cm:02d}"
-    claim_total = calc.claim_sum(conn, ym, parts, calc.CLAIM_COPQ_ITEMS)
-    wk = defaultdict(lambda: {"copq_cost": 0.0, "prod_amt": 0.0, "start": None, "end": None})
+    svp_month = calc.svp_of(conn, ym, parts)
+    copq_claim_total = calc.claim_sum(conn, ym, parts, calc.CLAIM_COPQ_ITEMS)
+    warranty_total = calc.claim_sum(conn, ym, parts, ["Warranty"])
+
+    wk = defaultdict(lambda: {"scrap_qty": 0, "scrap_cost": 0.0, "scrap_cost_copq": 0.0,
+                              "proc_qty": 0, "set_qty": 0, "prod_qty": 0, "prod_amount": 0.0,
+                              "start": None, "end": None})
     from datetime import date, timedelta
     d = date(cy, cm, 1)
-    month_prod = 0.0
+    month_prod_amt = 0.0
     while d.month == cm and d.year == cy:
         ds = d.isoformat()
         w = calc.week_of_month(ds)
-        if wk[w]["start"] is None:
-            wk[w]["start"] = ds
-        wk[w]["end"] = ds                           # 월~일 기준, 월 경계에서 잘린 첫/마지막 주 포함
+        cell = wk[w]
+        if cell["start"] is None:
+            cell["start"] = ds
+        cell["end"] = ds                             # 월~일 기준, 월 경계에서 잘린 첫/마지막 주 포함
         for p in parts:
             c = daily.get(ds, {}).get(p)
             if c:
-                wk[w]["copq_cost"] += c["scrap_cost_copq"]
-                wk[w]["prod_amt"] += c["prod_amount"]
-                month_prod += c["prod_amount"]
+                cell["scrap_qty"] += c["scrap_qty"]
+                cell["scrap_cost"] += c["scrap_cost"]
+                cell["scrap_cost_copq"] += c["scrap_cost_copq"]
+                cell["proc_qty"] += c["proc_qty"]
+                cell["set_qty"] += c["set_qty"]
+                cell["prod_qty"] += c["prod_qty"]
+                cell["prod_amount"] += c["prod_amount"]
+                month_prod_amt += c["prod_amount"]
         d += timedelta(days=1)
+
+    def pct(a, b):
+        return round(a / b * 100, 2) if b else 0.0
+
+    def ppm(a, b):
+        return round(a / b * 1_000_000) if b else 0
+
     out = []
     for w in sorted(wk):
-        pa = wk[w]["prod_amt"]
-        claim_w = claim_total * (pa / month_prod) if month_prod else 0
-        cost = wk[w]["copq_cost"] + claim_w
-        pct = round(cost / pa * 100, 2) if pa else 0
-        out.append({"week": w, "copq_pct": pct, "start": wk[w]["start"], "end": wk[w]["end"]})
+        cell = wk[w]
+        pa = cell["prod_amount"]
+        share = (pa / month_prod_amt) if month_prod_amt else 0
+        svp_w = (svp_month * share) if svp_month else pa
+        claim_w = copq_claim_total * share
+        warranty_w = warranty_total * share
+        incident_w = conn.execute(
+            ("SELECT COUNT(*) c FROM incident WHERE is_official=1 AND d BETWEEN ? AND ? AND part IN (%s)"
+             % ",".join("?" * len(parts))), [cell["start"], cell["end"]] + list(parts)).fetchone()["c"]
+        copq_cost = cell["scrap_cost_copq"] + claim_w
+        out.append({
+            "week": w, "start": cell["start"], "end": cell["end"],
+            "copq_pct": pct(copq_cost, svp_w),
+            "scrap_cost_pct": pct(cell["scrap_cost"], svp_w),
+            "scrap_qty_pct": pct(cell["scrap_qty"], cell["prod_qty"]),
+            "proc_ppm": ppm(cell["proc_qty"], cell["prod_qty"]),
+            "set_ppm": ppm(cell["set_qty"], cell["prod_qty"]),
+            "incident": incident_w,
+            "warranty": round(warranty_w),
+            "prod_qty": cell["prod_qty"],
+        })
     return out
 
 
@@ -432,7 +488,7 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
                        "d_from": df, "d_to": dt, "trend2": trend2})
     conn.close()
     return render(request, "report_detail.html", u, active="rdetail", heading="세부지표현황",
-                  crumb="집계/리포트", pending=pending_count(), **ctx)
+                  crumb="개요", pending=pending_count(), **ctx)
 
 
 @app.get("/report/tmno-search")
@@ -572,6 +628,18 @@ def _price_map(conn, tm):
     return {p: cur.get(p) for p in db.AGG_PROCESSES}
 
 
+def _hidden_tmnos(conn):
+    return {r["tm_no"] for r in conn.execute("SELECT tm_no FROM data_check_hidden")}
+
+
+def unreg_alert_count():
+    """메뉴 경고 아이콘용: 숨김 처리 안 한 TM-NO 미등록 건수."""
+    conn = db.connect()
+    unreg_rows, _missing = _data_check(conn)
+    conn.close()
+    return len([r for r in unreg_rows if not r["hidden"]])
+
+
 def _data_check(conn):
     """TM-NO 미등록 / 공정별 단가 누락 점검. 반환: (미등록 목록, 단가누락 목록)."""
     unreg = {}
@@ -591,7 +659,9 @@ def _data_check(conn):
         if r["part"] and not cur["part"]:
             cur["part"] = r["part"]
         cur["src"].add("생산량")
-    unreg_rows = [{"tm_no": tm, "part": v["part"], "last_d": v["last_d"], "src": "·".join(sorted(v["src"]))}
+    hidden = _hidden_tmnos(conn)
+    unreg_rows = [{"tm_no": tm, "part": v["part"], "last_d": v["last_d"], "src": "·".join(sorted(v["src"])),
+                   "hidden": tm in hidden}
                   for tm, v in unreg.items()]
     unreg_rows.sort(key=lambda r: r["last_d"], reverse=True)
 
@@ -626,7 +696,7 @@ def _data_check(conn):
 
 
 @app.get("/admin/data-check", response_class=HTMLResponse)
-def data_check_page(request: Request):
+def data_check_page(request: Request, show_hidden: str = ""):
     """TM-NO 미등록·공정별 단가 누락 점검 화면. 관리자가 바로 등록 화면으로 이동해 채울 수 있다."""
     u = current_user(request)
     g = _guard(u)
@@ -637,9 +707,45 @@ def data_check_page(request: Request):
     conn = db.connect()
     unreg_rows, missing_rows = _data_check(conn)
     conn.close()
+    show_hidden = show_hidden == "1"
+    hidden_count = len([r for r in unreg_rows if r["hidden"]])
+    if not show_hidden:
+        unreg_rows = [r for r in unreg_rows if not r["hidden"]]
     return render(request, "data_check.html", u, active="data_check", heading="데이터 점검",
                   crumb="관리", pending=pending_count(), unreg_rows=unreg_rows, missing_rows=missing_rows,
-                  can_edit=(u["role"] == "admin"))
+                  hidden_count=hidden_count, show_hidden=show_hidden, can_edit=(u["role"] == "admin"))
+
+
+@app.post("/admin/data-check/hide")
+def data_check_hide(request: Request, tm_no: str = Form(...)):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO data_check_hidden(tm_no, hidden_at) VALUES(?, datetime('now')) "
+        "ON CONFLICT(tm_no) DO NOTHING", (tm_no,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/data-check", status_code=303)
+
+
+@app.post("/admin/data-check/unhide")
+def data_check_unhide(request: Request, tm_no: str = Form(...)):
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return g
+    if u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM data_check_hidden WHERE tm_no=?", (tm_no,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/data-check?show_hidden=1", status_code=303)
 
 
 @app.get("/admin/products", response_class=HTMLResponse)

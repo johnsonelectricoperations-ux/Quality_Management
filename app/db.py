@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS upload_log (
   id INTEGER PRIMARY KEY, ts TEXT NOT NULL, kind TEXT NOT NULL,
   filename TEXT NOT NULL, ok INTEGER NOT NULL, note TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS data_check_hidden (
+  tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS ix_defect_d ON defect_entry(d);
 CREATE INDEX IF NOT EXISTS ix_prod_d ON production(d);
 """

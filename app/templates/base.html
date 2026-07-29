@@ -12,15 +12,15 @@
   <div class="brand"><span class="mark"></span><div>통합품질관리<small>Quality Management</small></div></div>
   <div class="cap">개요</div>
   <a class="nav {{ 'on' if active=='dash' }}" href="/">▣ 대시보드</a>
+  <a class="nav {{ 'on' if active=='rdetail' }}" href="/report/detail">📈 세부지표현황</a>
   <div class="cap">데이터 입력</div>
   <a class="nav {{ 'on' if active=='svp' }}" href="/input/svp">₩ SVP 입력</a>
   <a class="nav {{ 'on' if active=='claim' }}" href="/input/claim">▤ Claim 입력</a>
   <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
   {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span></a>{% endif %}
-  <div class="cap">집계 / 리포트</div>
-  <a class="nav {{ 'on' if active=='rdetail' }}" href="/report/detail">📈 세부지표현황</a>
+  <div class="cap">리포트</div>
   <div class="cap">관리</div>
-  <a class="nav {{ 'on' if active=='data_check' }}" href="/admin/data-check">🩺 데이터 점검<span class="role">관리자</span></a>
+  <a class="nav {{ 'on' if active=='data_check' }}" href="/admin/data-check">🩺 데이터 점검<span class="role">관리자</span>{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}</a>
   <a class="nav {{ 'on' if active=='products' }}" href="/admin/products">📦 제품 마스터 (단가 포함)</a>
   <a class="nav {{ 'on' if active=='processes' }}" href="/admin/processes">🏭 공정 관리</a>
   <a class="nav {{ 'on' if active=='defect_types' }}" href="/admin/defect-types">⚠ 불량유형 마스터<span class="role">관리자</span></a>

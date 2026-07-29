@@ -449,6 +449,52 @@
 
 ## 최근 로그
 
+### 2026-07-29 (29) — 데이터점검 경고아이콘/숨기기, 공정별단가 자동입력, 메뉴 재배치, 대시보드 주별차트·TOP5 수정
+- 목표: 사용자 요청 6가지 — ① 데이터점검 메뉴에 미등록 TM-NO 있으면 경고아이콘 ② 공정별단가에
+  "기준단가(최종가격)" 입력 칸 추가, 해당공정 선택 시 자동으로 배분비율대로 단가 입력 ③ 세부지표현황
+  메뉴를 개요-대시보드 아래로 이동, "집계/리포트"를 "리포트"로 개명(내용은 추후 결정) ④ 데이터점검
+  미등록 리스트에 "숨기기" 버튼(누르면 목록·경고아이콘에서 제외) + "숨긴 항목 보기" 체크박스로 다시
+  노출 ⑤ 대시보드 KPI 카드 클릭 시 월별 차트는 바뀌는데 주별 차트가 안 바뀌던 버그 수정 ⑥ 대시보드
+  "공정불량 TOP5"에 1PART/2PART 선택바를 제목 옆에 추가해 그 선택에 따라 표가 바뀌도록.
+- `app/db.py`: `data_check_hidden(tm_no PK, hidden_at)` 테이블 신설(숨김 처리 저장).
+- `app/main.py`:
+  - `_hidden_tmnos()`/`unreg_alert_count()` 신설, `render()`에서 관리자 로그인 시 항상
+    `unreg_alert`를 계산해 컨텍스트에 넣음(모든 페이지 메뉴에서 뱃지 표시 가능하도록 16개 호출부를
+    다 고치지 않고 `render()` 한 곳에서 처리).
+  - `_data_check()`가 각 미등록 행에 `hidden` 플래그 포함. `data_check_page()`에 `show_hidden`
+    쿼리파라미터 추가(기본은 숨김 항목 제외). `/admin/data-check/hide`, `/admin/data-check/unhide`
+    POST 엔드포인트 신설.
+  - `build_weekly()` 전면 확장: 기존엔 COPQ 주별 비율만 계산했는데, scrap_cost/scrap_qty/proc_ppm/
+    set_ppm/incident/warranty/prod_qty까지 전 지표를 주 단위로 계산하도록 확장(SVP·Warranty·claim은
+    월 단위 값이라 그 주의 생산금액 비중으로 비례배분하는 기존 COPQ 방식을 그대로 확장 적용,
+    incident는 날짜 범위로 직접 카운트). `build_dashboard()`의 `metrics` 리스트 각 항목에
+    `wk_values`/`wk_target`을 추가.
+  - TOP5: 페이지 전체 파트필터와 무관하게 VMS PART·TM PART 양쪽을 항상 계산해 `top5` 딕셔너리로
+    반환(`top_part_default`는 현재 파트필터가 TM PART면 2PART, 아니면 1PART).
+- `app/templates/base.html`: 세부지표현황을 개요 그룹으로 이동, "집계 / 리포트" 캡션을 "리포트"로
+  변경(현재 하위 메뉴 없음, 추후 항목 추가 예정). 데이터 점검 메뉴에 `unreg_alert` 값이 있으면
+  "⚠ N" 뱃지 표시.
+- `app/static/qms.css`: `.nav .warn-ic` 스타일(빨간 배지) 추가.
+- `app/templates/data_check.html`: 미등록 목록에 "숨기기"/"보이기" 버튼(폼 POST), 상단에 "숨긴 항목
+  보기" 체크박스(체크 시 `?show_hidden=1`로 이동) 추가.
+- `app/templates/product_form.html`: "기준단가(최종가격, 원)" 입력 칸 추가(폼 미제출, 순수 JS
+  보조용). 입력하거나 "사용" 체크박스를 토글하면 `price_calc.py`의 배분비율(성형/소결/정형=
+  기준단가×비율, 가공/기타=기준단가 그대로, 파트·정형유무별 비율은 파이썬 규칙과 동일하게 JS로
+  이식)을 그대로 필드에 채운다. 채운 뒤에도 직접 수정 가능. 기존 "최근 3개월 평균단가로 채우기"
+  버튼(생산실적 기반 제안)은 그대로 유지, 별개 기능으로 공존.
+- `app/templates/dashboard.html`: 주별 차트에 id 부여(`wChart`/`wTitle`/`wDot`/`wVal`) 하고 KPI 카드
+  클릭 JS(`select()`)에서 월별 차트와 동일하게 주별 차트도 함께 갱신하도록 수정. TOP5 영역에
+  1PART/2PART 선택바(`#topPartSeg`) 추가, 클릭 시 두 `data-topgrid` 블록을 보이기/숨기기로 전환.
+- 검증: 서버 기동 후 Playwright로 로그인 → 대시보드에서 "공정불량율" 카드 클릭 시 주별 차트 라벨·
+  값·제목이 COPQ에서 "당월 주별 공정불량율"로 실제 변경됨 확인. TOP5에서 2PART 클릭 시 VMS 블록
+  숨김/TM 블록 노출 확인. 데이터점검 메뉴에 "⚠ 14" 뱃지 노출 확인(당시 미등록 15건 중 1건 숨김
+  처리 후). 숨기기 클릭 → 목록 15→14건, "숨긴 항목 보기" 체크 → 15건(숨김 표시 회색 처리)로 복귀,
+  보이기 클릭 → 정상 해제 확인. 제품 수정 화면에서 기준단가 1000원 입력 + 전체 공정 체크 시
+  성형500/소결600/정형800/기타1000(정형있음 규칙 0.5/0.6/0.8/1.0)로 정확히 자동 입력됨 확인.
+  메뉴 순서(대시보드→세부지표현황→...→리포트(빈 캡션)→관리) 렌더 결과로 재확인. 콘솔 JS 에러
+  없음(파비콘 404 1건은 무관). `python3 -c "from app import main"` 및 4개 템플릿 Jinja 컴파일
+  확인 통과.
+
 ### 2026-07-29 (28) — 세부지표현황: 누계 열 + Warranty/Incident 월별화 + 불량유형별 item/유형 서브탭
 - 목표: (27)번 이후 사용자가 5가지를 추가 요청 — ① Warranty/Incident에 발생·누적·목표 행 추가
   ② Scrap Cost/Quantity/COPQ/Incident/Warranty/공정불량에 4월 왼쪽 "누계" 열 추가
