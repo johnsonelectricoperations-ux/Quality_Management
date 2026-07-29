@@ -46,6 +46,17 @@
 </div>
 <style>a.nav{text-decoration:none;}</style>
 <script src="/static/theme.js"></script>
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  if (params.get('perm_denied') === '1') {
+    params.delete('perm_denied');
+    var newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
+    history.replaceState(null, '', newUrl);
+    alert('권한이 없습니다. 품질관리팀에 문의하세요.');
+  }
+})();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

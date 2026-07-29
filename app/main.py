@@ -98,12 +98,15 @@ def logout(request: Request):
     return resp
 
 
+FORBIDDEN_REDIRECT = "/?perm_denied=1"   # 대시보드로 보내되 팝업으로 사유를 알림(base.html의 JS가 처리)
+
+
 def _guard(u):
     """로그인/권한 체크 → 리다이렉트 or None."""
     if u is None:
         return RedirectResponse("/login", status_code=303)
     if u.get("_forbidden"):
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     return None
 
 
@@ -155,7 +158,7 @@ def _perm_guard(request, menu_key, level="view"):
     if g:
         return u, g
     if not has_perm(u["role"], menu_key, level):
-        return u, RedirectResponse("/", status_code=303)
+        return u, RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     return u, None
 
 
@@ -1315,7 +1318,7 @@ def admin_users(request: Request, edit: str = "", msg: str = "", err: str = ""):
     if g:
         return g
     if u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     conn = db.connect()
     users = [dict(r) for r in conn.execute("SELECT username,name,role FROM users ORDER BY role")]
     edit_row = None
@@ -1336,7 +1339,7 @@ def admin_users_save(request: Request, orig_username: str = Form(""), username: 
                      name: str = Form(...), role: str = Form(...), password: str = Form("")):
     u = current_user(request)
     if u is None or u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     username = username.strip()
     if role not in ("editor", "viewer"):
         return RedirectResponse("/admin/users?err=권한은 editor 또는 viewer만 지정할 수 있습니다.", status_code=303)
@@ -1380,7 +1383,7 @@ def admin_users_save(request: Request, orig_username: str = Form(""), username: 
 def admin_users_delete(request: Request, username: str):
     u = current_user(request)
     if u is None or u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     conn = db.connect()
     row = conn.execute("SELECT role FROM users WHERE username=?", (username,)).fetchone()
     if row and row["role"] in ("editor", "viewer"):
@@ -1395,7 +1398,7 @@ async def admin_permissions_save(request: Request):
     """editor/viewer 메뉴별 보기·편집 권한 매트릭스 저장(관리자 전용, 관리자 자신은 매트릭스 대상 아님)."""
     u = current_user(request)
     if u is None or u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(FORBIDDEN_REDIRECT, status_code=303)
     form = await request.form()
     conn = db.connect()
     for role in ("editor", "viewer"):
