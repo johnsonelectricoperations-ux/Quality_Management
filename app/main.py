@@ -8,7 +8,7 @@ import secrets
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -365,13 +365,15 @@ FY_MONTH_LABELS = [f"{mo}월" for mo in list(range(4, 13)) + list(range(1, 4))]
 
 
 @app.get("/report/detail", response_class=HTMLResponse)
-def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0,
+def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: str = "item",
                   tpart: str = "통합", d_tm: str = "", d_name: str = "",
-                  d_from: str = "", d_to: str = ""):
+                  d_from: str = "", d_to: str = "",
+                  t1: str = "", t2: str = "", t3: str = "", t_unit: str = "일"):
     """세부지표현황: 사용자 제공 세부지표현황.xlsx 양식과 동일한 탭 구성.
-    Scrap Cost/Quantity/COPQ/Customer Incident/Warranty는 Total·1Part·2Part 3블록×FY 12개월,
-    공정불량-1PART/2PART는 파트별 종합(집계기준 EA)+공정별(발생기준 ppm),
-    불량유형별은 Part·TM-NO·불량유형·기간으로 필터링하는 일 단위 추이."""
+    Scrap Cost/Quantity/COPQ/Customer Incident/Warranty는 Total·1Part·2Part 3블록×FY 12개월
+    (+4월 왼쪽 누계 열), 공정불량-1PART/2PART는 파트별 종합(집계기준 EA)+공정별(발생기준 ppm),
+    불량유형별은 [item별](Part·TM-NO·불량유형·기간, 일 단위) / [유형별](Part·불량유형 최대 3개·
+    집계단위 일/주/월) 두 서브탭."""
     u = current_user(request)
     g = _guard(u)
     if g:
@@ -407,18 +409,54 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0,
     else:  # trend
         if tpart not in ("통합", "VMS PART", "TM PART"):
             tpart = "통합"
-        df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
+        sub = sub if sub in ("item", "type") else "item"
         dtypes = [r["name"] for r in conn.execute(
             "SELECT DISTINCT name FROM defect_type ORDER BY name")]
-        trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, df, dt)
-        trend["chart_names"] = "|".join(trend["series"].keys())
-        trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
-        trend["days_csv"] = ",".join(trend["days"])
-        ctx.update({"tpart": tpart, "d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt,
-                   "defect_type_opts": dtypes, "trend": trend})
+        ctx.update({"sub": sub, "tpart": tpart, "defect_type_opts": dtypes})
+        if sub == "item":
+            df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
+            trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, df, dt)
+            trend["chart_names"] = "|".join(trend["series"].keys())
+            trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
+            trend["days_csv"] = ",".join(trend["days"])
+            ctx.update({"d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt, "trend": trend})
+        else:
+            t_unit = t_unit if t_unit in ("일", "주", "월") else "일"
+            df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
+            types = [t1, t2, t3]
+            trend2 = report_kpi.defect_trend_types(conn, m, tpart, types, t_unit, df, dt)
+            trend2["chart_names"] = "|".join(trend2["series"].keys())
+            trend2["chart_sets"] = "|".join(_join(v) for v in trend2["series"].values())
+            trend2["labels_csv"] = ",".join(trend2["labels"])
+            ctx.update({"t1": t1, "t2": t2, "t3": t3, "t_unit": t_unit,
+                       "d_from": df, "d_to": dt, "trend2": trend2})
     conn.close()
     return render(request, "report_detail.html", u, active="rdetail", heading="세부지표현황",
                   crumb="집계/리포트", pending=pending_count(), **ctx)
+
+
+@app.get("/report/tmno-search")
+def report_tmno_search(request: Request, q: str = "", part: str = ""):
+    """불량유형별[item별] TM-NO 자동완성용 JSON."""
+    u = current_user(request)
+    if u is None:
+        return JSONResponse([])
+    conn = db.connect()
+    rows = report_kpi.tmno_search(conn, q.strip().upper(), part)
+    conn.close()
+    return JSONResponse(rows)
+
+
+@app.get("/report/tmno-defects")
+def report_tmno_defects(request: Request, tm: str = ""):
+    """특정 TM-NO에 실제 발생한 불량유형 목록 JSON (불량유형 드롭다운 좁히기용)."""
+    u = current_user(request)
+    if u is None:
+        return JSONResponse([])
+    conn = db.connect()
+    rows = report_kpi.defect_names_for_tm(conn, tm.strip())
+    conn.close()
+    return JSONResponse(rows)
 
 
 # ── (구) 공정별 불량현황 → 세부지표현황으로 통합 (옛 링크 호환) ──

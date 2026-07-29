@@ -6,7 +6,12 @@
 - 성형/소결/정형/가공/기타 5개 행 배분(bucket): **단가는 발견공정 그대로 쓰되, 그 비용이
   집계되는 행은 불량유형 마스터가 정의한 귀책(원인)공정**을 따른다(2026-07-29 확정,
   `month_process()` 참고). 총액은 바뀌지 않고 5행 사이의 분배만 달라진다.
+- 각 표의 월별 열은 **그 달 단독 실적**만 보여주고, 4월 왼쪽의 **"누계"** 열이 데이터가 있는
+  월까지의 누적을 보여준다(2026-07-29 확정). 비율지표(Scrap Cost/Quantity/COPQ %,
+  공정불량 ppm)의 누계는 각 월 %의 단순합이 아니라 **누적 분자 ÷ 누적 분모**로 재계산한다.
 """
+import calendar
+import datetime as _dt
 from collections import defaultdict
 
 from . import db, calc
@@ -85,6 +90,23 @@ def month_prod(conn, m, y, mth, parts):
     return qty, amt
 
 
+def latest_actual_month(conn):
+    """생산량 데이터가 존재하는 마지막 (년,월). 없으면 None."""
+    row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
+    d = row["m"]
+    if not d:
+        return None
+    return int(d[:4]), int(d[5:7])
+
+
+def _months_so_far(fy, cutoff):
+    """FY 12개월 중 cutoff(년,월) 이전(포함)까지만. cutoff가 None이면 전부 제외."""
+    months = calc.fy_months(fy)
+    if cutoff is None:
+        return []
+    return [(y, mo) for (y, mo) in months if (y, mo) <= cutoff]
+
+
 def _target_flat(conn, fy, part, kpi):
     """MONTHLY_KPIS가 아닌 지표(scrap_cost/scrap_qty/copq)의 FY 단일 목표를 12개월에 반복."""
     v = calc_target_val(conn, fy, part, kpi)
@@ -110,17 +132,17 @@ def _pct(a, b):
 
 
 def _block_cost(conn, m, fy, part, qty_mode=False):
-    """Scrap Cost/Scrap Quantity 탭의 1개 블록(통합/1Part/2Part) 12개월치 데이터.
+    """Scrap Cost/Scrap Quantity 탭의 1개 블록(통합/1Part/2Part) 12개월치 데이터 + 누계.
     qty_mode=True면 단위가 EA(수량), False면 천원(비용)."""
     parts = calc._parts_for(part)
     months = calc.fy_months(fy)
+    cutoff = latest_actual_month(conn)
     key = "qty" if qty_mode else "cost"
     gj = {b: [] for b in BUCKETS}
     gj_sub = []
     setting = []
     total = []
     denom = []
-    target = []
     for (y, mo) in months:
         mp = month_process(conn, m, y, mo, parts)
         gj_month = 0.0
@@ -144,8 +166,18 @@ def _block_cost(conn, m, fy, part, qty_mode=False):
     tkpi = "scrap_qty" if qty_mode else "scrap_cost"
     target = _target_flat(conn, fy, part, tkpi)
     actual = [_pct(t, d) for t, d in zip(total, denom)]
+
+    idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
+    cum_gj = {b: sum(gj[b][i] for i in idxs) for b in BUCKETS}
+    cum_gj_sub = sum(gj_sub[i] for i in idxs)
+    cum_setting = sum(setting[i] for i in idxs)
+    cum_total = sum(total[i] for i in idxs)
+    cum_denom = sum(denom[i] for i in idxs)
+    cum = {"gj": cum_gj, "gj_sub": cum_gj_sub, "setting": cum_setting, "total": cum_total,
+          "denom": cum_denom, "target": target[0] if target else 0,
+          "actual": _pct(cum_total, cum_denom)}
     return {"gj": gj, "gj_sub": gj_sub, "setting": setting, "total": total,
-           "denom": denom, "target": target, "actual": actual}
+           "denom": denom, "target": target, "actual": actual, "cum": cum}
 
 
 def scrap_cost_table(conn, m, fy):
@@ -161,6 +193,7 @@ def scrap_qty_table(conn, m, fy):
 def _block_copq(conn, m, fy, part):
     parts = calc._parts_for(part)
     months = calc.fy_months(fy)
+    cutoff = latest_actual_month(conn)
     items = {it: [] for it in COPQ_ITEM_ORDER}
     total = []
     denom = []
@@ -186,7 +219,15 @@ def _block_copq(conn, m, fy, part):
         denom.append(s)
     target = _target_flat(conn, fy, part, "copq")
     actual = [_pct(t, d) for t, d in zip(total, denom)]
-    return {"copq_items": items, "total": total, "denom": denom, "target": target, "actual": actual}
+
+    idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
+    cum_items = {it: sum(items[it][i] for i in idxs) for it in COPQ_ITEM_ORDER}
+    cum_total = sum(total[i] for i in idxs)
+    cum_denom = sum(denom[i] for i in idxs)
+    cum = {"copq_items": cum_items, "total": cum_total, "denom": cum_denom,
+          "target": target[0] if target else 0, "actual": _pct(cum_total, cum_denom)}
+    return {"copq_items": items, "total": total, "denom": denom, "target": target,
+           "actual": actual, "cum": cum}
 
 
 def copq_table(conn, m, fy):
@@ -195,8 +236,10 @@ def copq_table(conn, m, fy):
 
 
 def _block_incident(conn, m, fy, part):
+    """월별 열은 그 달 발생분만(누적 아님). 왼쪽 누계 열에서 데이터가 있는 달까지 합산."""
     parts = calc._parts_for(part)
     months = calc.fy_months(fy)
+    cutoff = latest_actual_month(conn)
     official, unofficial, sub = [], [], []
     for (y, mo) in months:
         ym = "%04d-%02d" % (y, mo)
@@ -210,14 +253,13 @@ def _block_incident(conn, m, fy, part):
         official.append(off)
         unofficial.append(unoff)
         sub.append(off + unoff)
-    cum_official = []
-    run = 0
-    for v in official:
-        run += v
-        cum_official.append(run)
     target = _target_flat(conn, fy, part, "incident")
+
+    idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
+    cum_official = sum(official[i] for i in idxs)
+    cum = {"official": cum_official, "target": target[0] if target else 0}
     return {"sub": sub, "official": official, "unofficial": unofficial,
-           "target": target, "actual": cum_official}
+           "target": target, "cum": cum}
 
 
 def incident_table(conn, m, fy):
@@ -226,19 +268,20 @@ def incident_table(conn, m, fy):
 
 
 def _block_warranty(conn, m, fy, part):
+    """월별 열은 그 달 발생분만(누적 아님). 왼쪽 누계 열에서 데이터가 있는 달까지 합산."""
     parts = calc._parts_for(part)
     months = calc.fy_months(fy)
+    cutoff = latest_actual_month(conn)
     monthly = []
     for (y, mo) in months:
         ym = "%04d-%02d" % (y, mo)
         monthly.append(calc.claim_sum(conn, ym, parts, ["Warranty"]))
-    cum = []
-    run = 0.0
-    for v in monthly:
-        run += v
-        cum.append(run)
     target = _target_flat(conn, fy, part, "warranty")
-    return {"actual": cum, "target": target}
+
+    idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
+    cum_actual = sum(monthly[i] for i in idxs)
+    cum = {"actual": cum_actual, "target": target[0] if target else 0}
+    return {"actual": monthly, "target": target, "cum": cum}
 
 
 def warranty_table(conn, m, fy):
@@ -258,6 +301,7 @@ def process_table(conn, m, fy, part):
     """공정불량-1PART/2PART 탭 데이터. part는 'VMS PART' 또는 'TM PART' (단일 파트만)."""
     parts = [part]
     months = calc.fy_months(fy)
+    cutoff = latest_actual_month(conn)
     is1 = part == "VMS PART"
     raw_rows = RAW_ROWS_1PART if is1 else RAW_ROWS_2PART
 
@@ -265,6 +309,7 @@ def process_table(conn, m, fy, part):
     raw_sub = []
     prod_qty = []
     bucket_ppm = {row: [] for row in BUCKET_ROWS}
+    bucket_qty = {row: [] for row in BUCKET_ROWS}
     for (y, mo) in months:
         mp = month_process(conn, m, y, mo, parts)["공정"]
         month_total = 0
@@ -278,18 +323,51 @@ def process_table(conn, m, fy, part):
 
         for row in BUCKET_ROWS:
             v = mp["bucket"].get(row, {"qty": 0}).get("qty", 0)
+            bucket_qty[row].append(v)
             bucket_ppm[row].append(round(v / pq * 1_000_000) if pq else 0)
 
     target = [calc_target_val(conn, fy, part, "proc_ppm", mo) for (_y, mo) in months]
     actual = [round(t / p * 1_000_000) if p else 0 for t, p in zip(raw_sub, prod_qty)]
+
+    idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
+    cum_raw = {row: sum(raw[row][i] for i in idxs) for row in raw_rows}
+    cum_raw_sub = sum(raw_sub[i] for i in idxs)
+    cum_prod_qty = sum(prod_qty[i] for i in idxs)
+    cum_bucket_qty = {row: sum(bucket_qty[row][i] for i in idxs) for row in BUCKET_ROWS}
+    cum_bucket_ppm = {row: (round(cum_bucket_qty[row] / cum_prod_qty * 1_000_000) if cum_prod_qty else 0)
+                     for row in BUCKET_ROWS}
+    cum_target = round(sum(target[i] for i in idxs if target[i]) / len(idxs)) if idxs else 0
+    cum = {"raw": cum_raw, "raw_sub": cum_raw_sub, "prod_qty": cum_prod_qty,
+          "bucket_ppm": cum_bucket_ppm, "target": cum_target,
+          "actual": round(cum_raw_sub / cum_prod_qty * 1_000_000) if cum_prod_qty else 0}
     return {"raw_rows": raw_rows, "raw": raw, "raw_sub": raw_sub, "prod_qty": prod_qty,
            "target": target, "actual": actual,
-           "bucket_rows": BUCKET_ROWS, "bucket_ppm": bucket_ppm}
+           "bucket_rows": BUCKET_ROWS, "bucket_ppm": bucket_ppm, "cum": cum}
 
 
-# ── 불량유형별 추이 (탭 8, 일 단위) ────────────────────────
+# ── 불량유형별 추이 (탭 8) ──────────────────────────────
+def tmno_search(conn, q, part=""):
+    """TM-NO 자동완성: 앞자리(prefix) 일치, 최대 20개. defect_entry에 등록된 값(미등록 제품 포함)."""
+    if len(q) < 2:
+        return []
+    sql = ("SELECT DISTINCT de.tm_no tm FROM defect_entry de LEFT JOIN product p ON p.tm_no=de.tm_no "
+          "WHERE de.tm_no LIKE ? AND de.tm_no != ''")
+    args = [q + "%"]
+    if part in ("VMS PART", "TM PART"):
+        sql += " AND COALESCE(p.part, de.part) = ?"
+        args.append(part)
+    sql += " ORDER BY de.tm_no LIMIT 20"
+    return [r["tm"] for r in conn.execute(sql, args)]
+
+
+def defect_names_for_tm(conn, tm):
+    """그 TM-NO에 실제 발생한 불량유형명 목록."""
+    return [r["defect_name"] for r in conn.execute(
+        "SELECT DISTINCT defect_name FROM defect_entry WHERE tm_no=? ORDER BY defect_name", (tm,))]
+
+
 def defect_trend(conn, part, tm_q, defect_name, date_from, date_to):
-    """Part·TM-NO/품명·불량유형·기간(일 단위)으로 필터링한 불량 발생 추이.
+    """[item별] Part·TM-NO/품명·불량유형·기간(일 단위)으로 필터링한 불량 발생 추이.
     반환: {"days":[...], "series":{불량명:[qty...]}, "qty_total":int, "tm_rows":[...]}"""
     parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
     where = ["status='confirmed'", "d BETWEEN ? AND ?"]
@@ -308,8 +386,6 @@ def defect_trend(conn, part, tm_q, defect_name, date_from, date_to):
         rows.append(r)
 
     days = []
-    d0 = date_from
-    import datetime as _dt
     cur = _dt.date.fromisoformat(date_from)
     end = _dt.date.fromisoformat(date_to)
     while cur <= end and len(days) < 400:
@@ -328,3 +404,92 @@ def defect_trend(conn, part, tm_q, defect_name, date_from, date_to):
     series = {t: [by_type[t].get(d, 0) for d in days] for t in top_types}
     tm_rows = sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]
     return {"days": days, "series": series, "qty_total": total, "tm_rows": tm_rows}
+
+
+def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_to=None):
+    """[유형별] Part·불량유형(최대 3개)·집계단위(일/주/월)로 필터링한 발생 추이.
+    일별=사용자가 준 시작~종료일. 월별=최근 12개월. 주별=최근 7개월 범위의 주차들
+    (calc.week_of_month, 월~일 기준, 라벨 'N월M주').
+    반환: {"labels":[...], "series":{불량명:[qty...]}}"""
+    parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
+    names = [n for n in defect_names if n][:3]
+    if not names:
+        return {"labels": [], "series": {}}
+
+    cutoff = latest_actual_month(conn) or (_dt.date.today().year, _dt.date.today().month)
+    cy, cm = cutoff
+    if unit == "일":
+        d0, d1 = date_from, date_to
+    elif unit == "월":
+        months = calc.trailing_months(cy, cm, 12)
+        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
+        y1, m1 = months[-1]
+        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
+    else:  # 주
+        months = calc.trailing_months(cy, cm, 7)
+        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
+        y1, m1 = months[-1]
+        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
+
+    where = ["status='confirmed'", "d BETWEEN ? AND ?",
+            "defect_name IN (%s)" % ",".join("?" * len(names))]
+    args = [d0, d1] + names
+    rows = []
+    for r in conn.execute(
+            f"SELECT d,tm_no,defect_name,qty,part FROM defect_entry WHERE {' AND '.join(where)}", args):
+        prod = m.product.get(r["tm_no"])
+        rpart = prod[1] if prod else (r["part"] or "")
+        if part != "통합" and rpart and rpart not in parts:
+            continue
+        rows.append(r)
+
+    if unit == "일":
+        labels = []
+        cur = _dt.date.fromisoformat(d0)
+        end = _dt.date.fromisoformat(d1)
+        while cur <= end and len(labels) < 400:
+            labels.append(cur.isoformat())
+            cur += _dt.timedelta(days=1)
+        series = {n: [0] * len(labels) for n in names}
+        idx = {d: i for i, d in enumerate(labels)}
+        for r in rows:
+            i = idx.get(r["d"])
+            if i is not None:
+                series[r["defect_name"]][i] += r["qty"]
+        return {"labels": labels, "series": series}
+
+    if unit == "월":
+        months = calc.trailing_months(cy, cm, 12)
+        labels = [f"{mo}월" for (_y, mo) in months]
+        idx = {(y, mo): i for i, (y, mo) in enumerate(months)}
+        series = {n: [0] * len(labels) for n in names}
+        for r in rows:
+            yy, mm = int(r["d"][:4]), int(r["d"][5:7])
+            i = idx.get((yy, mm))
+            if i is not None:
+                series[r["defect_name"]][i] += r["qty"]
+        return {"labels": labels, "series": series}
+
+    # 주별: 실제 존재하는 주차를 날짜 순으로 나열
+    seen = {}
+    cur = _dt.date.fromisoformat(d0)
+    end = _dt.date.fromisoformat(d1)
+    order = []
+    while cur <= end:
+        ds = cur.isoformat()
+        wk = calc.week_of_month(ds)
+        key = (cur.year, cur.month, wk)
+        if key not in seen:
+            seen[key] = f"{cur.month}월{wk}주"
+            order.append(key)
+        cur += _dt.timedelta(days=1)
+    labels = [seen[k] for k in order]
+    idx = {k: i for i, k in enumerate(order)}
+    series = {n: [0] * len(labels) for n in names}
+    for r in rows:
+        dd = _dt.date.fromisoformat(r["d"])
+        key = (dd.year, dd.month, calc.week_of_month(r["d"]))
+        i = idx.get(key)
+        if i is not None:
+            series[r["defect_name"]][i] += r["qty"]
+    return {"labels": labels, "series": series}

@@ -449,6 +449,47 @@
 
 ## 최근 로그
 
+### 2026-07-29 (28) — 세부지표현황: 누계 열 + Warranty/Incident 월별화 + 불량유형별 item/유형 서브탭
+- 목표: (27)번 이후 사용자가 5가지를 추가 요청 — ① Warranty/Incident에 발생·누적·목표 행 추가
+  ② Scrap Cost/Quantity/COPQ/Incident/Warranty/공정불량에 4월 왼쪽 "누계" 열 추가
+  ③ 불량유형별 TM-NO 자동완성(입력 시 유사 품번, 선택 시 그 품번의 불량유형만) ④ 불량유형별을
+  item별/유형별 서브탭으로 분리(유형별=불량유형 복수선택+일/주/월) ⑤ 그래프 hover/click 시
+  (일자,수량) 툴팁. 구현 전 질문 5개를 먼저 하고 답변 받은 뒤 진행(누계로 대체되므로 별도 발생행
+  불필요, 데이터 있는 달까지 누적비율, TM-NO 2글자 이상 앞자리, 불량유형 최대 3개 선택바 3개,
+  주/월 각각 최근 7개월/12개월, 라벨 "N월M주").
+- `app/report_kpi.py`: `latest_actual_month()`/`_months_so_far()` 신설(생산량 데이터 있는
+  마지막 달 기준). `_block_cost`/`_block_copq`/`_block_incident`/`_block_warranty`/
+  `process_table()` 각각에 `"cum"` 딕셔너리 추가 — %·ppm류는 누적 분자/누적 분모로 재계산(단순
+  평균 아님), 공정불량 누계 목표(ppm)만 예외로 월별 목표 평균 사용. `_block_warranty`/
+  `_block_incident`는 월별 열을 FY누적 running sum에서 **그 달 발생분만**으로 변경(누계 열이
+  누적 역할을 대신). `tmno_search()`(2글자 이상 접두 검색, defect_entry 기준, Part 필터 지원),
+  `defect_names_for_tm()`, `defect_trend_types()`(유형별 탭: 불량유형 최대 3개, 일/주/월 단위,
+  주=최근 7개월 내 실제 주차를 "N월M주"로, 월=최근 12개월) 신설.
+- `app/main.py`: `report_detail()`에 `sub`/`t1`/`t2`/`t3`/`t_unit` 파라미터 추가, item별/유형별
+  분기. `/report/tmno-search`, `/report/tmno-defects` JSON 엔드포인트 신설.
+- `app/templates/report_detail.html`: `block_table`/`row` 매크로에 누계 열 추가, 6개 탭 전체
+  반영. Incident 탭의 옛 `b.actual`(FY누적) 행 제거, Warranty 라벨 "FY누적"→월간으로 수정.
+  불량유형별 탭에 item별/유형별 링크 서브탭 추가, TM-NO 입력창에 자동완성 드롭다운(JS, 2글자
+  이상 debounce fetch) + 선택 시 불량유형 드롭다운 재구성, 유형별 탭 폼(불량유형 select 3개 +
+  단위 select, 일 단위일 때만 시작일/종료일 노출).
+- `app/static/charts.js`: `renderMulti()`에 시리즈명 표시(names), 각 점에 투명 히트서클(반경 7)
+  + data-lbl/data-nm/data-val/data-col 부여. `draw()`에 멀티차트 전용 툴팁 div(mousemove/click로
+  표시, mouseleave로 숨김) 바인딩 — innerHTML 재설정으로 매번 떨어져나가는 tooltip div를 다시
+  붙이도록 처리.
+- `docs/ARCHITECTURE.md`: 규칙 7-3(누계 열 계산방식) / 7-4(Warranty·Incident 월간화) /
+  7-5(불량유형별 item/유형 서브탭·TM-NO 자동완성) 추가.
+- 검증: `_block_copq`의 cum 합계를 직접 호출로 재검증(cum.total=85,205.49천원=1~4월 합, 오차
+  없음). 서버 기동 후 로그인 세션으로 scrap_cost/scrap_qty/copq/incident/warranty/process1/
+  process2/trend(item·type) 8개 URL 모두 200 응답, 본문에 traceback 없음 확인. 누계 열 수치가
+  월별 합과 정확히 일치함을 렌더된 HTML에서 확인(예: Scrap Cost 1Part 공정불량소계 누계
+  142,172=43,391+18,863+36,806+43,111). Playwright로 브라우저 구동해 TM-NO "59" 입력 시
+  자동완성 8건 노출·클릭 시 입력창 채워짐과 불량유형 재구성 확인, 유형별 탭에서 불량유형 2개
+  선택 시 범례 2색 분리 확인, 주 단위 라벨이 "1월1주"~"4월3주" 형태로 표시됨 확인, 차트 점에
+  마우스오버 시 툴팁에 (기간, 값)이 표시됨을 확인. 콘솔 JS 에러 없음(파비콘 404 1건은 무관).
+- **확인 필요(사용자 확정 아님, 판단으로 구현)**: 공정불량 탭 누계 "목표(ppm)"는 ppm 목표가
+  자연스럽게 누적 합산되는 값이 아니라서 **데이터 있는 달들의 단순평균**을 썼음 — 다른 방식을
+  원하면 알려주세요.
+
 ### 2026-07-29 (27) — 세부지표현황 5행 배분을 귀책(원인)공정 기준으로 수정
 - 목표: (26)번에서 만든 세부지표현황의 성형/소결/정형/가공/기타 배분이 "발견공정"(예: 후처리
   시트에서 잡힌 불량은 무조건 '기타')이었는데, 사용자가 예시(598-01, 후처리 시트에서 깨짐 10개,

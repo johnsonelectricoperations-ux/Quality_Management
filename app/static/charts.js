@@ -179,17 +179,24 @@
       const pPlotW = PW - pPL - pPR;
       const y = v => pPT + pPlotH * (vmax - v) / (vmax - vmin || 1);
       const xs = i => pPL + pPlotW * i / (n - 1 || 1);
+      const names = cfg.names || [];
       let paths = "", dots = "";
       sets.forEach((s, si) => {
         const col = MULTI[si % MULTI.length];
         const c = col.startsWith("--") ? `var(${col})` : col;
+        const nm = names[si] || "";
         const pts = [];
-        s.forEach((v, i) => { if (v != null) pts.push({x: xs(i), y: y(v)}); });
+        s.forEach((v, i) => { if (v != null) pts.push({x: xs(i), y: y(v), i, v}); });
         if (!pts.length) return;
         let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
         for (let i = 1; i < pts.length; i++) d += ` L${pts[i].x.toFixed(1)},${pts[i].y.toFixed(1)}`;
         paths += `<path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`;
-        pts.forEach(p => { dots += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${c}"/>`; });
+        pts.forEach(p => {
+          dots += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${c}"/>`;
+          dots += `<circle class="g-mdot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="7" fill="transparent" `
+                + `style="cursor:pointer;" data-lbl="${cfg.labels[p.i]}" data-nm="${nm}" data-col="${c}" `
+                + `data-val="${fmt(p.v, cfg.dec)}${cfg.unit}"/>`;
+        });
       });
       // y축 눈금 3단
       let gr = "", ylab = "";
@@ -267,6 +274,40 @@
           node.querySelectorAll(".g-bw.show").forEach(el => { if (el !== g) el.classList.remove("show"); });
           if (g) g.classList.toggle("show");
         });
+      }
+      // 꺾은선(multi) 그래프: 점에 마우스오버/클릭 시 (구분, 값) 툴팁 표시
+      if (d.type === "multi") {
+        if (!node._ttEl) {
+          const tt = document.createElement("div");
+          tt.className = "g-tt";
+          tt.style.cssText = "position:absolute;display:none;pointer-events:none;background:var(--card);"
+            + "border:1px solid var(--bd);border-radius:6px;padding:6px 9px;font:600 11px/1.4 inherit;"
+            + "box-shadow:0 4px 12px rgba(0,0,0,.18);z-index:30;white-space:nowrap;";
+          node._ttEl = tt;
+        }
+        node.style.position = "relative";
+        node.appendChild(node._ttEl);   // innerHTML 재설정으로 매번 떨어져 나가므로 다시 붙인다
+        const tt = node._ttEl;
+        const showTip = (e, dot) => {
+          const lbl = dot.getAttribute("data-lbl"), nm = dot.getAttribute("data-nm"),
+                val = dot.getAttribute("data-val"), col = dot.getAttribute("data-col");
+          tt.innerHTML = `<div>${lbl}</div><div style="color:${col}">${nm ? nm + ": " : ""}${val}</div>`;
+          const rect = node.getBoundingClientRect();
+          let x = e.clientX - rect.left + 12, y = e.clientY - rect.top - 10;
+          tt.style.left = x + "px"; tt.style.top = y + "px"; tt.style.display = "block";
+        };
+        if (!node._mmBound) {
+          node._mmBound = true;
+          node.addEventListener("mousemove", function (e) {
+            const dot = e.target.closest(".g-mdot");
+            if (dot) showTip(e, dot); else tt.style.display = "none";
+          });
+          node.addEventListener("mouseleave", function () { tt.style.display = "none"; });
+          node.addEventListener("click", function (e) {
+            const dot = e.target.closest(".g-mdot");
+            if (dot) showTip(e, dot);
+          });
+        }
       }
     }
 
