@@ -121,15 +121,15 @@
 {% elif tab == 'trend' %}
   <div class="fyrow" style="margin-top:0;">
     <a class="btn btn-sm {{ 'btn-p' if sub=='item' else 'btn-s' }}" style="text-decoration:none;"
-       href="/report/detail?tab=trend&fy={{ fy }}&sub=item">item별</a>
+       href="/report/detail?tab=trend&fy={{ fy }}&sub=item">ITEM</a>
     <a class="btn btn-sm {{ 'btn-p' if sub=='type' else 'btn-s' }}" style="text-decoration:none;"
-       href="/report/detail?tab=trend&fy={{ fy }}&sub=type">유형별</a>
+       href="/report/detail?tab=trend&fy={{ fy }}&sub=type">불량유형</a>
   </div>
   {% if sub == 'item' %}
   <form class="fbar panel" method="get" action="/report/detail" style="padding:12px 14px;">
     <input type="hidden" name="tab" value="trend">
     <input type="hidden" name="fy" value="{{ fy }}">
-    <div class="frow" style="grid-template-columns:110px 160px 1fr 150px 150px 90px;">
+    <div class="frow" style="grid-template-columns:110px 160px 1fr 100px 130px 130px 90px;">
       <div class="f"><label>파트</label><select class="in" name="tpart">
         {% for pv, pl in [('통합','통합'),('VMS PART','1PART'),('TM PART','2PART')] %}
         <option value="{{ pv }}" {{ 'selected' if tpart==pv }}>{{ pl }}</option>{% endfor %}</select></div>
@@ -140,13 +140,26 @@
       <div class="f"><label>불량유형</label><select class="in" id="dNameSel" name="d_name">
         <option value="">전체</option>
         {% for dn in defect_type_opts %}<option value="{{ dn }}" {{ 'selected' if d_name==dn }}>{{ dn }}</option>{% endfor %}</select></div>
-      <div class="f"><label>시작일</label><input class="in" type="date" name="d_from" value="{{ d_from }}"></div>
-      <div class="f"><label>종료일</label><input class="in" type="date" name="d_to" value="{{ d_to }}"></div>
+      <div class="f"><label>단위</label><select class="in" id="dUnitSel" name="d_unit">
+        {% for uv in ['일','주','월'] %}<option value="{{ uv }}" {{ 'selected' if d_unit==uv }}>{{ uv }}</option>{% endfor %}</select></div>
+      <div class="f" id="dFromWrap" style="{{ '' if d_unit=='일' else 'display:none;' }}"><label>시작일</label><input class="in" type="date" name="d_from" value="{{ d_from }}"></div>
+      <div class="f" id="dToWrap" style="{{ '' if d_unit=='일' else 'display:none;' }}"><label>종료일</label><input class="in" type="date" name="d_to" value="{{ d_to }}"></div>
       <div class="f" style="justify-content:flex-end;"><button class="btn btn-p">조회</button></div>
     </div>
   </form>
+  <script>
+  (function(){
+    var sel = document.getElementById('dUnitSel');
+    if (!sel) return;
+    sel.addEventListener('change', function(){
+      var show = sel.value === '일';
+      document.getElementById('dFromWrap').style.display = show ? '' : 'none';
+      document.getElementById('dToWrap').style.display = show ? '' : 'none';
+    });
+  })();
+  </script>
 
-  <div class="panel"><div class="phead"><h2>불량 발생 추이 (일 단위)</h2>
+  <div class="panel"><div class="phead"><h2>불량 발생 추이 ({{ d_unit }} 단위)</h2>
     <span class="tot">{{ d_from }} ~ {{ d_to }} · 총 {{ trend.qty_total|cf }}건</span></div>
     <div class="pbody">
       {% if trend.series %}
@@ -155,8 +168,8 @@
         <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'][loop.index0 % 8] }}"></i>{{ nm }}</span>
         {% endfor %}
       </div>
-      <div class="jchart" data-type="multi" data-unit="EA" data-dec="0"
-           data-labels="{{ trend.days_csv }}" data-names="{{ trend.chart_names }}"
+      <div class="jchart" data-type="{{ 'multi' if d_unit=='일' else 'multibar' }}" data-unit="EA" data-dec="0"
+           data-labels="{{ trend.labels_csv }}" data-names="{{ trend.chart_names }}"
            data-sets="{{ trend.chart_sets }}"></div>
       {% else %}
       <div style="color:var(--tx3);">해당 조건의 불량 데이터가 없습니다.</div>
@@ -250,7 +263,7 @@
         <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'][loop.index0 % 8] }}"></i>{{ nm }}</span>
         {% endfor %}
       </div>
-      <div class="jchart" data-type="multi" data-unit="EA" data-dec="0"
+      <div class="jchart" data-type="{{ 'multi' if t_unit=='일' else 'multibar' }}" data-unit="EA" data-dec="0"
            data-labels="{{ trend2.labels_csv }}" data-names="{{ trend2.chart_names }}"
            data-sets="{{ trend2.chart_sets }}"></div>
       {% else %}

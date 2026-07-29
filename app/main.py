@@ -107,6 +107,58 @@ def _guard(u):
     return None
 
 
+# ── 메뉴별 권한 매트릭스(사용자 관리 화면) ──────────────────────
+# 관리자는 항상 전기능(하드코딩, 매트릭스에 없음). editor/viewer는 메뉴별 보기/편집을
+# permission 테이블에서 조회(db._ensure_default_permissions가 기본값 시딩).
+PERM_MENUS = [
+    ("dash", "대시보드"),
+    ("rdetail", "세부지표현황"),
+    ("svp", "SVP 입력"),
+    ("claim", "Claim 입력"),
+    ("incident", "Customer Incident 관리"),
+    ("oreview", "불량 검토(100EA↑)"),
+    ("data_check", "데이터 점검"),
+    ("products", "제품 마스터"),
+    ("processes", "공정 관리"),
+    ("defect_types", "불량유형 마스터"),
+    ("scan", "폴더 반영"),
+    ("masters", "마스터 조회"),
+    ("target", "목표 관리"),
+]
+
+
+def load_permissions(conn):
+    """{(role, menu_key): (can_view, can_edit)}. admin은 포함 안 함(항상 True)."""
+    d = {}
+    for r in conn.execute("SELECT role,menu_key,can_view,can_edit FROM permission"):
+        d[(r["role"], r["menu_key"])] = (bool(r["can_view"]), bool(r["can_edit"]))
+    return d
+
+
+def has_perm(role, menu_key, level="view"):
+    """관리자는 항상 True. dash(대시보드)는 로그인 후 반드시 갈 곳이 있어야 하므로 항상 보기 허용."""
+    if role == "admin" or menu_key == "dash":
+        return True
+    conn = db.connect()
+    row = conn.execute("SELECT can_view,can_edit FROM permission WHERE role=? AND menu_key=?",
+                       (role, menu_key)).fetchone()
+    conn.close()
+    if not row:
+        return level == "view"
+    return bool(row["can_view"]) if level == "view" else bool(row["can_edit"])
+
+
+def _perm_guard(request, menu_key, level="view"):
+    """로그인 + 메뉴 권한 체크. (user, 막힘응답or None) 반환 — 막히면 user가 None일 수 있음."""
+    u = current_user(request)
+    g = _guard(u)
+    if g:
+        return u, g
+    if not has_perm(u["role"], menu_key, level):
+        return u, RedirectResponse("/", status_code=303)
+    return u, None
+
+
 def pending_count():
     conn = db.connect()
     n = conn.execute("SELECT COUNT(*) c FROM defect_entry WHERE status='pending'").fetchone()["c"]
@@ -423,15 +475,14 @@ FY_MONTH_LABELS = [f"{mo}월" for mo in list(range(4, 13)) + list(range(1, 4))]
 @app.get("/report/detail", response_class=HTMLResponse)
 def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: str = "item",
                   tpart: str = "통합", d_tm: str = "", d_name: str = "",
-                  d_from: str = "", d_to: str = "",
+                  d_from: str = "", d_to: str = "", d_unit: str = "일",
                   t1: str = "", t2: str = "", t3: str = "", t_unit: str = "일"):
     """세부지표현황: 사용자 제공 세부지표현황.xlsx 양식과 동일한 탭 구성.
     Scrap Cost/Quantity/COPQ/Customer Incident/Warranty는 Total·1Part·2Part 3블록×FY 12개월
     (+4월 왼쪽 누계 열), 공정불량-1PART/2PART는 파트별 종합(집계기준 EA)+공정별(발생기준 ppm),
-    불량유형별은 [item별](Part·TM-NO·불량유형·기간, 일 단위) / [유형별](Part·불량유형 최대 3개·
+    불량유형별은 [ITEM](Part·TM-NO·불량유형·집계단위 일/주/월) / [불량유형](Part·불량유형 최대 3개·
     집계단위 일/주/월) 두 서브탭."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "rdetail", "view")
     if g:
         return g
     if tab not in {t for t, _n in TABS}:
@@ -470,12 +521,14 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
             "SELECT DISTINCT name FROM defect_type ORDER BY name")]
         ctx.update({"sub": sub, "tpart": tpart, "defect_type_opts": dtypes})
         if sub == "item":
+            d_unit = d_unit if d_unit in ("일", "주", "월") else "일"
             df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
-            trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, df, dt)
+            trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, d_unit, df, dt)
             trend["chart_names"] = "|".join(trend["series"].keys())
             trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
-            trend["days_csv"] = ",".join(trend["days"])
-            ctx.update({"d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt, "trend": trend})
+            trend["labels_csv"] = ",".join(trend["labels"])
+            ctx.update({"d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt,
+                       "d_unit": d_unit, "trend": trend})
         else:
             t_unit = t_unit if t_unit in ("일", "주", "월") else "일"
             df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
@@ -525,8 +578,7 @@ def report_defect_redirect(request: Request, part: str = "통합", kind: str = "
 # ── 마스터 ──────────────────────────────────────────────
 @app.get("/masters", response_class=HTMLResponse)
 def masters(request: Request):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "masters", "view")
     if g:
         return g
     conn = db.connect()
@@ -539,13 +591,13 @@ def masters(request: Request):
     conn.close()
     return render(request, "masters.html", u, active="masters", heading="마스터 조회",
                   crumb="관리", pending=pending_count(), proc=proc, prod=prod, prod_total=prod_total,
-                  dtypes=dtypes, can_edit=(u["role"] == "admin"))
+                  dtypes=dtypes, can_edit=(u["role"] == "admin" or has_perm(u["role"], "masters", "edit")))
 
 
 @app.post("/masters/upload")
 async def masters_upload(request: Request, kind: str = Form(...), file: UploadFile = File(...)):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "masters", "edit")):
         return RedirectResponse("/masters", status_code=303)
     path = os.path.join("/tmp", "qms_up_" + secrets.token_hex(4) + ".xlsx")
     with open(path, "wb") as f:
@@ -698,12 +750,9 @@ def _data_check(conn):
 @app.get("/admin/data-check", response_class=HTMLResponse)
 def data_check_page(request: Request, show_hidden: str = ""):
     """TM-NO 미등록·공정별 단가 누락 점검 화면. 관리자가 바로 등록 화면으로 이동해 채울 수 있다."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "data_check", "view")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
     conn = db.connect()
     unreg_rows, missing_rows = _data_check(conn)
     conn.close()
@@ -711,19 +760,17 @@ def data_check_page(request: Request, show_hidden: str = ""):
     hidden_count = len([r for r in unreg_rows if r["hidden"]])
     if not show_hidden:
         unreg_rows = [r for r in unreg_rows if not r["hidden"]]
+    can_edit = u["role"] == "admin" or has_perm(u["role"], "data_check", "edit")
     return render(request, "data_check.html", u, active="data_check", heading="데이터 점검",
                   crumb="관리", pending=pending_count(), unreg_rows=unreg_rows, missing_rows=missing_rows,
-                  hidden_count=hidden_count, show_hidden=show_hidden, can_edit=(u["role"] == "admin"))
+                  hidden_count=hidden_count, show_hidden=show_hidden, can_edit=can_edit)
 
 
 @app.post("/admin/data-check/hide")
 def data_check_hide(request: Request, tm_no: str = Form(...)):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "data_check", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
     conn = db.connect()
     conn.execute(
         "INSERT INTO data_check_hidden(tm_no, hidden_at) VALUES(?, datetime('now')) "
@@ -735,12 +782,9 @@ def data_check_hide(request: Request, tm_no: str = Form(...)):
 
 @app.post("/admin/data-check/unhide")
 def data_check_unhide(request: Request, tm_no: str = Form(...)):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "data_check", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/", status_code=303)
     conn = db.connect()
     conn.execute("DELETE FROM data_check_hidden WHERE tm_no=?", (tm_no,))
     conn.commit()
@@ -752,8 +796,7 @@ def data_check_unhide(request: Request, tm_no: str = Form(...)):
 def products_list(request: Request, q: str = "", part: str = "", miss: str = "",
                   page: int = 1, msg: str = "", err: str = ""):
     """제품 마스터 + 공정별 단가 통합 목록."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "products", "view")
     if g:
         return g
     conn = db.connect()
@@ -783,13 +826,13 @@ def products_list(request: Request, q: str = "", part: str = "", miss: str = "",
     return render(request, "products.html", u, active="products", heading="제품 마스터",
                   crumb="관리", pending=pending_count(), rows=rows, total=total,
                   agg=DISPLAY_PROCESSES, q=q, part=part, miss=miss, page=page, pages=pages,
-                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "products", "edit")), msg=msg, err=err)
 
 
 @app.post("/admin/products/import")
 async def products_import(request: Request, part: str = Form(...), file: UploadFile = File(...)):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "products", "edit")):
         return RedirectResponse("/admin/products", status_code=303)
     path = os.path.join("/tmp", "qms_csv_" + secrets.token_hex(4))
     with open(path, "wb") as f:
@@ -809,12 +852,9 @@ async def products_import(request: Request, part: str = Form(...), file: UploadF
 
 @app.get("/admin/products/new", response_class=HTMLResponse)
 def product_new(request: Request, tm: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "products", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/admin/products", status_code=303)
     conn = db.connect()
     excl = _copq_excluded(conn)
     tm = calc.base_tmno(tm) if tm else ""
@@ -838,12 +878,9 @@ def product_new(request: Request, tm: str = ""):
 @app.get("/admin/products/{tm}/edit", response_class=HTMLResponse)
 def product_edit(request: Request, tm: str):
     """수정 폼: 제품 정보 + 공정 라우팅 + 공정별 단가를 현재 값으로 채워 보여준다."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "products", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/admin/products", status_code=303)
     conn = db.connect()
     p = conn.execute("SELECT * FROM product WHERE tm_no=?", (tm,)).fetchone()
     if not p:
@@ -867,7 +904,7 @@ def product_edit(request: Request, tm: str):
 async def product_save(request: Request):
     """제품 정보 + 라우팅 + 공정별 단가를 한 번에 저장."""
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "products", "edit")):
         return RedirectResponse("/admin/products", status_code=303)
     form = await request.form()
     tm = calc.base_tmno(form.get("tm_no") or "")   # 변형 접미 알파벳 제거(base로 합침)
@@ -925,7 +962,7 @@ async def product_save(request: Request):
 @app.post("/admin/products/{tm}/delete")
 def product_delete(request: Request, tm: str):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "products", "edit")):
         return RedirectResponse("/admin/products", status_code=303)
     conn = db.connect()
     for t in ("product", "product_route", "product_price"):
@@ -964,13 +1001,12 @@ def _scan_page(request, u, results=None, msg="", err=""):
                   crumb="관리", pending=pending_count(), root=root,
                   root_ok=os.path.isdir(root), sources=sources, results=results,
                   logs=logs, last_scan=last_scan, init_done=init_done,
-                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "scan", "edit")), msg=msg, err=err)
 
 
 @app.get("/admin/scan", response_class=HTMLResponse)
 def scan_page(request: Request, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "scan", "view")
     if g:
         return g
     return _scan_page(request, u, msg=msg, err=err)
@@ -979,7 +1015,7 @@ def scan_page(request: Request, msg: str = "", err: str = ""):
 @app.post("/admin/scan/root")
 async def scan_set_root(request: Request, root: str = Form("")):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "scan", "edit")):
         return RedirectResponse("/admin/scan", status_code=303)
     conn = db.connect()
     db.set_setting(conn, scan.SETTING_ROOT, root.strip())
@@ -990,12 +1026,9 @@ async def scan_set_root(request: Request, root: str = Form("")):
 @app.post("/admin/scan/init", response_class=HTMLResponse)
 async def scan_init_data(request: Request):
     """templates/ 실데이터로 DB 초기 구축 (최초 1회). 적재는 멱등이라 재실행해도 중복 없음."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "scan", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/admin/scan", status_code=303)
     conn = db.connect()
     try:
         steps = init_data.run(conn, echo=lambda *_a: None)
@@ -1014,12 +1047,9 @@ async def scan_init_data(request: Request):
 @app.post("/admin/scan/purge-demo", response_class=HTMLResponse)
 async def scan_purge_demo(request: Request):
     """데모(샘플) 품목과 그 실적을 삭제. 실데이터로 전환할 때 1회 사용."""
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "scan", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/admin/scan", status_code=303)
     conn = db.connect()
     try:
         out = init_data.purge_demo(conn)
@@ -1037,12 +1067,9 @@ async def scan_purge_demo(request: Request):
 
 @app.post("/admin/scan/run", response_class=HTMLResponse)
 async def scan_run(request: Request, key: str = Form("all")):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "scan", "edit")
     if g:
         return g
-    if u["role"] != "admin":
-        return RedirectResponse("/admin/scan", status_code=303)
     conn = db.connect()
     try:
         results = scan.scan_all(conn) if key == "all" else [scan.scan_one(conn, key)]
@@ -1056,8 +1083,7 @@ async def scan_run(request: Request, key: str = Form("all")):
 # ── 공정 관리 ───────────────────────────────────────────
 @app.get("/admin/processes", response_class=HTMLResponse)
 def processes_list(request: Request, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "processes", "view")
     if g:
         return g
     conn = db.connect()
@@ -1065,13 +1091,13 @@ def processes_list(request: Request, msg: str = "", err: str = ""):
     conn.close()
     return render(request, "processes.html", u, active="processes", heading="공정 관리",
                   crumb="관리", pending=pending_count(), rows=rows,
-                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "processes", "edit")), msg=msg, err=err)
 
 
 @app.post("/admin/processes/save")
 async def processes_save(request: Request):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "processes", "edit")):
         return RedirectResponse("/admin/processes", status_code=303)
     form = await request.form()
     part = (form.get("part") or "").strip()
@@ -1095,7 +1121,7 @@ async def processes_save(request: Request):
 @app.post("/admin/processes/{pid}/delete")
 def processes_delete(request: Request, pid: int):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "processes", "edit")):
         return RedirectResponse("/admin/processes", status_code=303)
     conn = db.connect()
     conn.execute("DELETE FROM process WHERE id=?", (pid,))
@@ -1152,8 +1178,7 @@ def _compose_alloc_rule(form):
 
 @app.get("/admin/defect-types", response_class=HTMLResponse)
 def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "defect_types", "view")
     if g:
         return g
     conn = db.connect()
@@ -1171,13 +1196,13 @@ def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str =
     return render(request, "defect_types.html", u, active="defect_types", heading="불량유형 마스터 관리",
                   crumb="관리", pending=pending_count(), rows=rows, edit_row=edit_row,
                   agg=db.AGG_PROCESSES, kinds=DEFECT_KINDS,
-                  can_edit=(u["role"] == "admin"), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")), msg=msg, err=err)
 
 
 @app.post("/admin/defect-types/save")
 async def defect_types_save(request: Request):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")):
         return RedirectResponse("/admin/defect-types", status_code=303)
     form = await request.form()
     orig_id = (form.get("orig_id") or "").strip()
@@ -1205,7 +1230,7 @@ async def defect_types_save(request: Request):
 @app.post("/admin/defect-types/{did}/delete")
 def defect_types_delete(request: Request, did: int):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")):
         return RedirectResponse("/admin/defect-types", status_code=303)
     conn = db.connect()
     conn.execute("DELETE FROM defect_type WHERE id=?", (did,))
@@ -1217,8 +1242,7 @@ def defect_types_delete(request: Request, did: int):
 # ── 목표 관리 ───────────────────────────────────────────
 @app.get("/admin/target", response_class=HTMLResponse)
 def admin_target(request: Request, fy: int = 27, part: str = "통합"):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "target", "view")
     if g:
         return g
     conn = db.connect()
@@ -1241,13 +1265,13 @@ def admin_target(request: Request, fy: int = 27, part: str = "통합"):
     return render(request, "target.html", u, active="target", heading="목표 관리",
                   crumb="관리", pending=pending_count(), fy=fy, part=part, items=items,
                   monthly=monthly, fy_months=fy_months,
-                  can_edit=(u["role"] == "admin"))
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "target", "edit")))
 
 
 @app.post("/admin/target")
 async def admin_target_save(request: Request):
     u = current_user(request)
-    if u is None or u["role"] != "admin":
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "target", "edit")):
         return RedirectResponse("/admin/target", status_code=303)
     form = await request.form()
     fy = int(form.get("fy")); part = form.get("part")
@@ -1283,18 +1307,108 @@ async def admin_target_save(request: Request):
 
 
 # ── 사용자 관리 ─────────────────────────────────────────
+# 관리자만 editor·viewer 계정을 추가/수정/삭제할 수 있다(admin 계정 자체는 이 화면에서 다루지 않음).
 @app.get("/admin/users", response_class=HTMLResponse)
-def admin_users(request: Request):
+def admin_users(request: Request, edit: str = "", msg: str = "", err: str = ""):
     u = current_user(request)
     g = _guard(u)
     if g:
         return g
+    if u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
     conn = db.connect()
     users = [dict(r) for r in conn.execute("SELECT username,name,role FROM users ORDER BY role")]
+    edit_row = None
+    if edit:
+        row = conn.execute("SELECT username,name,role FROM users WHERE username=? AND role IN ('editor','viewer')",
+                           (edit,)).fetchone()
+        edit_row = dict(row) if row else None
+    perm_data = load_permissions(conn)
     conn.close()
     return render(request, "users.html", u, active="users", heading="사용자 관리",
-                  crumb="관리", pending=pending_count(), users=users,
-                  can_edit=(u["role"] == "admin"))
+                  crumb="관리", pending=pending_count(), users=users, edit_row=edit_row,
+                  can_edit=(u["role"] == "admin"), msg=msg, err=err,
+                  perm_matrix=PERM_MENUS, perm_data=perm_data)
+
+
+@app.post("/admin/users/save")
+def admin_users_save(request: Request, orig_username: str = Form(""), username: str = Form(...),
+                     name: str = Form(...), role: str = Form(...), password: str = Form("")):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    username = username.strip()
+    if role not in ("editor", "viewer"):
+        return RedirectResponse("/admin/users?err=권한은 editor 또는 viewer만 지정할 수 있습니다.", status_code=303)
+    if not username or not name.strip():
+        return RedirectResponse("/admin/users?err=아이디와 이름을 입력하세요.", status_code=303)
+    conn = db.connect()
+    try:
+        if orig_username:
+            existing = conn.execute("SELECT role FROM users WHERE username=?", (orig_username,)).fetchone()
+            if not existing or existing["role"] not in ("editor", "viewer"):
+                conn.close()
+                return RedirectResponse("/admin/users?err=admin 계정은 이 화면에서 수정할 수 없습니다.", status_code=303)
+            if username != orig_username:
+                dup = conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone()
+                if dup:
+                    conn.close()
+                    return RedirectResponse("/admin/users?err=이미 사용 중인 아이디입니다.", status_code=303)
+            if password:
+                conn.execute("UPDATE users SET username=?,name=?,role=?,pw_hash=? WHERE username=?",
+                            (username, name.strip(), role, db.hash_pw(password), orig_username))
+            else:
+                conn.execute("UPDATE users SET username=?,name=?,role=? WHERE username=?",
+                            (username, name.strip(), role, orig_username))
+        else:
+            dup = conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone()
+            if dup:
+                conn.close()
+                return RedirectResponse("/admin/users?err=이미 사용 중인 아이디입니다.", status_code=303)
+            if not password:
+                conn.close()
+                return RedirectResponse("/admin/users?err=새 계정은 비밀번호를 입력하세요.", status_code=303)
+            conn.execute("INSERT INTO users(username,name,pw_hash,role) VALUES(?,?,?,?)",
+                        (username, name.strip(), db.hash_pw(password), role))
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse("/admin/users?msg=저장했습니다.", status_code=303)
+
+
+@app.post("/admin/users/{username}/delete")
+def admin_users_delete(request: Request, username: str):
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    conn = db.connect()
+    row = conn.execute("SELECT role FROM users WHERE username=?", (username,)).fetchone()
+    if row and row["role"] in ("editor", "viewer"):
+        conn.execute("DELETE FROM users WHERE username=?", (username,))
+        conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/users?msg=삭제했습니다.", status_code=303)
+
+
+@app.post("/admin/permissions/save")
+async def admin_permissions_save(request: Request):
+    """editor/viewer 메뉴별 보기·편집 권한 매트릭스 저장(관리자 전용, 관리자 자신은 매트릭스 대상 아님)."""
+    u = current_user(request)
+    if u is None or u["role"] != "admin":
+        return RedirectResponse("/", status_code=303)
+    form = await request.form()
+    conn = db.connect()
+    for role in ("editor", "viewer"):
+        for key, _label in PERM_MENUS:
+            can_view = 1 if form.get(f"p_{role}_{key}_view") else 0
+            can_edit = 1 if form.get(f"p_{role}_{key}_edit") else 0
+            conn.execute(
+                "INSERT INTO permission(role,menu_key,can_view,can_edit) VALUES(?,?,?,?) "
+                "ON CONFLICT(role,menu_key) DO UPDATE SET can_view=excluded.can_view, can_edit=excluded.can_edit",
+                (role, key, can_view, can_edit))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/users?msg=권한을 저장했습니다.", status_code=303)
 
 
 # ── 데이터 입력 ─────────────────────────────────────────
@@ -1302,8 +1416,7 @@ def admin_users(request: Request):
 # SVP는 FY 표(아래), Claim·Customer Incident는 건별 직접 등록(원장) 화면.
 @app.get("/input/outsource-review", response_class=HTMLResponse)
 def outsource_review_page(request: Request):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "oreview", "view")
     if g:
         return g
     return outsource_review(request, u)
@@ -1337,8 +1450,7 @@ def _fy_options(conn):
 
 @app.get("/input/svp", response_class=HTMLResponse)
 def svp_page(request: Request, fy: int = 0, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "svp", "view")
     if g:
         return g
     conn = db.connect()
@@ -1357,14 +1469,14 @@ def svp_page(request: Request, fy: int = 0, msg: str = "", err: str = ""):
     return render(request, "svp.html", u, active="svp", heading="SVP 입력",
                   crumb="데이터 입력", pending=pending_count(), fy=fy, fy_list=fy_list,
                   cols=cols, rows=rows, msg=msg, err=err,
-                  can_edit=(u["role"] in ("editor", "admin")))
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "svp", "edit")))
 
 
 @app.post("/input/svp/save")
 async def svp_save(request: Request):
     """FY 표 저장. 빈칸은 삭제(그 달은 생산금액 추정으로 계산)."""
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "svp", "edit")):
         return RedirectResponse("/input/svp", status_code=303)
     form = await request.form()
     fy = int(form.get("fy") or 27)
@@ -1398,8 +1510,7 @@ CLAIM_ITEM_OPTIONS = calc.CLAIM_COPQ_ITEMS + ["기타"]
 
 @app.get("/input/claim", response_class=HTMLResponse)
 def claim_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "claim", "view")
     if g:
         return g
     conn = db.connect()
@@ -1421,13 +1532,13 @@ def claim_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
     return render(request, "claim.html", u, active="claim", heading="Claim 입력",
                   crumb="데이터 입력", pending=pending_count(), rows=rows,
                   item_options=CLAIM_ITEM_OPTIONS, edit_row=edit_row,
-                  can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "claim", "edit")), msg=msg, err=err)
 
 
 @app.post("/input/claim/save")
 async def claim_save(request: Request):
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "claim", "edit")):
         return RedirectResponse("/input/claim", status_code=303)
     form = await request.form()
     orig_id = (form.get("orig_id") or "").strip()
@@ -1476,7 +1587,7 @@ async def claim_save(request: Request):
 def claim_toggle_agg(request: Request, cid: int):
     """이력표의 '집계 포함' 체크박스: 체크된 건만 COPQ 등 집계에 반영."""
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "claim", "edit")):
         return RedirectResponse("/input/claim", status_code=303)
     conn = db.connect()
     conn.execute("UPDATE claim SET use_agg=1-use_agg WHERE id=?", (cid,))
@@ -1488,7 +1599,7 @@ def claim_toggle_agg(request: Request, cid: int):
 @app.post("/input/claim/{cid}/delete")
 def claim_delete(request: Request, cid: int):
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "claim", "edit")):
         return RedirectResponse("/input/claim", status_code=303)
     conn = db.connect()
     conn.execute("DELETE FROM claim WHERE id=?", (cid,))
@@ -1500,8 +1611,7 @@ def claim_delete(request: Request, cid: int):
 # ── Customer Incident 관리 (건별 직접 등록) ──────────────
 @app.get("/input/incident", response_class=HTMLResponse)
 def incident_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
-    u = current_user(request)
-    g = _guard(u)
+    u, g = _perm_guard(request, "incident", "view")
     if g:
         return g
     conn = db.connect()
@@ -1518,13 +1628,13 @@ def incident_page(request: Request, edit: int = 0, msg: str = "", err: str = "")
     conn.close()
     return render(request, "incident.html", u, active="incident", heading="Customer Incident 관리",
                   crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
-                  can_edit=(u["role"] in ("editor", "admin")), msg=msg, err=err)
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "incident", "edit")), msg=msg, err=err)
 
 
 @app.post("/input/incident/save")
 async def incident_save(request: Request):
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "incident", "edit")):
         return RedirectResponse("/input/incident", status_code=303)
     form = await request.form()
     orig_id = (form.get("orig_id") or "").strip()
@@ -1560,7 +1670,7 @@ async def incident_save(request: Request):
 def incident_toggle_official(request: Request, iid: int):
     """이력표의 '공식' 체크박스: 공식(is_official=1) 건만 Customer Incident KPI에 반영."""
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "incident", "edit")):
         return RedirectResponse("/input/incident", status_code=303)
     conn = db.connect()
     conn.execute("UPDATE incident SET is_official=1-is_official WHERE id=?", (iid,))
@@ -1572,7 +1682,7 @@ def incident_toggle_official(request: Request, iid: int):
 @app.post("/input/incident/{iid}/delete")
 def incident_delete(request: Request, iid: int):
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "incident", "edit")):
         return RedirectResponse("/input/incident", status_code=303)
     conn = db.connect()
     conn.execute("DELETE FROM incident WHERE id=?", (iid,))
@@ -1595,7 +1705,7 @@ def outsource_review(request, u):
     conn.close()
     return render(request, "review.html", u, active="oreview", heading="불량 검토 (100EA 이상)",
                   crumb="데이터 입력", pending=len(rows), rows=rows,
-                  can_edit=(u["role"] in ("editor", "admin")))
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "oreview", "edit")))
 
 
 @app.post("/input/outsource-review/{eid}")
@@ -1603,7 +1713,7 @@ async def review_action(request: Request, eid: int, action: str = Form(...), qty
     """검토 대기 건 처리: approve(그대로/수정 반영)·reject(삭제).
     사람이 결정한 건은 reviewed=1로 표시해 다음 폴더 반영(재스캔) 때도 덮어써지지 않는다."""
     u = current_user(request)
-    if u is None or u["role"] not in ("editor", "admin"):
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "oreview", "edit")):
         return RedirectResponse("/input/outsource-review", status_code=303)
     conn = db.connect()
     if action == "approve":

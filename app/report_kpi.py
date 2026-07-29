@@ -366,12 +366,66 @@ def defect_names_for_tm(conn, tm):
         "SELECT DISTINCT defect_name FROM defect_entry WHERE tm_no=? ORDER BY defect_name", (tm,))]
 
 
-def defect_trend(conn, part, tm_q, defect_name, date_from, date_to):
-    """[item별] Part·TM-NO/품명·불량유형·기간(일 단위)으로 필터링한 불량 발생 추이.
-    반환: {"days":[...], "series":{불량명:[qty...]}, "qty_total":int, "tm_rows":[...]}"""
+def _period_setup(cy, cm, unit, date_from=None, date_to=None):
+    """일/주/월 단위 기간·라벨·날짜인덱스를 만든다(ITEM·불량유형 두 추이 화면 공통).
+    일=date_from~date_to 그대로. 월=최근 12개월. 주=최근 7개월 범위의 실제 주차(라벨 'N월M주',
+    calc.week_of_month 기준 월~일). 반환: (d0, d1, labels, day_idx) —
+    day_idx: {'YYYY-MM-DD': 그 날짜가 속하는 라벨의 인덱스}."""
+    if unit == "월":
+        months = calc.trailing_months(cy, cm, 12)
+        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
+        y1, m1 = months[-1]
+        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
+        labels = [f"{mo}월" for (_y, mo) in months]
+        mi = {(y, mo): i for i, (y, mo) in enumerate(months)}
+        day_idx = {}
+        d = _dt.date.fromisoformat(d0)
+        end = _dt.date.fromisoformat(d1)
+        while d <= end:
+            day_idx[d.isoformat()] = mi.get((d.year, d.month))
+            d += _dt.timedelta(days=1)
+        return d0, d1, labels, day_idx
+    if unit == "주":
+        months = calc.trailing_months(cy, cm, 7)
+        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
+        y1, m1 = months[-1]
+        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
+        seen, order = {}, []
+        day_idx = {}
+        d = _dt.date.fromisoformat(d0)
+        end = _dt.date.fromisoformat(d1)
+        while d <= end:
+            wk = calc.week_of_month(d.isoformat())
+            key = (d.year, d.month, wk)
+            if key not in seen:
+                seen[key] = f"{d.month}월{wk}주"
+                order.append(key)
+            day_idx[d.isoformat()] = order.index(key)
+            d += _dt.timedelta(days=1)
+        labels = [seen[k] for k in order]
+        return d0, d1, labels, day_idx
+    # 일
+    d0, d1 = date_from, date_to
+    labels, day_idx = [], {}
+    d = _dt.date.fromisoformat(d0)
+    end = _dt.date.fromisoformat(d1)
+    while d <= end and len(labels) < 400:
+        day_idx[d.isoformat()] = len(labels)
+        labels.append(d.isoformat())
+        d += _dt.timedelta(days=1)
+    return d0, d1, labels, day_idx
+
+
+def defect_trend(conn, part, tm_q, defect_name, unit, date_from=None, date_to=None):
+    """[ITEM] Part·TM-NO/품명·불량유형·집계단위(일/주/월)로 필터링한 불량 발생 추이.
+    반환: {"labels":[...], "series":{불량명:[qty...]}, "qty_total":int, "tm_rows":[...]}"""
     parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
+    cutoff = latest_actual_month(conn) or (_dt.date.today().year, _dt.date.today().month)
+    cy, cm = cutoff
+    d0, d1, labels, day_idx = _period_setup(cy, cm, unit, date_from, date_to)
+
     where = ["status='confirmed'", "d BETWEEN ? AND ?"]
-    args = [date_from, date_to]
+    args = [d0, d1]
     if defect_name:
         where.append("defect_name=?")
         args.append(defect_name)
@@ -385,31 +439,24 @@ def defect_trend(conn, part, tm_q, defect_name, date_from, date_to):
             continue
         rows.append(r)
 
-    days = []
-    cur = _dt.date.fromisoformat(date_from)
-    end = _dt.date.fromisoformat(date_to)
-    while cur <= end and len(days) < 400:
-        days.append(cur.isoformat())
-        cur += _dt.timedelta(days=1)
-
-    by_type = defaultdict(lambda: defaultdict(int))
+    by_type = defaultdict(lambda: [0] * len(labels))
     by_tm = defaultdict(int)
     total = 0
     for r in rows:
-        by_type[r["defect_name"]][r["d"]] += r["qty"]
         by_tm[r["tm_no"] or "(미지정)"] += r["qty"]
         total += r["qty"]
+        i = day_idx.get(r["d"])
+        if i is not None:
+            by_type[r["defect_name"]][i] += r["qty"]
 
-    top_types = sorted(by_type, key=lambda k: -sum(by_type[k].values()))[:8]
-    series = {t: [by_type[t].get(d, 0) for d in days] for t in top_types}
+    top_types = sorted(by_type, key=lambda k: -sum(by_type[k]))[:8]
+    series = {t: by_type[t] for t in top_types}
     tm_rows = sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]
-    return {"days": days, "series": series, "qty_total": total, "tm_rows": tm_rows}
+    return {"labels": labels, "series": series, "qty_total": total, "tm_rows": tm_rows}
 
 
 def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_to=None):
-    """[유형별] Part·불량유형(최대 3개)·집계단위(일/주/월)로 필터링한 발생 추이.
-    일별=사용자가 준 시작~종료일. 월별=최근 12개월. 주별=최근 7개월 범위의 주차들
-    (calc.week_of_month, 월~일 기준, 라벨 'N월M주').
+    """[불량유형] Part·불량유형(최대 3개)·집계단위(일/주/월)로 필터링한 발생 추이.
     반환: {"labels":[...], "series":{불량명:[qty...]}}"""
     parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
     names = [n for n in defect_names if n][:3]
@@ -418,18 +465,7 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
 
     cutoff = latest_actual_month(conn) or (_dt.date.today().year, _dt.date.today().month)
     cy, cm = cutoff
-    if unit == "일":
-        d0, d1 = date_from, date_to
-    elif unit == "월":
-        months = calc.trailing_months(cy, cm, 12)
-        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
-        y1, m1 = months[-1]
-        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
-    else:  # 주
-        months = calc.trailing_months(cy, cm, 7)
-        d0 = f"{months[0][0]:04d}-{months[0][1]:02d}-01"
-        y1, m1 = months[-1]
-        d1 = f"{y1:04d}-{m1:02d}-{calendar.monthrange(y1, m1)[1]:02d}"
+    d0, d1, labels, day_idx = _period_setup(cy, cm, unit, date_from, date_to)
 
     where = ["status='confirmed'", "d BETWEEN ? AND ?",
             "defect_name IN (%s)" % ",".join("?" * len(names))]
@@ -443,53 +479,9 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
             continue
         rows.append(r)
 
-    if unit == "일":
-        labels = []
-        cur = _dt.date.fromisoformat(d0)
-        end = _dt.date.fromisoformat(d1)
-        while cur <= end and len(labels) < 400:
-            labels.append(cur.isoformat())
-            cur += _dt.timedelta(days=1)
-        series = {n: [0] * len(labels) for n in names}
-        idx = {d: i for i, d in enumerate(labels)}
-        for r in rows:
-            i = idx.get(r["d"])
-            if i is not None:
-                series[r["defect_name"]][i] += r["qty"]
-        return {"labels": labels, "series": series}
-
-    if unit == "월":
-        months = calc.trailing_months(cy, cm, 12)
-        labels = [f"{mo}월" for (_y, mo) in months]
-        idx = {(y, mo): i for i, (y, mo) in enumerate(months)}
-        series = {n: [0] * len(labels) for n in names}
-        for r in rows:
-            yy, mm = int(r["d"][:4]), int(r["d"][5:7])
-            i = idx.get((yy, mm))
-            if i is not None:
-                series[r["defect_name"]][i] += r["qty"]
-        return {"labels": labels, "series": series}
-
-    # 주별: 실제 존재하는 주차를 날짜 순으로 나열
-    seen = {}
-    cur = _dt.date.fromisoformat(d0)
-    end = _dt.date.fromisoformat(d1)
-    order = []
-    while cur <= end:
-        ds = cur.isoformat()
-        wk = calc.week_of_month(ds)
-        key = (cur.year, cur.month, wk)
-        if key not in seen:
-            seen[key] = f"{cur.month}월{wk}주"
-            order.append(key)
-        cur += _dt.timedelta(days=1)
-    labels = [seen[k] for k in order]
-    idx = {k: i for i, k in enumerate(order)}
     series = {n: [0] * len(labels) for n in names}
     for r in rows:
-        dd = _dt.date.fromisoformat(r["d"])
-        key = (dd.year, dd.month, calc.week_of_month(r["d"]))
-        i = idx.get(key)
+        i = day_idx.get(r["d"])
         if i is not None:
             series[r["defect_name"]][i] += r["qty"]
     return {"labels": labels, "series": series}

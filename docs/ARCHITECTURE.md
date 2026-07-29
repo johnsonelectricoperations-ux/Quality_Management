@@ -400,6 +400,23 @@ erDiagram
 
 구 라우트 `/report/kpi`, `/report/defect` 는 `/report/detail` 로 **리다이렉트**만 한다(옛 링크 호환).
 
+### 권한 매트릭스 (2026-07-29 추가, `/admin/users`)
+
+- `permission(role, menu_key, can_view, can_edit)` 테이블. **관리자는 여기 저장하지 않고 항상
+  전기능**(코드에서 하드코딩, `main.has_perm()`). editor·viewer만 메뉴별 보기/편집을 체크로 지정.
+  기본값(`db._ensure_default_permissions`)은 기존 하드코딩 동작 그대로: viewer=전체 보기전용,
+  editor=SVP·Claim·Incident·불량검토 4개 메뉴만 편집, 나머지는 보기.
+- **대시보드(dash)는 매트릭스 대상 밖**(`has_perm`에서 항상 True) — 로그인 직후 갈 곳이 없어지는
+  걸 막기 위한 안전장치. **사용자 관리(users)도 매트릭스 대상 밖** — admin만 다루는 화면으로
+  하드코딩 고정(editor/viewer에게 계정 관리 권한을 줄 수 없음).
+- 권한이 없으면(보기 실패) **메뉴는 사이드바에 그대로 보이되, 클릭하면 `/`로 리다이렉트**된다
+  (숨기지 않음 — 2026-07-29 사용자 확정). 편집 권한이 없으면 화면은 보이되 저장/추가/삭제
+  버튼(폼)만 숨겨지고, 그 상태에서 POST 엔드포인트를 직접 두드려도 서버가 `has_perm(..,"edit")`로
+  다시 막는다(화면단 숨김 + 서버단 재검증 이중 체크).
+- 라우트 가드는 `main._perm_guard(request, menu_key, "view"|"edit")` 하나로 통일(로그인 체크 +
+  권한 체크를 한 번에). 새 관리 화면을 추가하면 `PERM_MENUS`에 항목을 추가하고 그 라우트에
+  `_perm_guard`를 붙이면 매트릭스에 자동으로 노출된다.
+
 ### 세부지표현황 (`/report/detail`)
 
 검색조건 8개 × 분석유형 7종의 조합으로 본다.
@@ -455,7 +472,7 @@ erDiagram
 ```bash
 # 개발 서버
 uvicorn app.main:app --host 0.0.0.0 --port 5003
-# 브라우저 http://localhost:5003  (admin/admin)
+# 브라우저 http://localhost:5003  (admin/qazwsx0793)
 
 # 초기 DB 구축 (최초 1회)
 python -m app.init_data

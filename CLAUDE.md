@@ -134,7 +134,7 @@
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 5003
-# 브라우저에서 http://localhost:5003 접속 → admin / admin 으로 로그인
+# 브라우저에서 http://localhost:5003 접속 → admin / qazwsx0793 으로 로그인
 ```
 
 - **코드를 고쳤으면 서버를 반드시 재시작한다.** `--reload` 를 안 붙였으면 옛 코드가 계속 돈다.

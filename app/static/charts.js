@@ -212,6 +212,52 @@
       return `<svg viewBox="0 0 ${PW} ${PH}" role="img">` + gr + ylab + paths + dots + xl + `</svg>`;
     }
 
+    // 다중 시리즈 막대(세부지표현황: 불량유형별 추이를 월/주 단위로 볼 때) — renderMulti와 같은
+    // 데이터 모양(cfg.sets/labels/names)을 막대로 그린다. 시리즈별로 슬롯 안에 나란히 배치.
+    function renderMultiBar(cfg){
+      const sets = cfg.sets || [], n = cfg.labels.length;
+      const flat = [];
+      sets.forEach(s => s.forEach(v => { if (v != null) flat.push(v); }));
+      if (!flat.length) return `<svg viewBox="0 0 ${PW} ${PH}"><text class="g-ax" x="${PW/2}" y="${PH/2}" text-anchor="middle">데이터 없음</text></svg>`;
+      const vmax = (Math.max(...flat, 0) * 1.15) || 1;
+      const ticks = [0, 0.5, 1].map(f => ({f, v: Math.round(vmax * (1 - f))}));
+      const pPL = Math.max(...ticks.map(t => fmt(t.v, 0).length)) * 5.4 + 10;
+      const pPlotW = PW - pPL - pPR;
+      const y = v => pPT + pPlotH * (vmax - v) / (vmax || 1);
+      const baseY = pPT + pPlotH;
+      const slot = pPlotW / n;
+      const names = cfg.names || [];
+      const sN = Math.max(1, sets.length);
+      const gap = 2;
+      const barW = Math.max(2, (slot - 6) / sN - gap);
+      let bars = "";
+      sets.forEach((s, si) => {
+        const col = MULTI[si % MULTI.length];
+        const c = col.startsWith("--") ? `var(${col})` : col;
+        const nm = names[si] || "";
+        s.forEach((v, i) => {
+          if (v == null) return;
+          const groupX = pPL + slot * i + 3;
+          const x = groupX + si * (barW + gap);
+          const yt = y(v), h = Math.max(0, baseY - yt);
+          bars += `<rect x="${x.toFixed(1)}" y="${yt.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${c}"/>`;
+          bars += `<rect class="g-mdot" x="${(x - 1).toFixed(1)}" y="${pPT}" width="${(barW + 2).toFixed(1)}" height="${pPlotH.toFixed(1)}" `
+                + `fill="transparent" style="cursor:pointer;" data-lbl="${cfg.labels[i]}" data-nm="${nm}" data-col="${c}" `
+                + `data-val="${fmt(v, cfg.dec)}${cfg.unit}"/>`;
+        });
+      });
+      let gr = "", ylab = "";
+      ticks.forEach(t => {
+        const yy = pPT + pPlotH * t.f;
+        gr += `<line class="g-grid" x1="${pPL}" y1="${yy.toFixed(1)}" x2="${pPL+pPlotW}" y2="${yy.toFixed(1)}"/>`;
+        ylab += `<text class="g-ax" x="${(pPL-5).toFixed(1)}" y="${(yy+3).toFixed(1)}" text-anchor="end" style="font-size:9px">${fmt(t.v, 0)}</text>`;
+      });
+      const xlStep = Math.max(1, Math.ceil(n / 12));
+      const xl = cfg.labels.map((l, i) => (i % xlStep !== 0 && i !== n - 1) ? "" :
+        `<text class="g-ax" x="${(pPL + slot*i + slot/2).toFixed(1)}" y="${PH-9}" text-anchor="middle" style="font-size:10px">${l}</text>`).join("");
+      return `<svg viewBox="0 0 ${PW} ${PH}" role="img">` + gr + ylab + bars + xl + `</svg>`;
+    }
+
     // 가로 막대(비중/순위): 항목이 많아도 이름이 안 겹친다
     function renderHBar(cfg){
       const id = "gh" + (++uid);
@@ -264,6 +310,7 @@
       };
       node.innerHTML = d.type === "bar" ? renderBar(cfg)
                      : d.type === "multi" ? renderMulti(cfg)
+                     : d.type === "multibar" ? renderMultiBar(cfg)
                      : d.type === "hbar" ? renderHBar(cfg)
                      : renderArea(cfg);
       // 이전월 수치 라벨: 터치기기는 hover가 없으므로 클릭/탭으로 토글한다(PC는 CSS hover로 표시).
@@ -276,7 +323,7 @@
         });
       }
       // 꺾은선(multi) 그래프: 점에 마우스오버/클릭 시 (구분, 값) 툴팁 표시
-      if (d.type === "multi") {
+      if (d.type === "multi" || d.type === "multibar") {
         if (!node._ttEl) {
           const tt = document.createElement("div");
           tt.className = "g-tt";

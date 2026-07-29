@@ -1,9 +1,72 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="panel"><div class="phead"><h2>사용자 목록</h2><span class="tot">{{ users|length }}명</span></div>
-  <table><thead><tr><th>아이디</th><th>이름</th><th>권한</th></tr></thead><tbody>
+  <table><thead><tr><th>아이디</th><th>이름</th><th>권한</th>{% if can_edit %}<th style="width:150px;"></th>{% endif %}</tr></thead><tbody>
   {% for r in users %}<tr><td class="mono">{{ r.username }}</td><td>{{ r.name }}</td>
-    <td>{% if r.role=='admin' %}<span class="badge bg-err">관리자</span>{% elif r.role=='editor' %}<span class="badge bg-info">입력자</span>{% else %}<span class="badge bg-hold">조회자</span>{% endif %}</td></tr>{% endfor %}
+    <td>{% if r.role=='admin' %}<span class="badge bg-err">관리자</span>{% elif r.role=='editor' %}<span class="badge bg-info">입력자</span>{% else %}<span class="badge bg-hold">조회자</span>{% endif %}</td>
+    {% if can_edit %}<td>
+      {% if r.role in ('editor', 'viewer') %}
+      <a class="btn btn-s btn-sm" href="/admin/users?edit={{ r.username }}" style="text-decoration:none;">수정</a>
+      <form method="post" action="/admin/users/{{ r.username }}/delete" style="display:inline;"
+            onsubmit="return confirm('{{ r.username }} 계정을 삭제할까요?');">
+        <button type="submit" class="btn btn-ghost btn-sm">삭제</button>
+      </form>
+      {% endif %}
+    </td>{% endif %}
+  </tr>{% endfor %}
   </tbody></table>
 </div>
+
+{% if can_edit %}
+<div class="panel"><div class="phead"><h2>{{ '계정 수정' if edit_row else '계정 추가' }}</h2>
+  {% if edit_row %}<a class="btn btn-s btn-sm" href="/admin/users" style="margin-left:auto;text-decoration:none;">+ 새 계정</a>{% endif %}</div>
+  <div class="pbody">
+    <form method="post" action="/admin/users/save">
+      {% if edit_row %}<input type="hidden" name="orig_username" value="{{ edit_row.username }}">{% endif %}
+      <div class="frow" style="grid-template-columns:200px 200px 160px 200px 120px;">
+        <div class="f"><label>아이디</label><input class="in" name="username" value="{{ edit_row.username if edit_row else '' }}" required></div>
+        <div class="f"><label>이름</label><input class="in" name="name" value="{{ edit_row.name if edit_row else '' }}" required></div>
+        <div class="f"><label>권한</label><select class="in" name="role">
+          <option value="editor" {{ 'selected' if edit_row and edit_row.role=='editor' }}>입력자(editor)</option>
+          <option value="viewer" {{ 'selected' if edit_row and edit_row.role=='viewer' }}>조회자(viewer)</option>
+        </select></div>
+        <div class="f"><label>비밀번호{{ ' (변경 시에만 입력)' if edit_row else '' }}</label>
+          <input class="in" type="password" name="password" placeholder="{{ '변경 안 하려면 비워두기' if edit_row else '' }}"></div>
+        <div class="f" style="justify-content:flex-end;"><button class="btn btn-p">저장</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="panel"><div class="phead"><h2>메뉴별 권한 매트릭스</h2>
+  <span class="tot">관리자는 항상 전기능 · editor·viewer는 메뉴별로 보기/편집을 체크</span></div>
+  <div class="pbody">
+    <form method="post" action="/admin/permissions/save">
+      <div style="overflow-x:auto;">
+      <table class="dtbl" style="width:auto;min-width:100%;">
+        <thead><tr><th style="text-align:left;">메뉴</th>
+          <th colspan="2">입력자(editor)</th><th colspan="2">조회자(viewer)</th></tr>
+        <tr><th></th><th>보기</th><th>편집</th><th>보기</th><th>편집</th></tr></thead>
+        <tbody>
+        {% for key, label in perm_matrix %}
+        <tr><td style="text-align:left;">{{ label }}</td>
+          {% if key == 'dash' %}
+          <td colspan="2" style="color:var(--tx3);">항상 허용(로그인 후 첫 화면)</td>
+          <td colspan="2" style="color:var(--tx3);">항상 허용(로그인 후 첫 화면)</td>
+          {% else %}
+          <td><input type="checkbox" name="p_editor_{{ key }}_view" {{ 'checked' if perm_data.get(('editor', key), (True, False))[0] }}></td>
+          <td>{% if key != 'rdetail' %}<input type="checkbox" name="p_editor_{{ key }}_edit" {{ 'checked' if perm_data.get(('editor', key), (True, False))[1] }}>{% endif %}</td>
+          <td><input type="checkbox" name="p_viewer_{{ key }}_view" {{ 'checked' if perm_data.get(('viewer', key), (True, False))[0] }}></td>
+          <td>{% if key != 'rdetail' %}<input type="checkbox" name="p_viewer_{{ key }}_edit" {{ 'checked' if perm_data.get(('viewer', key), (True, False))[1] }}>{% endif %}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div style="margin-top:10px;"><button class="btn btn-p">권한 저장</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

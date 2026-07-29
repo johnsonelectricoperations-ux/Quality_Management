@@ -449,6 +449,57 @@
 
 ## 최근 로그
 
+### 2026-07-29 (30) — 세부지표현황 ITEM/불량유형 개편, 관리자 라벨 제거, 사용자관리 CRUD·권한 매트릭스
+- 목표: ① 세부지표현황-불량유형별의 "item별"/"유형별" 이름을 "ITEM"/"불량유형"으로 변경
+  ② ITEM 탭에도 유형 탭과 동일하게 일/주/월 단위 선택을 추가 ③ 월/주 선택 시 그래프를 막대그래프로
+  ④ 사이드바의 "관리자" 표기 텍스트 제거 ⑤ admin 비밀번호를 qazwsx0793으로 변경, 이 화면에서
+  관리자만 editor·viewer 계정을 추가/수정/삭제 ⑥ 관리자는 전기능, editor·viewer는 메뉴별 보기/편집을
+  체크로 허용하는 권한 매트릭스. 사전에 사용자에게 매트릭스 적용범위(실제 작동 여부·미허용 메뉴
+  처리방식·editor/viewer 기본값)를 질문해 확인 후 진행: 실제로 접근을 막고, 메뉴는 사이드바에 계속
+  보이되 클릭 시 차단, 기본값은 viewer=전체 보기전용·editor=데이터입력 4개 메뉴만 편집(기존 하드코딩
+  동작과 동일)으로 확정.
+- `app/report_kpi.py`: `_period_setup(cy, cm, unit, date_from, date_to)` 신설(일/주/월 라벨과
+  날짜→인덱스 매핑을 공통화, 기존에 `defect_trend_types`에만 있던 로직을 재사용 가능하게 추출).
+  `defect_trend()`(ITEM)에 `unit` 파라미터 추가(일/주/월 모두 지원, "days"→"labels" 키 변경).
+  `defect_trend_types()`(불량유형)는 `_period_setup` 재사용하도록 리팩터.
+- `app/main.py`: `report_detail()`에 `d_unit` 파라미터 추가(ITEM 탭 전용, 기본 "일"). `TABS`는
+  변경 없음(라벨은 템플릿에서만 변경). 사용자 관리: `PERM_MENUS`(메뉴키·라벨 13개, 사용자관리
+  자체는 제외 — 관리자 전용 고정), `load_permissions()`, `has_perm(role, menu_key, level)`,
+  `_perm_guard(request, menu_key, level)` 신설. `has_perm`은 dash(대시보드)를 항상 허용(로그인
+  직후 갈 곳이 없어지는 걸 방지), admin은 항상 허용, 나머지는 permission 테이블 조회(없으면
+  보기만 허용하는 안전한 기본값). 기존에 흩어져 있던 ~25곳의 `u["role"] != "admin"` /
+  `u["role"] in ("editor","admin")` 하드코딩 체크를 전부 `has_perm()`/`_perm_guard()` 기반으로
+  교체(대시보드·세부지표현황·SVP·Claim·Incident·불량검토·데이터점검·제품마스터·공정관리·
+  불량유형마스터·폴더반영·마스터조회·목표관리 13개 화면 × 보기/편집). `/admin/users/save`,
+  `/admin/users/{username}/delete`, `/admin/permissions/save` 신설(모두 관리자 전용, 사용자
+  관리 자체는 매트릭스 대상이 아님 — admin 계정 자체도 이 화면에서 만들거나 수정 불가).
+- `app/db.py`: `permission(role, menu_key, can_view, can_edit)` 테이블 신설 +
+  `_ensure_default_permissions()`(테이블이 비어있을 때만 시딩 — 기존 하드코딩 동작과 동일한
+  기본값으로 viewer=전체보기, editor=svp/claim/incident/oreview만 편집).
+- `app/templates/base.html`: `<span class="role">관리자</span>` 뱃지 전부 제거.
+- `app/templates/report_detail.html`: 서브탭 링크 라벨 "item별"→"ITEM", "유형별"→"불량유형".
+  ITEM 탭 폼에 단위(일/주/월) select 추가(불량유형 탭과 동일한 UX, 일 선택시만 시작일/종료일
+  노출). 두 탭 모두 그래프 `data-type`을 `d_unit`/`t_unit`이 '일'이면 "multi"(꺾은선), 아니면
+  "multibar"(막대)로 전환.
+- `app/static/charts.js`: `renderMultiBar(cfg)` 신설(다중 시리즈 막대 — renderMulti와 동일한
+  cfg.sets/labels/names 데이터 모양을 슬롯 안에 나란히 배치하는 막대로 그림, 색상은 기존 MULTI
+  팔레트 재사용). `draw()`의 타입 분기와 툴팁 바인딩(`g-mdot` hover/click)에 "multibar" 추가.
+- `app/templates/users.html`: 전면 재작성 — 사용자 목록(관리자에게만 수정/삭제 버튼 노출, admin
+  행은 버튼 없음), 계정 추가/수정 폼(아이디·이름·권한·비밀번호, 비밀번호는 수정 시 빈칸이면
+  기존 값 유지), 메뉴별 권한 매트릭스 표(editor·viewer × 보기/편집 체크박스, 대시보드는 "항상
+  허용" 고정표시, 세부지표현황은 편집 개념이 없어 편집 칸 없음).
+- **DB 변경(qms.db, 커밋 포함)**: admin 비밀번호를 qazwsx0793으로 변경(기존 값은 되돌릴 수
+  없으므로 별도 백업 없이 직접 UPDATE, 요청에 따른 의도된 변경). `permission` 테이블 신설 +
+  기본값 26행(editor·viewer × 13메뉴) 시딩.
+- 검증: 새 비밀번호로 로그인 성공·구 비밀번호 거부 확인. ITEM 탭에서 단위를 "월"로 바꾸면
+  차트 `data-type`이 "multibar"로 바뀜을 확인, 불량유형 탭도 동일 확인. 사이드바 HTML에서
+  `class="role">관리자` 문자열 0건 확인. 사용자 관리에서 editor 계정 추가→목록에 노출→삭제까지
+  왕복 확인. 권한 매트릭스에서 editor의 SVP 편집 체크 해제 후 저장 → 실제로 editor 계정으로
+  로그인해 SVP 화면은 보이지만(200 응답) 저장 버튼이 사라짐(뷰 전용) 확인. viewer의 제품마스터
+  "보기" 체크 해제 후 저장 → viewer 계정으로 `/admin/products` 접근 시 "/"로 리다이렉트됨(접근
+  자체가 차단됨, "메뉴는 보이되 클릭 시 차단" 요구사항과 일치) 확인. 두 토글 모두 원복 후 저장해
+  기본값 상태로 복구. Playwright 콘솔 JS 에러 없음(파비콘 404 1건 무관).
+
 ### 2026-07-29 (29) — 데이터점검 경고아이콘/숨기기, 공정별단가 자동입력, 메뉴 재배치, 대시보드 주별차트·TOP5 수정
 - 목표: 사용자 요청 6가지 — ① 데이터점검 메뉴에 미등록 TM-NO 있으면 경고아이콘 ② 공정별단가에
   "기준단가(최종가격)" 입력 칸 추가, 해당공정 선택 시 자동으로 배분비율대로 단가 입력 ③ 세부지표현황

@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS permission (
+  -- editor/viewer 메뉴별 보기/편집 권한(관리자는 항상 전기능이라 여기 저장하지 않음)
+  role TEXT NOT NULL, menu_key TEXT NOT NULL,
+  can_view INTEGER NOT NULL DEFAULT 1, can_edit INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(role, menu_key)
+);
 CREATE INDEX IF NOT EXISTS ix_defect_d ON defect_entry(d);
 CREATE INDEX IF NOT EXISTS ix_prod_d ON production(d);
 """
@@ -252,7 +258,27 @@ def init_db():
     conn.commit()
     _normalize_tmno(conn)
     _ensure_default_admin(conn)
+    _ensure_default_permissions(conn)
     conn.close()
+
+
+# editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
+PERM_MENU_KEYS = ("dash", "rdetail", "svp", "claim", "incident", "oreview",
+                  "data_check", "products", "processes", "defect_types",
+                  "scan", "masters", "target")
+# 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.
+_EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "oreview"}
+
+
+def _ensure_default_permissions(conn):
+    if conn.execute("SELECT COUNT(*) c FROM permission").fetchone()["c"] > 0:
+        return
+    rows = []
+    for key in PERM_MENU_KEYS:
+        rows.append(("viewer", key, 1, 0))
+        rows.append(("editor", key, 1, 1 if key in _EDITOR_DEFAULT_EDIT else 0))
+    conn.executemany("INSERT INTO permission(role,menu_key,can_view,can_edit) VALUES(?,?,?,?)", rows)
+    conn.commit()
 
 
 def _prune_noncanonical_processes(conn):
