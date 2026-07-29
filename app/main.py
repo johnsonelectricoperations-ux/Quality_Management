@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan, init_data, price_calc
+from . import db, calc, ingest, scan, init_data, price_calc, report_kpi
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -347,160 +347,75 @@ def dashboard(request: Request, part: str = "통합"):
 # ── (구) KPI 현황 → 세부지표현황으로 통합 (옛 링크 호환) ──
 @app.get("/report/kpi")
 def report_kpi_redirect(request: Request, part: str = "통합"):
-    return RedirectResponse(f"/report/detail?view=kpi&part={part}", status_code=303)
+    return RedirectResponse("/report/detail?tab=scrap_cost", status_code=303)
 
 
-# ── 리포트: 세부지표현황 (KPI현황 + 공정별현황 통합) ────
-VIEWS = [
-    ("kpi", "KPI 종합 추이", "Scrap/COPQ/불량율 6개 지표를 한눈에"),
-    ("part", "파트별 불량율 추이", "1PART vs 2PART 비교"),
-    ("process", "공정별 불량율 추이", "성형~기타후공정"),
-    ("defect_type", "불량유형별 추이", "어떤 불량이 늘고 있나 (상위 N)"),
-    ("defect_share", "불량유형별 비중", "상위 유형 파레토"),
-    ("tm", "TM-NO별 불량율 추이", "품번별 문제 추적 (상위 N)"),
-    ("product_name", "품명별 비중", "품명 기준 집중도"),
+# ── 리포트: 세부지표현황 (사용자 제공 세부지표현황.xlsx 양식, 탭 구성) ──
+TABS = [
+    ("scrap_cost", "Scrap Cost"),
+    ("scrap_qty", "Scrap Quantity"),
+    ("copq", "COPQ"),
+    ("incident", "Customer Incident"),
+    ("warranty", "Warranty"),
+    ("process1", "공정불량-1PART"),
+    ("process2", "공정불량-2PART"),
+    ("trend", "불량유형별"),
 ]
-SOURCE_OPTS = [("direct", "사내"), ("outsource", "외주"), ("discard", "폐기")]
-
-
-def _default_range(conn):
-    cy, cm = latest_month(conn)
-    months = calc.trailing_months(cy, cm, 7)
-    y0, m0 = months[0]
-    return f"{y0:04d}-{m0:02d}", f"{cy:04d}-{cm:02d}"
+FY_MONTH_LABELS = [f"{mo}월" for mo in list(range(4, 13)) + list(range(1, 4))]
 
 
 @app.get("/report/detail", response_class=HTMLResponse)
-def report_detail(request: Request, view: str = "kpi", part: str = "통합", unit: str = "월",
-                  f: str = "", t: str = "", kind: str = "", proc: str = "",
-                  src: str = "", measure: str = "ppm", topn: int = 10):
-    """세부지표현황: 검색조건(파트·기간·구분·공정·소스) + 분석유형 선택 + 집계단위(월/분기/년)."""
+def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0,
+                  tpart: str = "통합", d_tm: str = "", d_name: str = "",
+                  d_from: str = "", d_to: str = ""):
+    """세부지표현황: 사용자 제공 세부지표현황.xlsx 양식과 동일한 탭 구성.
+    Scrap Cost/Quantity/COPQ/Customer Incident/Warranty는 Total·1Part·2Part 3블록×FY 12개월,
+    공정불량-1PART/2PART는 파트별 종합(집계기준 EA)+공정별(발생기준 ppm),
+    불량유형별은 Part·TM-NO·불량유형·기간으로 필터링하는 일 단위 추이."""
     u = current_user(request)
     g = _guard(u)
     if g:
         return g
-    if view not in {v for v, _n, _d in VIEWS}:
-        view = "kpi"
-    if part not in ("통합", "VMS PART", "TM PART"):
-        part = "통합"
-    if unit not in calc.PERIOD_UNITS:
-        unit = "월"
-    if measure not in ("ppm", "qty"):
-        measure = "ppm"
+    if tab not in {t for t, _n in TABS}:
+        tab = "scrap_cost"
     conn = db.connect()
-    df, dt = _default_range(conn)
-    ym_from = f or df
-    ym_to = t or dt
-    date_from = ym_from + "-01"
-    date_to = ym_to + "-31"
-    procs = [p for p in proc.split(",") if p] or None
-    sources = [s for s in src.split(",") if s] or None
-    kind_f = kind if kind in ("공정", "셋팅") else None
-
     m = calc.Masters(conn)
-    ctx = {"view": view, "part": part, "unit": unit, "ym_from": ym_from, "ym_to": ym_to,
-           "kind": kind, "proc": proc, "src": src, "measure": measure, "topn": topn,
-           "views": VIEWS, "units": calc.PERIOD_UNITS, "agg_procs": db.AGG_PROCESSES,
-           "source_opts": SOURCE_OPTS, "proc_label": PROC_LABEL,
-           "chart": None, "table": None, "kpi_charts": None}
+    cy, cm = latest_month(conn)
+    cur_fy = calc.fy_of(cy, cm)
+    fy = fy or cur_fy
+    fy_opts = sorted({cur_fy, cur_fy - 1, cur_fy + 1})
 
-    if view == "kpi":
-        # 기존 KPI 현황: 선택 기간의 월별 6개 지표 (집계단위는 월 고정이 자연스러움)
-        daily = calc.compute_daily(conn, m)
-        y0, m0 = int(ym_from[:4]), int(ym_from[5:7])
-        y1, m1 = int(ym_to[:4]), int(ym_to[5:7])
-        months = []
-        yy, mm = y0, m0
-        while (yy, mm) <= (y1, m1) and len(months) < 36:
-            months.append((yy, mm))
-            mm += 1
-            if mm == 13:
-                mm, yy = 1, yy + 1
-        series = [calc.month_kpi(conn, m, daily, y, mo, part) for (y, mo) in months]
-        labels = [f"{mo}월" for (y, mo) in months]
-        fys = [calc.fy_of(y, mo) for (y, mo) in months]
-        fydiv = next((i for i in range(1, len(fys)) if fys[i] != fys[i - 1]), None)
-        fylabels = f"{calc.fy_label(fys[0])},{calc.fy_label(fys[-1])}" if fydiv is not None else ""
-        ppm_part = part if part != "통합" else "VMS PART"
+    ctx = {"tab": tab, "tabs": TABS, "fy": fy, "fy_opts": fy_opts, "fy_label": calc.fy_label(fy),
+           "months": FY_MONTH_LABELS, "PROC_LABEL": PROC_LABEL}
 
-        def tgt(kpi, tpart=None):
-            mon = kpi in MONTHLY_KPIS
-            return _join([target_val(conn, calc.fy_of(y, mo), tpart or part, kpi, mo if mon else 0)
-                          for (y, mo) in months])
-
-        specs = [("Scrap Cost", "--p-500", "%", 2, "scrap_cost_pct", "scrap_cost", part),
-                 ("Scrap Quantity", "--sec", "%", 2, "scrap_qty_pct", "scrap_qty", part),
-                 ("COPQ", "--p-500", "%", 2, "copq_pct", "copq", part),
-                 ("Warranty", "--sec", "", 0, "warranty", "warranty", part),
-                 ("공정불량율 (ppm)", "--p-500", "", 0, "proc_ppm", "proc_ppm", ppm_part),
-                 ("셋팅불량율 (ppm)", "--sec", "", 0, "set_ppm", "set_ppm", ppm_part)]
-        # 카드별 월별 분자·분모(소스 데이터): vk(값 키)로 매핑
-        KPI_SRC = {
-            "scrap_cost_pct": ("scrap_cost", "Scrap Cost(천원)", "denom", "분모(SVP·천원)"),
-            "scrap_qty_pct": ("scrap_qty", "Scrap 수량(EA)", "prod_qty", "생산수량(EA)"),
-            "copq_pct": ("copq_cost", "COPQ 비용(천원)", "denom", "분모(SVP·천원)"),
-            "warranty": ("warranty", "Warranty(천원)", None, None),
-            "proc_ppm": ("proc_qty", "공정불량 수량(EA)", "prod_qty", "생산수량(EA)"),
-            "set_ppm": ("set_qty", "셋팅불량 수량(EA)", "prod_qty", "생산수량(EA)"),
-        }
-
-        def src_table(vk):
-            num_key, num_label, den_key, den_label = KPI_SRC[vk]
-            rows = [[num_label] + [f"{s[num_key]:,}" for s in series]]
-            if den_key:
-                rows.append([den_label] + [f"{s[den_key]:,}" for s in series])
-            return {"head": ["구분"] + labels, "rows": rows}
-
-        ctx["kpi_charts"] = [{
-            "name": nm, "color": col, "unit": un, "dec": dc,
-            "cur_val": series[-1][vk] if series else 0,
-            "vseries": _join([s[vk] for s in series]), "targets": tgt(tk, tp),
-            "src_table": src_table(vk),
-        } for nm, col, un, dc, vk, tk, tp in specs]
-        ctx["labels"] = ",".join(labels)
-        ctx["cur"] = len(months) - 1
-        ctx["fydiv"] = fydiv if fydiv is not None else ""
-        ctx["fylabels"] = fylabels
-    elif view in ("defect_share", "product_name"):
-        axis, label, color = ("defect_type", "불량유형", "--p-500") if view == "defect_share" \
-                             else ("product_name", "품명", "--sec")
-        res = calc.analyze(conn, m, axis, date_from, date_to, part, unit,
-                           kind_f, procs, sources, measure="qty", topn=topn)
-        rows = sorted(res["series"], key=lambda s: s["total"], reverse=True)
-        grand = sum(r["total"] for r in rows) or 1
-        ctx["chart"] = {"type": "hbar", "names": "|".join(r["name"] for r in rows),
-                        "vseries": _join([r["total"] for r in rows]),
-                        "unit": "EA", "dec": 0, "color": color, "note": res["note"]}
-        # 월별 소스 데이터: 분자(항목별 월 수량) + 분모(그 달 전체 수량, 열 합계)
-        by_period_total = [sum(r["qty"][i] for r in rows) for i in range(len(res["periods"]))]
-        ctx["table"] = {"head": [label] + res["periods"] + ["합계(EA)", "비중"],
-                        "rows": [[r["name"]] + [f"{v:,}" for v in r["qty"]]
-                                 + [f"{r['total']:,}", f"{r['total']/grand*100:.1f}%"] for r in rows],
-                        "denom_row": ["합계(분모)"] + [f"{v:,}" for v in by_period_total]
-                                     + [f"{grand:,}", "100.0%"]}
-    else:
-        res = calc.analyze(conn, m, view, date_from, date_to, part, unit,
-                           kind_f, procs, sources, measure=measure, topn=topn)
-        names = [PROC_LABEL.get(s["name"], s["name"]) for s in res["series"]]
-        ctx["chart"] = {"type": "multi", "labels": ",".join(res["periods"]),
-                        "names": "|".join(names),
-                        "sets": "|".join(_join(s["values"]) for s in res["series"]),
-                        "unit": res["unit"], "dec": 0, "color": "--p-500", "note": res["note"],
-                        "legend": list(zip(names, range(len(names))))}
-        # 상세 표는 항상 원본 수량(분자)로 표시하고, 생산수량(분모)은 별도 표로 보여준다
-        ctx["table"] = {"head": ["구분(분자·EA)"] + res["periods"] + ["합계(EA)"],
-                        "rows": [[names[i]] + [f"{v:,}" for v in s["qty"]]
-                                 + [f"{s['total']:,}"] for i, s in enumerate(res["series"])]}
-        if res["per_tm"]:
-            ctx["denom_table"] = {"head": ["구분(분모·생산수량 EA)"] + res["periods"] + ["합계(EA)"],
-                                  "rows": [[names[i]] + [f"{v:,}" for v in res["denom_series"][s["name"]]]
-                                           + [f"{sum(res['denom_series'][s['name']]):,}"]
-                                           for i, s in enumerate(res["series"])]}
-        else:
-            dv = res["denom_series"]
-            ctx["denom_table"] = {"head": ["구분(분모)"] + res["periods"] + ["합계(EA)"],
-                                  "rows": [["생산수량(EA)"] + [f"{v:,}" for v in dv] + [f"{sum(dv):,}"]]}
-        ctx["measure_unit"] = "ppm" if measure == "ppm" else "EA"
+    if tab == "scrap_cost":
+        ctx["data"] = report_kpi.scrap_cost_table(conn, m, fy)
+        ctx["buckets"] = report_kpi.BUCKETS
+    elif tab == "scrap_qty":
+        ctx["data"] = report_kpi.scrap_qty_table(conn, m, fy)
+        ctx["buckets"] = report_kpi.BUCKETS
+    elif tab == "copq":
+        ctx["data"] = report_kpi.copq_table(conn, m, fy)
+        ctx["items"] = report_kpi.COPQ_ITEM_ORDER
+    elif tab == "incident":
+        ctx["data"] = report_kpi.incident_table(conn, m, fy)
+    elif tab == "warranty":
+        ctx["data"] = report_kpi.warranty_table(conn, m, fy)
+    elif tab in ("process1", "process2"):
+        part = "VMS PART" if tab == "process1" else "TM PART"
+        ctx["data"] = report_kpi.process_table(conn, m, fy, part)
+    else:  # trend
+        if tpart not in ("통합", "VMS PART", "TM PART"):
+            tpart = "통합"
+        df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
+        dtypes = [r["name"] for r in conn.execute(
+            "SELECT DISTINCT name FROM defect_type ORDER BY name")]
+        trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, df, dt)
+        trend["chart_names"] = "|".join(trend["series"].keys())
+        trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
+        trend["days_csv"] = ",".join(trend["days"])
+        ctx.update({"tpart": tpart, "d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt,
+                   "defect_type_opts": dtypes, "trend": trend})
     conn.close()
     return render(request, "report_detail.html", u, active="rdetail", heading="세부지표현황",
                   crumb="집계/리포트", pending=pending_count(), **ctx)
@@ -509,8 +424,8 @@ def report_detail(request: Request, view: str = "kpi", part: str = "통합", uni
 # ── (구) 공정별 불량현황 → 세부지표현황으로 통합 (옛 링크 호환) ──
 @app.get("/report/defect")
 def report_defect_redirect(request: Request, part: str = "통합", kind: str = "공정"):
-    return RedirectResponse(f"/report/detail?view=process&part={part}&kind={kind}",
-                            status_code=303)
+    tab = "process1" if part == "VMS PART" else "process2"
+    return RedirectResponse(f"/report/detail?tab={tab}", status_code=303)
 
 
 # ── 마스터 ──────────────────────────────────────────────

@@ -1,155 +1,160 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-.fbar{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:14px;}
-.fbar .row{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;}
-.fbar label{display:block;font:600 11px/1.4 inherit;color:var(--tx3);margin-bottom:4px;}
-.fbar .in{padding:6px 9px;font:500 12px/1.2 inherit;}
-.vtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
-.vtab{font:600 12px/1 inherit;color:var(--tx2);padding:8px 13px;border:1px solid var(--bd);border-radius:6px;
-  background:var(--card);text-decoration:none;cursor:pointer;}
-.vtab.on{background:var(--p-500);border-color:var(--p-500);color:#fff;}
-.vtab small{display:block;font:500 10px/1.4 inherit;opacity:.72;margin-top:2px;}
-.lgd{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 2px;}
-.lgd i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;}
-.lgd span{font:600 11px/1.5 inherit;color:var(--tx2);}
-.srct{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;}
-.srct th,.srct td{padding:3px 6px;border-top:1px solid var(--bd);white-space:nowrap;}
-.srct th{text-align:left;color:var(--tx3);font-weight:600;}
-.srct td.num, .srct th.num{text-align:right;font-variant-numeric:tabular-nums;}
-tr.trow-denom td{border-top:2px solid var(--bd);font-weight:600;color:var(--tx2);background:var(--bg2,rgba(127,127,127,.06));}
+.fyrow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.fyrow select{padding:6px 9px;font:600 12px/1.2 inherit;}
+.dtbl{width:100%;border-collapse:collapse;font-size:12px;}
+.dtbl th,.dtbl td{padding:5px 8px;border-top:1px solid var(--bd);white-space:nowrap;text-align:right;}
+.dtbl th{text-align:center;color:var(--tx3);font-weight:600;background:var(--bg2,rgba(127,127,127,.04));}
+.dtbl td:first-child,.dtbl th:first-child{text-align:left;position:sticky;left:0;background:var(--card);}
+.dtbl tr.sub td{font-weight:700;}
+.dtbl tr.grand td{font-weight:700;background:var(--bg2,rgba(127,127,127,.06));}
+.dtbl tr.pct td{color:var(--p-600);font-weight:700;}
+.dtbl tr.indent td:first-child{padding-left:20px;color:var(--tx2);font-weight:400;}
+.blocklbl{font:700 13px/1 inherit;color:var(--tx2);margin:2px 0 8px;}
 </style>
 
-<form class="fbar" method="get" action="/report/detail">
-  <input type="hidden" name="view" value="{{ view }}">
-  <div class="row">
-    <div><label>파트</label>
-      <select class="in" name="part" style="width:110px;">
-        {% for p in ['통합','VMS PART','TM PART'] %}
-        <option value="{{ p }}" {{ 'selected' if part==p }}>{{ p|pl }}</option>{% endfor %}
-      </select></div>
-    <div><label>기간 (년월)</label>
-      <span style="display:inline-flex;gap:5px;align-items:center;">
-        <input class="in" type="month" name="f" value="{{ ym_from }}" style="width:140px;">
-        <span style="color:var(--tx3);">~</span>
-        <input class="in" type="month" name="t" value="{{ ym_to }}" style="width:140px;">
-      </span></div>
-    <div><label>집계단위</label>
-      <select class="in" name="unit" style="width:90px;">
-        {% for x in units %}<option value="{{ x }}" {{ 'selected' if unit==x }}>{{ x }}별</option>{% endfor %}
-      </select></div>
-    <div><label>구분</label>
-      <select class="in" name="kind" style="width:100px;">
-        <option value="" {{ 'selected' if not kind }}>전체</option>
-        <option value="공정" {{ 'selected' if kind=='공정' }}>공정불량</option>
-        <option value="셋팅" {{ 'selected' if kind=='셋팅' }}>셋팅불량</option>
-      </select></div>
-    <div><label>공정</label>
-      <select class="in" name="proc" style="width:120px;">
-        <option value="" {{ 'selected' if not proc }}>전체 공정</option>
-        {% for p in agg_procs %}<option value="{{ p }}" {{ 'selected' if proc==p }}>{{ proc_label.get(p, p) }}</option>{% endfor %}
-      </select></div>
-    <div><label>소스</label>
-      <select class="in" name="src" style="width:100px;">
-        <option value="" {{ 'selected' if not src }}>전체</option>
-        {% for v, n in source_opts %}<option value="{{ v }}" {{ 'selected' if src==v }}>{{ n }}</option>{% endfor %}
-      </select></div>
-    <div><label>지표</label>
-      <select class="in" name="measure" style="width:110px;">
-        <option value="ppm" {{ 'selected' if measure=='ppm' }}>불량율(ppm)</option>
-        <option value="qty" {{ 'selected' if measure=='qty' }}>불량수량(EA)</option>
-      </select></div>
-    <div><label>표시 개수</label>
-      <select class="in" name="topn" style="width:90px;">
-        {% for n in [5,10,15,20] %}<option value="{{ n }}" {{ 'selected' if topn==n }}>상위 {{ n }}</option>{% endfor %}
-      </select></div>
-    <button class="btn btn-p">조회</button>
-  </div>
-</form>
-
-<div class="vtabs">
-  {% for v, name, desc in views %}
-  <a class="vtab {{ 'on' if view==v }}"
-     href="/report/detail?view={{ v }}&part={{ part }}&unit={{ unit }}&f={{ ym_from }}&t={{ ym_to }}&kind={{ kind }}&proc={{ proc }}&src={{ src }}&measure={{ measure }}&topn={{ topn }}">
-    {{ name }}</a>
+<div class="fyrow">
+  {% for t, name in tabs %}
+  <a class="btn btn-sm {{ 'btn-p' if tab==t else 'btn-s' }}" style="text-decoration:none;"
+     href="/report/detail?tab={{ t }}&fy={{ fy }}">{{ name }}</a>
   {% endfor %}
+  <span style="margin-left:auto;"></span>
+  <label style="font:600 11px/1 inherit;color:var(--tx3);">FY</label>
+  <select onchange="location.href='/report/detail?tab={{ tab }}&fy='+this.value">
+    {% for f in fy_opts %}<option value="{{ f }}" {{ 'selected' if f==fy }}>FY{{ '%02d'|format(f % 100) }}</option>{% endfor %}
+  </select>
 </div>
 
-{% if view == 'kpi' %}
-  <div class="charts2">
-  {% for ch in kpi_charts %}
-    <div class="mcard">
-      <div class="mh"><div><div class="mt"><span class="dot" style="background:var({{ ch.color }})"></span>{{ ch.name }}</div>
-        <div class="mv">{{ ch.cur_val|cf if ch.dec==0 else ch.cur_val|cf2 }}<small>{{ ' '+ch.unit if ch.unit else '' }}</small></div></div></div>
-      <div class="jchart" data-type="bar" data-color="{{ ch.color }}" data-unit="{{ ch.unit }}" data-dec="{{ ch.dec }}"
-        data-cur="{{ cur }}" {% if fydiv != '' %}data-fydiv="{{ fydiv }}" data-fylabels="{{ fylabels }}"{% endif %}
-        data-targets="{{ ch.targets }}" data-labels="{{ labels }}" data-values="{{ ch.vseries }}"></div>
-      {% if ch.src_table %}
-      <div style="overflow-x:auto;">
-      <table class="srct">
-        <thead><tr>{% for h in ch.src_table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in ch.src_table.rows %}
-          <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
-        {% endfor %}</tbody>
-      </table>
-      </div>
-      {% endif %}
-    </div>
+{% macro block_table(lbl, head_rows, months) %}
+<div class="panel"><div class="pbody">
+  <div class="blocklbl">{{ lbl }}</div>
+  <div style="overflow-x:auto;">
+  <table class="dtbl">
+    <thead><tr><th>구분</th>{% for mo in months %}<th>{{ mo }}</th>{% endfor %}</tr></thead>
+    <tbody>{{ caller() }}</tbody>
+  </table>
+  </div>
+</div></div>
+{% endmacro %}
+
+{% macro row(label, vals, cls='', dec=0) %}
+<tr class="{{ cls }}"><td>{{ label }}</td>
+  {% for v in vals %}<td>{{ ('%.'+dec|string+'f')|format(v or 0) if dec else '{:,.0f}'.format(v or 0) }}</td>{% endfor %}
+</tr>
+{% endmacro %}
+
+{% if tab in ('scrap_cost','scrap_qty') %}
+  {% set unit = 'EA' if tab=='scrap_qty' else '천원' %}
+  {% for lbl in ['Total','1Part','2Part'] %}
+    {% set b = data[lbl] %}
+    {% call block_table(lbl, None, months) %}
+      <tr class="sub"><td>공정불량({{ unit }}) 소계</td>{% for v in b.gj_sub %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+      {% for pr in buckets %}
+      <tr class="indent"><td>{{ pr }}</td>{% for v in b.gj[pr] %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+      {% endfor %}
+      {{ row('셋팅불량('+unit+')', b.setting) }}
+      <tr class="grand"><td>합계({{ unit }})</td>{% for v in b.total %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+      {{ row('SVP(천원)' if tab=='scrap_cost' else '생산량(EA)', b.denom) }}
+      {{ row('지표(%) 목표', b.target, dec=3) }}
+      <tr class="pct"><td>실적</td>{% for v in b.actual %}<td>{{ '%.3f'|format(v) }}%</td>{% endfor %}</tr>
+    {% endcall %}
   {% endfor %}
-  </div>
+
+{% elif tab == 'copq' %}
+  {% for lbl in ['Total','1Part','2Part'] %}
+    {% set b = data[lbl] %}
+    {% call block_table(lbl, None, months) %}
+      <tr class="sub"><td>COPQ(천원) 소계</td>{% for v in b.total %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+      {% for it in items %}
+      <tr class="indent"><td>{{ it }}</td>{% for v in b.copq_items[it] %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+      {% endfor %}
+      {{ row('SVP(천원)', b.denom) }}
+      {{ row('지표(%) 목표', b.target, dec=3) }}
+      <tr class="pct"><td>실적</td>{% for v in b.actual %}<td>{{ '%.3f'|format(v) }}%</td>{% endfor %}</tr>
+    {% endcall %}
+  {% endfor %}
+
+{% elif tab == 'incident' %}
+  {% for lbl in ['Total','1Part','2Part'] %}
+    {% set b = data[lbl] %}
+    {% call block_table(lbl, None, months) %}
+      {{ row('발생(건) 소계', b.sub) }}
+      {{ row('공식', b.official) }}
+      {{ row('비공식', b.unofficial) }}
+      {{ row('지표(건) 목표', b.target) }}
+      <tr class="pct"><td>실적(FY누적)</td>{% for v in b.actual %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+    {% endcall %}
+  {% endfor %}
+
+{% elif tab == 'warranty' %}
+  {% for lbl in ['Total','1Part','2Part'] %}
+    {% set b = data[lbl] %}
+    {% call block_table(lbl, None, months) %}
+      {{ row('Warranty(천원, FY누적)', b.actual) }}
+      {{ row('목표(천원)', b.target) }}
+    {% endcall %}
+  {% endfor %}
+
+{% elif tab in ('process1','process2') %}
+  {% set b = data %}
+  {% call block_table('종합 (불량수량, 집계기준, EA)', None, months) %}
+    {% for row_name in b.raw_rows %}
+    <tr class="indent"><td>{{ row_name }}</td>{% for v in b.raw[row_name] %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+    {% endfor %}
+    <tr class="sub"><td>소계</td>{% for v in b.raw_sub %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+    {{ row('생산량(EA)', b.prod_qty) }}
+    {{ row('지표(ppm) 목표', b.target) }}
+    <tr class="pct"><td>실적</td>{% for v in b.actual %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+  {% endcall %}
+  {% call block_table('공정별 (불량수량, 발생기준, ppm)', None, months) %}
+    {% for row_name in b.bucket_rows %}
+    <tr class="indent"><td>{{ row_name }}</td>{% for v in b.bucket_ppm[row_name] %}<td>{{ '{:,.0f}'.format(v) }}</td>{% endfor %}</tr>
+    {% endfor %}
+  {% endcall %}
+
 {% else %}
-  <div class="panel">
-    <div class="phead"><h2>{% for v,n,dsc in views %}{{ n if v==view }}{% endfor %}</h2>
-      <span class="tot">{{ ym_from }} ~ {{ ym_to }} · {{ unit }}별 · {{ part|pl }}{% if measure_unit %} · 단위 {{ measure_unit }}{% endif %}</span></div>
+  <form class="fbar panel" method="get" action="/report/detail" style="padding:12px 14px;">
+    <input type="hidden" name="tab" value="trend">
+    <input type="hidden" name="fy" value="{{ fy }}">
+    <div class="frow" style="grid-template-columns:110px 160px 1fr 150px 150px 90px;">
+      <div class="f"><label>파트</label><select class="in" name="tpart">
+        {% for pv, pl in [('통합','통합'),('VMS PART','1PART'),('TM PART','2PART')] %}
+        <option value="{{ pv }}" {{ 'selected' if tpart==pv }}>{{ pl }}</option>{% endfor %}</select></div>
+      <div class="f"><label>TM-NO</label><input class="in" name="d_tm" value="{{ d_tm }}" placeholder="예: 1545-01"></div>
+      <div class="f"><label>불량유형</label><select class="in" name="d_name">
+        <option value="">전체</option>
+        {% for dn in defect_type_opts %}<option value="{{ dn }}" {{ 'selected' if d_name==dn }}>{{ dn }}</option>{% endfor %}</select></div>
+      <div class="f"><label>시작일</label><input class="in" type="date" name="d_from" value="{{ d_from }}"></div>
+      <div class="f"><label>종료일</label><input class="in" type="date" name="d_to" value="{{ d_to }}"></div>
+      <div class="f" style="justify-content:flex-end;"><button class="btn btn-p">조회</button></div>
+    </div>
+  </form>
+
+  <div class="panel"><div class="phead"><h2>불량 발생 추이 (일 단위)</h2>
+    <span class="tot">{{ d_from }} ~ {{ d_to }} · 총 {{ trend.qty_total|cf }}건</span></div>
     <div class="pbody">
-      {% if chart and chart.type == 'multi' %}
-        <div class="lgd">
-          {% for nm, i in chart.legend %}
-          <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#a3a3a3','#0ea5e9'][i % 11] }}"></i>{{ nm }}</span>
-          {% endfor %}
-        </div>
-        <div class="jchart" data-type="multi" data-unit="{{ chart.unit }}" data-dec="{{ chart.dec }}"
-             data-labels="{{ chart.labels }}" data-names="{{ chart.names }}" data-sets="{{ chart.sets }}"></div>
-      {% elif chart %}
-        <div class="jchart" data-type="hbar" data-color="{{ chart.color }}" data-unit="{{ chart.unit }}"
-             data-dec="{{ chart.dec }}" data-names="{{ chart.names }}" data-values="{{ chart.vseries }}"></div>
-      {% endif %}
-      {% if chart and chart.note %}<div class="hint" style="margin-top:8px;">{{ chart.note }}</div>{% endif %}
-    </div>
-  </div>
-
-  {% if table %}
-  <div class="panel"><div class="phead"><h2>상세 데이터 (소스: 분자)</h2></div>
-    <div style="overflow-x:auto;">
-    <table>
-      <thead><tr>{% for h in table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
-      <tbody>
-      {% for row in table.rows %}
-        <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
+      {% if trend.series %}
+      <div class="lgd">
+        {% for nm in trend.series.keys() %}
+        <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'][loop.index0 % 8] }}"></i>{{ nm }}</span>
+        {% endfor %}
+      </div>
+      <div class="jchart" data-type="multi" data-unit="EA" data-dec="0"
+           data-labels="{{ trend.days_csv }}" data-names="{{ trend.chart_names }}"
+           data-sets="{{ trend.chart_sets }}"></div>
       {% else %}
-        <tr><td colspan="{{ table.head|length }}" style="color:var(--tx3);">데이터가 없습니다.</td></tr>
-      {% endfor %}
-      {% if table.denom_row %}
-        <tr class="trow-denom">{% for cval in table.denom_row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
+      <div style="color:var(--tx3);">해당 조건의 불량 데이터가 없습니다.</div>
       {% endif %}
-      </tbody>
-    </table>
     </div>
   </div>
-  {% endif %}
 
-  {% if denom_table %}
-  <div class="panel"><div class="phead"><h2>생산수량 (소스: 분모)</h2></div>
-    <div style="overflow-x:auto;">
+  {% if trend.tm_rows %}
+  <div class="panel"><div class="phead"><h2>TM-NO별 수량 (상위 20)</h2></div>
     <table>
-      <thead><tr>{% for h in denom_table.head %}<th {{ 'class="num"' if not loop.first }}>{{ h }}</th>{% endfor %}</tr></thead>
-      <tbody>
-      {% for row in denom_table.rows %}
-        <tr>{% for cval in row %}<td {{ 'class="num"' if not loop.first }}>{{ cval }}</td>{% endfor %}</tr>
-      {% endfor %}
-      </tbody>
+      <thead><tr><th>TM-NO</th><th class="num">수량(EA)</th></tr></thead>
+      <tbody>{% for tm, q in trend.tm_rows %}<tr><td class="mono">{{ tm }}</td><td class="num">{{ q|cf }}</td></tr>{% endfor %}</tbody>
     </table>
-    </div>
   </div>
   {% endif %}
 {% endif %}

@@ -107,6 +107,8 @@ app/
   scan.py       공유 폴더 순회 → ingest 호출 (scan_all이 단일 진입점)
   init_data.py  templates/ 실데이터로 최초 1회 DB 구축
   calc.py       ★ 계산 엔진 — 배분·KPI·세부지표 분석
+  price_calc.py 공정별 단가(성형/소결/정형/가공/기타) 산출 — 연 1회 재계산 배치용
+  report_kpi.py 세부지표현황(/report/detail) 전용 — 세부지표현황.xlsx 양식(탭 8개, FY 12개월)
   main.py       ★ FastAPI 라우트·인증·화면 조립
   seed.py       (데모용) 샘플 Excel 일괄 적재
   setpw.py      비밀번호 변경 CLI

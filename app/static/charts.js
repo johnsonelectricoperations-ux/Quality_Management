@@ -198,7 +198,9 @@
         gr += `<line class="g-grid" x1="${pPL}" y1="${yy.toFixed(1)}" x2="${pPL+pPlotW}" y2="${yy.toFixed(1)}"/>`;
         ylab += `<text class="g-ax" x="${(pPL-5).toFixed(1)}" y="${(yy+3).toFixed(1)}" text-anchor="end" style="font-size:9px">${fmt(t.v, 0)}</text>`;
       });
-      const xl = cfg.labels.map((l, i) =>
+      // 라벨이 많으면(일 단위 등) 겹치지 않도록 최대 12개 정도만 골라서 표시
+      const xlStep = Math.max(1, Math.ceil(n / 12));
+      const xl = cfg.labels.map((l, i) => (i % xlStep !== 0 && i !== n - 1) ? "" :
         `<text class="g-ax" x="${xs(i).toFixed(1)}" y="${PH-9}" text-anchor="middle" style="font-size:10px">${l}</text>`).join("");
       return `<svg viewBox="0 0 ${PW} ${PH}" role="img">` + gr + ylab + paths + dots + xl + `</svg>`;
     }
