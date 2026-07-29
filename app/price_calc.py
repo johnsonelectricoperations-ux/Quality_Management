@@ -25,7 +25,20 @@ from . import calc
 
 RATIO_WITH_JEONGHYEONG = {"성형": 0.5, "소결": 0.6, "정형": 0.8}
 RATIO_NO_JEONGHYEONG = {"성형": 0.6, "소결": 0.8}
+# 2PART(TM PART)는 정형 유무와 무관하게 성형 0.5 · 소결 0.8 고정 (2026-07-29 확정).
+# 기존 엑셀 실적과 대조한 결과 2PART는 이 배수가 실제와 맞는다.
+RATIO_TM_PART = {"성형": 0.5, "소결": 0.8, "정형": 0.8}
 REST_PROCESSES = ("가공", "기타")   # 나머지공정단가 그대로 적용
+
+
+def ratios_for(part, has_jeonghyeong):
+    """파트·정형유무에 따른 공정단가 배수(기타=1.0 기준)."""
+    if part == "TM PART":
+        r = dict(RATIO_TM_PART)
+        if not has_jeonghyeong:
+            r.pop("정형", None)
+        return r
+    return RATIO_WITH_JEONGHYEONG if has_jeonghyeong else RATIO_NO_JEONGHYEONG
 
 
 def compute_process_prices(conn, months=3):
@@ -45,6 +58,7 @@ def compute_process_prices(conn, months=3):
     routes = {}  # tm_no -> {버킷공정 집합}
     for r in conn.execute("SELECT tm_no,process FROM product_route"):
         routes.setdefault(r["tm_no"], set()).add(db.bucket_of(r["process"]))
+    parts = {r["tm_no"]: r["part"] for r in conn.execute("SELECT tm_no,part FROM product")}
 
     out = {}
     for tm, (qty, amt) in agg.items():
@@ -52,8 +66,7 @@ def compute_process_prices(conn, months=3):
             continue
         rest = amt * 1000.0 / qty                     # 천원 → 원, 개당
         has_jh = "정형" in routes.get(tm, set())
-        ratios = RATIO_WITH_JEONGHYEONG if has_jh else RATIO_NO_JEONGHYEONG
-        for proc, ratio in ratios.items():
+        for proc, ratio in ratios_for(parts.get(tm, ""), has_jh).items():
             out[(tm, proc)] = rest * ratio
         for proc in REST_PROCESSES:
             out[(tm, proc)] = rest
@@ -76,9 +89,11 @@ def suggest_prices(conn, tm, months=3):
     if qty_sum <= 0:
         return {"rest": None, "with_jh": None, "no_jh": None}
     rest = amt_sum * 1000.0 / qty_sum                  # 천원 → 원, 개당
-    with_jh = {p: round(rest * r) for p, r in RATIO_WITH_JEONGHYEONG.items()}
+    prow = conn.execute("SELECT part FROM product WHERE tm_no=?", (tm,)).fetchone()
+    part = prow["part"] if prow else ""
+    with_jh = {p: round(rest * r) for p, r in ratios_for(part, True).items()}
     with_jh["기타"] = round(rest)
-    no_jh = {p: round(rest * r) for p, r in RATIO_NO_JEONGHYEONG.items()}
+    no_jh = {p: round(rest * r) for p, r in ratios_for(part, False).items()}
     no_jh["기타"] = round(rest)
     return {"rest": round(rest), "with_jh": with_jh, "no_jh": no_jh}
 

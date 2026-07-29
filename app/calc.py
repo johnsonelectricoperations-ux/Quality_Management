@@ -40,7 +40,9 @@ CLAIM_COPQ_ITEMS = ["Warranty", "3rd Party Containment", "Quality Special Freigh
 
 # 외주소재불량 Scrap Cost 단가 = 완제품(기타)단가 × 이 배수 (2026-07-29 확정).
 # 외주에서 받은 소재 상태의 불량이라 공정단가(성형 0.5배 등)가 아니라 별도 배수를 쓴다.
-OUTSOURCE_PRICE_RATIO = 0.8
+# 기존 엑셀 실적과 대조한 결과 파트별로 실제 배수가 달라 파트별로 둔다(1PART 0.794 → 0.8).
+OUTSOURCE_PRICE_RATIO = {"VMS PART": 0.8, "TM PART": 0.9}
+OUTSOURCE_PRICE_RATIO_DEFAULT = 0.8
 
 
 # ── FY 유틸 ─────────────────────────────────────────────
@@ -168,13 +170,14 @@ class Masters:
             val = p
         return val
 
-    def scrap_price(self, tm_no, stored_process, source, d):
+    def scrap_price(self, tm_no, stored_process, source, d, part=""):
         """Scrap Cost용 단가 — **불량을 발견한 공정(입력공정)** 기준 (2026-07-29 확정).
         불량유형 마스터의 배분규칙은 '공정별 불량수량' 분석에만 쓰고, 비용은 재배분하지 않는다
         (재배분하면 후처리에서 발견된 불량이 성형 0.5배 단가로 계산돼 실패비용이 과소평가된다).
-        외주소재불량은 공정단가가 아니라 **완제품(기타)단가 × 0.8**로 계산한다."""
+        외주소재불량은 공정단가가 아니라 **완제품(기타)단가 × 파트별 배수**로 계산한다."""
         if source == "outsource":
-            return self.price_on(tm_no, "기타", d) * OUTSOURCE_PRICE_RATIO
+            ratio = OUTSOURCE_PRICE_RATIO.get(part, OUTSOURCE_PRICE_RATIO_DEFAULT)
+            return self.price_on(tm_no, "기타", d) * ratio
         proc = db.bucket_of(stored_process) if stored_process else ""
         return self.price_on(tm_no, proc, d) if proc else 0
 
@@ -265,7 +268,7 @@ def compute_daily(conn, m: Masters):
         if r["exclude_cost"]:
             continue                            # 성형 작성 셋팅불량: 불량율엔 포함, 비용은 제외
         # 비용은 배분규칙을 쓰지 않고 **발견(입력) 공정** 단가로 계산한다
-        price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"])
+        price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"], part)
         cost = r["qty"] * price / 1000.0                   # 원 → 천원
         cell["scrap_cost"] += cost
         cell["scrap_cost_copq"] += cost                    # COPQ는 성형 등 별도 제외 없이 전체 반영
@@ -439,7 +442,7 @@ def process_breakdown(conn, m, y, mth, part, kind):
             continue                    # 성형 작성 셋팅불량: 수량만 반영, 비용 제외
         cost_proc = "기타" if r["source"] == "outsource" else db.bucket_of(r["process"] or "")
         if cost_proc:
-            price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"])
+            price = m.scrap_price(r["tm_no"], r["process"], r["source"], r["d"], rpart)
             per[cost_proc]["cost"] += r["qty"] * price / 1000.0
     # 생산수량(파트 합, 월)
     prod_qty = 0
