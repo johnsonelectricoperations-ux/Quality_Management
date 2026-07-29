@@ -61,7 +61,7 @@ def require(role="viewer"):
 
 def render(request, template, user, **ctx):
     ctx.setdefault("crumb", "")
-    if user["role"] == "admin":
+    if has_perm(user["role"], "data_check", "view"):
         ctx.setdefault("unreg_alert", unreg_alert_count())
     else:
         ctx.setdefault("unreg_alert", 0)
