@@ -1,17 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
+{% if pend_types %}
+<div class="panel" style="border-color:var(--err);">
+  <div class="phead" style="background:var(--err-bg);">
+    <h2 style="color:var(--err);">⚠ 미등록 불량유형 {{ pend_types|length }}건</h2>
+    <span class="tot">사내불량 시트에서 발견됐지만 마스터에 없는 불량명입니다</span>
+  </div>
+  <div class="pbody">
+    <div style="color:var(--err);font-size:12px;margin:-2px 0 10px;font-weight:600;">
+      마스터에 없으면 <b>배분규칙을 알 수 없어 그 수량이 집계에 반영되지 않습니다.</b>
+      아래 [등록]을 눌러 공정 배분율을 정해 주세요.
+    </div>
+    <table>
+      <thead><tr><th>파트</th><th>구분</th><th>불량명</th><th class="num">누락 수량(EA)</th>
+        <th>발생기간</th><th>출처 파일</th>{% if can_edit %}<th style="width:150px;"></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for p in pend_types %}
+        <tr>
+          <td>{{ p.part|pl }}</td><td>{{ p.kind }}</td>
+          <td style="font-weight:700;">{{ p.name }}</td>
+          <td class="num" style="color:var(--err);font-weight:700;">{{ p.qty|cf }}</td>
+          <td class="mono" style="font-size:11.5px;">{{ p.first_seen }} ~ {{ p.last_seen }}</td>
+          <td style="font-size:11.5px;color:var(--tx3);">{{ p.src_file }}</td>
+          {% if can_edit %}<td style="display:flex;gap:6px;">
+            <a class="btn btn-p btn-sm" style="text-decoration:none;"
+               href="/admin/defect-types?new_name={{ p.name|urlencode }}&new_part={{ p.part|urlencode }}&new_kind={{ p.kind|urlencode }}">등록</a>
+            <form method="post" action="/admin/defect-types/pending/dismiss" style="display:inline;"
+                  onsubmit="return confirm('{{ p.name }} 을 알람에서 제외할까요?\n(마스터에 등록되지 않으므로 이 불량 수량은 계속 집계에서 빠집니다)');">
+              <input type="hidden" name="part" value="{{ p.part }}">
+              <input type="hidden" name="kind" value="{{ p.kind }}">
+              <input type="hidden" name="name" value="{{ p.name }}">
+              <button class="btn btn-ghost btn-sm">무시</button>
+            </form>
+          </td>{% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% if can_edit %}
-<div class="panel"><div class="phead"><h2>{{ '불량유형 수정' if edit_row else '불량유형 추가' }}</h2>
+<div class="panel"><div class="phead"><h2>{{ '불량유형 수정' if edit_row else ('불량유형 추가 — ' ~ prefill.name if prefill else '불량유형 추가') }}</h2>
   {% if edit_row %}<a class="btn btn-s btn-sm" href="/admin/defect-types" style="margin-left:auto;text-decoration:none;">+ 새로 추가</a>{% endif %}</div>
   <div class="pbody">
     <form method="post" action="/admin/defect-types/save">
       <input type="hidden" name="orig_id" value="{{ edit_row.id if edit_row else '' }}">
       <div class="frow" style="grid-template-columns:140px 120px 1fr;">
         <div class="f"><label>파트</label><select class="in" name="part">
-          {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
+          {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if (edit_row and edit_row.part==pv) or (prefill and prefill.part==pv) }}>{{ pl }}</option>{% endfor %}</select></div>
         <div class="f"><label>구분</label><select class="in" name="kind">
-          {% for k in kinds %}<option value="{{ k }}" {{ 'selected' if edit_row and edit_row.kind==k }}>{{ k }}</option>{% endfor %}</select></div>
-        <div class="f"><label>불량명</label><input class="in" name="name" value="{{ edit_row.name if edit_row else '' }}" placeholder="예: 찍힘" required></div>
+          {% for k in kinds %}<option value="{{ k }}" {{ 'selected' if (edit_row and edit_row.kind==k) or (prefill and prefill.kind==k) }}>{{ k }}</option>{% endfor %}</select></div>
+        <div class="f"><label>불량명</label><input class="in" name="name" value="{{ edit_row.name if edit_row else (prefill.name if prefill else '') }}" placeholder="예: 찍힘" required></div>
       </div>
       <div class="f" style="margin-top:12px;"><label>공정 배분(체크한 공정으로 배분. 비율을 비워두면 균등배분, 아무 공정도 안 고르면 입력한 공정 그대로 100%)</label>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;">

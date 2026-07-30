@@ -35,10 +35,9 @@
   {% call nav('data_check', '/admin/data-check') %}🩺 데이터 점검{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}{% endcall %}
   {% call nav('products', '/admin/products') %}📦 제품 마스터 (단가 포함){% endcall %}
   {% call nav('processes', '/admin/processes') %}🏭 공정 관리{% endcall %}
-  {% call nav('defect_types', '/admin/defect-types') %}⚠ 불량유형 마스터{% endcall %}
+  {% call nav('defect_types', '/admin/defect-types') %}⚠ 불량유형 마스터{% if dtype_alert %}<span class="warn-ic" title="미등록 불량유형 {{ dtype_alert }}건 — 배분율을 정해 등록해야 집계에 반영됩니다">⚠ {{ dtype_alert }}</span>{% endif %}{% endcall %}
   {% call nav('customers', '/admin/customers') %}🏢 고객사 마스터{% endcall %}
   {% call nav('scan', '/admin/scan') %}🔄 폴더 반영{% endcall %}
-  {% call nav('masters', '/masters') %}🗂 마스터 조회{% endcall %}
   {% call nav('target', '/admin/target') %}🎯 목표 관리{% endcall %}
   {% call nav('users', '/admin/users') %}🔐 사용자 관리{% endcall %}
 </aside>

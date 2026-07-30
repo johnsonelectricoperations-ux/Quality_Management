@@ -453,6 +453,7 @@ def ingest_monthly_defect_file(conn, path, user=""):
     wb = load_workbook(path, data_only=True)
     days_in_month = calendar.monthrange(year, month)[1]
     rows, errors = [], []
+    unknown, unknown_days = {}, {}          # 마스터 미등록 불량명 → 수량 / 발생일자
 
     for day in range(1, days_in_month + 1):
         sheet_name = str(day)
@@ -472,11 +473,16 @@ def ingest_monthly_defect_file(conn, path, user=""):
             continue
         # 세부 불량유형 헤더는 4행. 공백/줄바꿈을 모두 제거해 마스터 불량명과 비교한다
         # (예: xlsm의 "영점 및\n동심도수정" → "영점및동심도수정").
-        dcols = []
+        dcols, ucols = [], []
         for c in range(1, ws.max_column + 1):
             raw = str(ws.cell(row=4, column=c).value or "")
             name = "".join(raw.split())
-            if not name or name in _MONTHLY_SKIP_COLS or name not in names:
+            if not name or name in _MONTHLY_SKIP_COLS:
+                continue
+            if name not in names:
+                # 마스터에 없는 불량명 → 적재하지 않고(배분규칙이 없어 귀책 판정 불가) 별도로
+                # 기록해 화면에 알람을 띄운다. 수량이 조용히 사라지는 것을 막기 위함.
+                ucols.append((c, name))
                 continue
             dcols.append((c, name))
 
@@ -493,13 +499,44 @@ def ingest_monthly_defect_file(conn, path, user=""):
                     continue
                 rows.append((d, tmno, name, qty, part, proc, kind, "direct",
                              "confirmed", user, batch_key, exclude_cost))
+            for c, name in ucols:                  # 마스터 미등록 열의 수량(영향도) 집계
+                qty = _int(ws.cell(row=r, column=c).value)
+                if qty > 0:
+                    unknown[name] = unknown.get(name, 0) + qty
+                    unknown_days.setdefault(name, []).append(d)
         conn.execute("DELETE FROM defect_entry WHERE batch_key=?", (batch_key,))
 
     conn.executemany(
         "INSERT INTO defect_entry(d,tm_no,defect_name,qty,part,process,kind,source,status,"
         "reg_user,batch_key,exclude_cost) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    if unknown:
+        note_pending_defect_types(conn, part, kind, unknown, unknown_days,
+                                  os.path.basename(path))
     conn.commit()
     return len(rows), errors
+
+
+def note_pending_defect_types(conn, part, kind, qty_by_name, days_by_name, src_file):
+    """사내불량 시트에서 마스터에 없던 불량명을 `defect_type_pending` 에 기록/누적한다.
+    같은 파일을 재적재하면 수량이 중복 누적되지 않도록 **파일 단위로 값을 덮어쓴다**."""
+    for name, qty in qty_by_name.items():
+        days = sorted(days_by_name.get(name, []))
+        conn.execute(
+            "INSERT INTO defect_type_pending(part,kind,name,qty,first_seen,last_seen,src_file) "
+            "VALUES(?,?,?,?,?,?,?) "
+            "ON CONFLICT(part,kind,name) DO UPDATE SET qty=excluded.qty, "
+            "first_seen=MIN(first_seen,excluded.first_seen), "
+            "last_seen=MAX(last_seen,excluded.last_seen), src_file=excluded.src_file",
+            (part, kind, name, qty, days[0] if days else "", days[-1] if days else "", src_file))
+
+
+def pending_defect_types(conn):
+    """알람용 목록 — 아직 마스터에 등록되지 않고 '무시' 처리도 안 된 신규 불량명.
+    마스터에 등록되면 이 조회에서 자동으로 빠진다(별도 정리 작업 불필요)."""
+    return [dict(r) for r in conn.execute(
+        "SELECT p.* FROM defect_type_pending p WHERE p.dismissed=0 AND NOT EXISTS("
+        "  SELECT 1 FROM defect_type t WHERE t.part=p.part AND t.kind=p.kind AND t.name=p.name) "
+        "ORDER BY p.qty DESC, p.name")]
 
 
 def ingest_monthly_defect_folder(conn, folder, user=""):

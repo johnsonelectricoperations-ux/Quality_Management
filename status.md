@@ -449,6 +449,40 @@
 
 ## 최근 로그
 
+### 2026-07-30 (45) — 사내불량 신규 불량유형 감지 알람 + 마스터 조회 메뉴 삭제
+- **문제**: 사내불량(월별 공정불량 시트)에 마스터에 없는 불량명 열이 있으면 그 수량이
+  **조용히 유실**됐다. 마스터에 배분규칙이 없으니 어느 공정에 넣을지 알 수 없어 버려진 것인데,
+  화면에는 아무 표시도 없어 담당자가 누락 사실을 알 방법이 없었다.
+- **감지·기록**: `defect_type_pending` 테이블 신설
+  (`part, kind, name, qty, first_seen, last_seen, src_file, dismissed`, UNIQUE(part,kind,name)).
+  - `ingest.ingest_monthly_defect_file()`: 헤더를 마스터 있는 열(`dcols`)/없는 열(`ucols`)로 나눠
+    unknown 수량·발생일을 모은 뒤 `note_pending_defect_types()`로 기록.
+  - 재적재 시 **파일 단위로 qty를 덮어쓴다**(누적 아님) → 폴더 반영을 여러 번 돌려도 중복 누계 없음.
+  - `pending_defect_types()`는 조회 시점에 마스터와 대조해서, **등록이 끝난 건은 자동으로 사라진다**
+    (dismissed=0 AND NOT EXISTS in defect_type). 등록 후 알람을 따로 지울 필요가 없다.
+- **알람 표시**: `render()`가 `dtype_alert`(=미등록 건수)를 모든 화면에 내려주고,
+  base.html의 불량유형 마스터 nav에 데이터 점검과 같은 `⚠ n` 뱃지를 붙인다(권한 있는 사람만).
+- **처리 화면**: `/admin/defect-types` 상단에 알람 패널
+  (파트·구분·불량명·누락수량·발생기간·출처파일) + 행마다 [등록]/[무시].
+  - [등록] → `?new_name=&new_part=&new_kind=` 으로 아래 추가 폼을 미리 채워, **배분율만 고르면 끝**.
+  - [무시] → `/admin/defect-types/pending/dismiss` (confirm 문구에 "계속 집계에서 빠진다"고 명시).
+- **마스터 조회 메뉴 삭제**: 제품·공정·불량유형 마스터 화면이 각각 생겨 완전히 중복됨.
+  `/masters` GET·`/masters/upload` POST(61줄), `templates/masters.html`, base.html nav,
+  `db.PERM_MENU_KEYS`의 `masters`, permission 테이블 2행 제거.
+  - ⚠ **삭제 사고 1건(수정 완료)**: 라우트 삭제 시 바로 뒤에 있던 제품 마스터 공용 상수
+    `PAGE_SIZE`/`DISPLAY_PROCESSES`/`_OTHER_UNDERLYING`까지 함께 지워 대시보드·데이터점검·
+    제품마스터가 500(NameError). 복원 후 전 화면 재검증. → **교훈: 라우트 삭제 후에는
+    반드시 전 메뉴를 한 번 돌려본다.** (컴파일은 통과하므로 문법검사만으로는 못 잡는다)
+- **검증**:
+  - 사본 DB(`/tmp/qms_test.db`) + 합성 월별 파일: 마스터에 있는 '깨짐'만 적재, 미등록
+    '테스트신규불량 100EA'는 pending에 기록 → 알람 1건 표기.
+  - 브라우저: 뱃지 `⚠ 1` → [등록] 폼 미리채움(불량명·VMS PART·공정) → [무시] 후 뱃지 소멸.
+  - 사이드바 '마스터 조회' 없음, `/masters` 404.
+  - **전 14개 메뉴 200 / JS 오류 0**.
+  - 테스트용 pending 행은 삭제 완료(운영 DB 깨끗함).
+- **다음 할 일**: 특별히 없음. (미해결 확인 요청: 2PART FY27 클레임 3건이 `use_agg=0`로
+  집계 제외 — ZF Austria 1,200천원·MSC 369천원이 의도된 것인지 사용자 확인 필요)
+
 ### 2026-07-30 (44) — 회사 로고 삽입 + 권한 없는 메뉴는 흐리게·클릭 불가로 변경
 - **로고**: `templates/logo_JE.svg`(Johnson Electric 워드마크, viewBox 122.58×37.33)를
   `app/static/logo_JE.svg` 로 복사하고 3곳에 배치 — ① 사이드바 **메뉴 상단 제목 위**,

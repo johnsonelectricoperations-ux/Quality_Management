@@ -62,6 +62,14 @@ def require(role="viewer"):
     return dep
 
 
+def new_dtype_count():
+    """사내불량 시트에서 발견된 미등록 불량유형 건수(불량유형 마스터 메뉴 알람용)."""
+    conn = db.connect()
+    n = len(ingest.pending_defect_types(conn))
+    conn.close()
+    return n
+
+
 def menu_perms(role):
     """사이드바용 메뉴별 보기 권한 {menu_key: bool}. 권한 없는 메뉴는 흐리게 + 클릭 불가로 그린다.
     한 번의 조회로 만든다(메뉴마다 has_perm을 부르면 페이지당 십여 번 DB를 여는 셈이 된다)."""
@@ -83,6 +91,7 @@ def render(request, template, user, **ctx):
     can = menu_perms(user["role"])
     ctx.setdefault("can_menu", can)
     ctx.setdefault("unreg_alert", unreg_alert_count() if can.get("data_check") else 0)
+    ctx.setdefault("dtype_alert", new_dtype_count() if can.get("defect_types") else 0)
     return tpl.TemplateResponse(request, template, {
         "user": user, "role_ko": ROLE_KO.get(user["role"], ""), **ctx})
 
@@ -145,7 +154,6 @@ PERM_MENUS = [
     ("defect_types", "불량유형 마스터"),
     ("customers", "고객사 마스터"),
     ("scan", "폴더 반영"),
-    ("masters", "마스터 조회"),
     ("target", "목표 관리"),
 ]
 
@@ -710,57 +718,6 @@ async def monthly_close_save(request: Request):
     return RedirectResponse(f"/report/monthly?ym={ym}&msg=저장됨", status_code=303)
 
 
-# ── 마스터 ──────────────────────────────────────────────
-@app.get("/masters", response_class=HTMLResponse)
-def masters(request: Request):
-    u, g = _perm_guard(request, "masters", "view")
-    if g:
-        return g
-    conn = db.connect()
-    proc = [dict(r) for r in conn.execute("SELECT * FROM process ORDER BY part,ord,name")]
-    prod_total = conn.execute("SELECT COUNT(*) c FROM product").fetchone()["c"]
-    prod = [dict(r) for r in conn.execute(
-        "SELECT p.tm_no,p.name,p.part,COUNT(r.id) steps FROM product p "
-        "LEFT JOIN product_route r ON r.tm_no=p.tm_no GROUP BY p.tm_no ORDER BY p.tm_no LIMIT 20")]
-    dtypes = [dict(r) for r in conn.execute("SELECT * FROM defect_type ORDER BY part,kind,name")]
-    conn.close()
-    return render(request, "masters.html", u, active="masters", heading="마스터 조회",
-                  crumb="관리", pending=pending_count(), proc=proc, prod=prod, prod_total=prod_total,
-                  dtypes=dtypes, can_edit=(u["role"] == "admin" or has_perm(u["role"], "masters", "edit")))
-
-
-@app.post("/masters/upload")
-async def masters_upload(request: Request, kind: str = Form(...), file: UploadFile = File(...)):
-    u = current_user(request)
-    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "masters", "edit")):
-        return RedirectResponse("/masters", status_code=303)
-    path = os.path.join("/tmp", "qms_up_" + secrets.token_hex(4) + ".xlsx")
-    with open(path, "wb") as f:
-        f.write(await file.read())
-    conn = db.connect()
-    msg = err = ""
-    try:
-        if kind == "process":
-            n = ingest.ingest_process_master(conn, path)
-            msg = f"공정명 마스터 {n}건 반영"
-        elif kind == "product":
-            n = ingest.ingest_product_master(conn, path)
-            msg = f"제품 마스터 {n}건 반영"
-        elif kind == "defect":
-            n, errs = ingest.ingest_defect_master(conn, path)
-            if errs:
-                err = "불량유형 마스터 오류: " + " / ".join(errs[:6])
-            else:
-                msg = f"불량유형 마스터 {n}건 반영"
-    except Exception as e:
-        err = f"업로드 실패: {e}"
-    finally:
-        conn.close()
-        os.remove(path)
-    q = ("?msg=" + msg) if msg else ("?err=" + err)
-    return RedirectResponse("/masters" + q, status_code=303)
-
-
 # ── 제품 마스터 관리 (CSV 가져오기 + 등록/수정/삭제) ────
 PAGE_SIZE = 50
 
@@ -1312,11 +1269,13 @@ def _compose_alloc_rule(form):
 
 
 @app.get("/admin/defect-types", response_class=HTMLResponse)
-def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str = ""):
+def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str = "",
+                      new_name: str = "", new_part: str = "", new_kind: str = ""):
     u, g = _perm_guard(request, "defect_types", "view")
     if g:
         return g
     conn = db.connect()
+    pend_types = ingest.pending_defect_types(conn)
     rows = [dict(r) for r in conn.execute(
         "SELECT * FROM defect_type ORDER BY part,kind,name")]
     edit_row = None
@@ -1328,8 +1287,12 @@ def defect_types_list(request: Request, edit: int = 0, msg: str = "", err: str =
             edit_row["selected"] = selected
             edit_row["ratios"] = ratios
     conn.close()
+    # 알람 목록에서 '등록'을 누르면 파트·구분·불량명이 채워진 상태로 추가 폼이 열린다
+    prefill = ({"name": new_name, "part": new_part, "kind": new_kind}
+               if new_name and not edit_row else None)
     return render(request, "defect_types.html", u, active="defect_types", heading="불량유형 마스터 관리",
                   crumb="관리", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  pend_types=pend_types, prefill=prefill,
                   agg=db.AGG_PROCESSES, kinds=DEFECT_KINDS,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")), msg=msg, err=err)
 
@@ -1360,6 +1323,21 @@ async def defect_types_save(request: Request):
     conn.commit()
     conn.close()
     return RedirectResponse(f"/admin/defect-types?msg=저장됨: {name}", status_code=303)
+
+
+@app.post("/admin/defect-types/pending/dismiss")
+def defect_types_dismiss(request: Request, part: str = Form(...), kind: str = Form(...),
+                         name: str = Form(...)):
+    """알람 목록에서 '무시' — 마스터에 넣지 않고 알람만 끈다(집계에는 계속 반영되지 않음)."""
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")):
+        return RedirectResponse("/admin/defect-types", status_code=303)
+    conn = db.connect()
+    conn.execute("UPDATE defect_type_pending SET dismissed=1 WHERE part=? AND kind=? AND name=?",
+                 (part, kind, name))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/defect-types?msg=알람에서 제외했습니다", status_code=303)
 
 
 @app.post("/admin/defect-types/{did}/delete")

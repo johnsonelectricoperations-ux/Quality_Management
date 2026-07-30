@@ -104,6 +104,17 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS defect_type_pending (
+  -- 사내불량 시트에서 발견됐지만 불량유형 마스터에 없는 불량명(2026-07-30 신설).
+  -- 마스터에 없으면 적재가 그 열을 건너뛰므로 **수량이 조용히 유실**된다. 그래서 여기에 남겨
+  -- 화면에 알람을 띄우고, 관리자가 배분율까지 정해 등록하도록 유도한다.
+  -- 마스터에 등록되면 조회 시 자동으로 목록에서 사라진다(마스터와 대조하므로 삭제 불필요).
+  id INTEGER PRIMARY KEY, part TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 0,          -- 건너뛴 수량 누계(영향도 파악용)
+  first_seen TEXT DEFAULT '', last_seen TEXT DEFAULT '',
+  src_file TEXT DEFAULT '', dismissed INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(part, kind, name)
+);
 CREATE TABLE IF NOT EXISTS report_cache (
   -- 월마감 보고서 조립 결과(JSON). 발표 중 화면 지연을 막기 위한 캐시일 뿐,
   -- 마감 후 수정불가 규칙은 없다(2026-07-30 확정) — '재계산'으로 언제든 갱신한다.
@@ -315,7 +326,7 @@ def init_db():
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
 PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "oreview",
                   "data_check", "products", "processes", "defect_types",
-                  "customers", "scan", "masters", "target")
+                  "customers", "scan", "target")
 # 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.
 _EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "oreview"}
 
