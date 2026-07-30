@@ -485,3 +485,53 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
         if i is not None:
             series[r["defect_name"]][i] += r["qty"]
     return {"labels": labels, "series": series}
+
+
+def ban_top_items(conn, m, y, mth, part, proc, top=3):
+    """[월마감 반별목표제] 그 달 · 그 공정(귀책) 공정불량 중 **수량 상위 TM-NO** 목록.
+
+    보고서 원본(PDF)에서 사람이 손으로 쓰던 서술칸(발생일자/품명/발생수량/발생원인/개선대책)을
+    DB 집계로 대체한다(2026-07-30 확정). 개선대책은 데이터로 뽑을 수 없어 제외.
+
+    공정 판정은 **귀책(원인)공정 기준**(`Masters.resolve()`)으로, 같은 화면의 반별 ppm과 동일한
+    기준을 쓴다(§5 규칙 7-2). 셋팅불량은 제외하고 공정불량만 본다.
+    반환: [{"tm_no","name","qty","dates","day_count","defects"}] — dates는 'M/D, M/D' 형식.
+    """
+    ym = "%04d-%02d" % (y, mth)
+    agg = {}
+    for r in conn.execute(
+            "SELECT d,tm_no,defect_name,qty,part,process,kind FROM defect_entry "
+            "WHERE status='confirmed' AND d LIKE ?", (ym + "%",)):
+        prod = m.product.get(r["tm_no"])
+        rpart = prod[1] if prod else (r["part"] or "")
+        if rpart != part:
+            continue
+        kind, allocs = m.resolve(rpart, r["tm_no"], r["defect_name"], r["qty"],
+                                 r["process"], r["kind"])
+        if kind != "공정":
+            continue
+        q = sum(qq for b, qq in allocs if (b if b in BUCKETS else "기타") == proc)
+        if q <= 0:
+            continue
+        tm = r["tm_no"] or "(미지정)"
+        cur = agg.setdefault(tm, {"qty": 0, "dates": set(), "by": defaultdict(int)})
+        cur["qty"] += q
+        cur["dates"].add(r["d"])
+        cur["by"][r["defect_name"]] += q
+
+    rows = []
+    for tm, v in sorted(agg.items(), key=lambda kv: -kv[1]["qty"])[:top]:
+        prod = m.product.get(tm)
+        days = sorted(v["dates"])
+        shown = days[:6]
+        rows.append({
+            "tm_no": tm,
+            "name": prod[0] if prod else "",
+            "qty": v["qty"],
+            "dates": ", ".join("%d/%d" % (int(d[5:7]), int(d[8:10])) for d in shown)
+                     + (" 외 %d일" % (len(days) - len(shown)) if len(days) > len(shown) else ""),
+            "day_count": len(days),
+            "defects": " / ".join("%s %d" % (n, q) for n, q in
+                                  sorted(v["by"].items(), key=lambda kv: -kv[1])[:3]),
+        })
+    return rows
