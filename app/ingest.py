@@ -256,16 +256,30 @@ def ensure_defect_types(conn, rows):
     return len(add)
 
 
+def _lock_cutoff(today=None):
+    """재스캔으로 갱신 가능한 구간의 시작일 = **지난달 1일**.
+
+    '이번 달 + 지난달'은 항상 열려 있고, 그보다 오래된 달은 잠긴다. 마감이 매번 말일에 딱
+    맞춰 확정되지 않기 때문에(다음 달 초까지 정정이 들어올 수 있음), 한 달 여유를 둔 것이다
+    (2026-07-30 확정 — 이전엔 '이번 달 1일'이 기준이라 여유가 하루도 없었다).
+    예) 오늘 7/30 → 6월·7월 열림. 8/5에 실행하면 → 7월·8월 열림(6월은 그 사이 자동으로 잠김).
+    """
+    d = today or datetime.date.today()
+    y, m = d.year, d.month
+    y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return datetime.date(y, m, 1).isoformat()
+
+
 def _reingest_preserve_reviewed(conn, source, rows):
-    """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행과 **이번 달 이전(지난달까지) 행**은
-    원본이 바뀌어도 건드리지 않고 그대로 보존한다(마감된 과거월 데이터 잠금).
+    """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행과 **잠금 구간 이전 행**은
+    원본이 바뀌어도 건드리지 않고 그대로 보존한다(마감된 과거월 데이터 잠금, 기준은 _lock_cutoff).
 
     rows: [(d,tm_no,defect_name,qty,part,proc,kind,status,reg_user), ...] (source는 고정값으로 별도 처리)
-    이번 달 1일 이전 날짜의 신규행은 통째로 무시(DB에 이미 있는 값 유지), reviewed=1인 기존 행과
-    (d,tm_no,defect_name) 키가 같은 신규행도 버린다. reviewed=0이면서 이번 달 이후인 기존 행만
+    잠금 구간 이전 날짜의 신규행은 통째로 무시(DB에 이미 있는 값 유지), reviewed=1인 기존 행과
+    (d,tm_no,defect_name) 키가 같은 신규행도 버린다. reviewed=0이면서 열린 구간인 기존 행만
     삭제 후 나머지를 재적재한다.
     반환: (적재건수, 검토완료라 건너뛴 건수, 과거월 잠금이라 건너뛴 건수)."""
-    cur_month_start = datetime.date.today().replace(day=1).isoformat()
+    cur_month_start = _lock_cutoff()
     reviewed_keys = {(r["d"], r["tm_no"], r["defect_name"]) for r in conn.execute(
         "SELECT d,tm_no,defect_name FROM defect_entry WHERE source=? AND reviewed=1", (source,))}
     conn.execute("DELETE FROM defect_entry WHERE source=? AND reviewed=0 AND d>=?", (source, cur_month_start))
@@ -454,13 +468,16 @@ def ingest_monthly_defect_file(conn, path, user=""):
     days_in_month = calendar.monthrange(year, month)[1]
     rows, errors = [], []
     unknown, unknown_days = {}, {}          # 마스터 미등록 불량명 → 수량 / 발생일자
+    cutoff = _lock_cutoff()                 # 잠금 구간(지난달 1일) 이전 날짜는 재스캔해도 안 건드림
 
     for day in range(1, days_in_month + 1):
         sheet_name = str(day)
         if sheet_name not in wb.sheetnames:
             continue
-        ws = wb[sheet_name]
         d = f"{year:04d}-{month:02d}-{day:02d}"
+        if d < cutoff:
+            continue                        # 과거월 잠금 — 이 날짜는 DB에 있는 값을 그대로 둔다
+        ws = wb[sheet_name]
         batch_key = f"{part}|{proc}|{kind}|{d}"
 
         tm_col = None
@@ -929,10 +946,13 @@ def ingest_production_xlsx(conn, path):
         cur = agg.setdefault(tm, [0, 0.0])
         cur[0] += qty; cur[1] += amt
     n_days = len(target_days)
+    cutoff = _lock_cutoff()             # 잠금 구간(지난달 1일) 이전 날짜는 재스캔해도 안 건드림
     for tm, (qty, amt) in agg.items():
         qty_split = largest_remainder(qty, [1] * n_days) if n_days > 1 else [qty]
         amt_split = [amt / n_days] * n_days if n_days > 1 else [amt]
         for day, q, a in zip(target_days, qty_split, amt_split):
+            if day < cutoff:            # day는 이미 ISO 문자열(_weekdays_in_range)
+                continue                # 과거월 잠금 — 이 날짜는 DB에 있는 값을 그대로 둔다
             conn.execute(
                 "INSERT INTO production(d,tm_no,qty,amount,part) VALUES(?,?,?,?,?) "
                 "ON CONFLICT(d,tm_no) DO UPDATE SET qty=excluded.qty, amount=excluded.amount, part=excluded.part",
