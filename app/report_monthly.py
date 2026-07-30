@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 6
+CACHE_VERSION = 7
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -213,6 +213,11 @@ def _koi_block(conn, m, daily, fy, part, upto):
         tdec = max(dec, 1) if tkpi in calc.FY_TOTAL_KPIS else dec
         out.append({"name": name, "unit": unit, "dec": dec, "tdec": tdec,
                     "fy_target": fy_target,
+                    # warranty·incident는 목표가 '연간 합계'라 월별 칸의 목표는 ÷12한 값이다.
+                    # 월별 그래프에 이 값으로 목표선을 그으면 매달 거의 항상 초과로 보여
+                    # 오해를 준다 — 그래서 월별 차트에는 목표선을 안 긋고(표에는 숫자로 남긴다),
+                    # FY 누적 차트에만 목표선을 긋는다(2026-07-30 확정).
+                    "is_fy_total": tkpi in calc.FY_TOTAL_KPIS,
                     "actual": acts, "target": tgts,
                     "achieve": [achieve(v, mt) for v in acts],
                     "cum": cums, "cum_target": [fy_target] * len(cums),
@@ -299,7 +304,7 @@ def _ban_block(conn, m, agg, fy, part, upto, top=2):
             })
         out[proc] = {"months": months, "upto_i": upto_i, "qty": qty, "ppm": ppm, "target": tgt,
                      "achieve": ach, "fy_cum": cum, "fy_cum_ach": achieve(cum, ft),
-                     "fy_target": ft,
+                     "fy_cum_qty": cq, "fy_target": ft,
                      "prev_actual": _fy_actual(conn, fy - 1, part, "ban_ppm_" + proc),
                      "prev_target": _target(conn, fy - 1, part, "ban_ppm_" + proc),
                      "top_items": rows,
