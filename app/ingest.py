@@ -270,26 +270,39 @@ def _lock_cutoff(today=None):
     return datetime.date(y, m, 1).isoformat()
 
 
-def _reingest_preserve_reviewed(conn, source, rows):
+def _reingest_preserve_reviewed(conn, source, rows, key_cols="d,tm_no,defect_name"):
     """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행과 **잠금 구간 이전 행**은
     원본이 바뀌어도 건드리지 않고 그대로 보존한다(마감된 과거월 데이터 잠금, 기준은 _lock_cutoff).
 
     rows: [(d,tm_no,defect_name,qty,part,proc,kind,status,reg_user), ...] (source는 고정값으로 별도 처리)
     잠금 구간 이전 날짜의 신규행은 통째로 무시(DB에 이미 있는 값 유지), reviewed=1인 기존 행과
-    (d,tm_no,defect_name) 키가 같은 신규행도 버린다. reviewed=0이면서 열린 구간인 기존 행만
-    삭제 후 나머지를 재적재한다.
+    key_cols 키가 같은 신규행도 버린다. reviewed=0이면서 열린 구간인 기존 행만 삭제 후 나머지를
+    재적재한다.
+
+    key_cols: "같은 건"으로 볼 컬럼 조합(기본 d,tm_no,defect_name). **폐기(discard)는
+    "d,tm_no,process"를 쓴다** — 원본 폐기사유(defect_name)가 검토 승인 이후 더 구체적인
+    이름으로 수정되면, defect_name까지 키에 넣을 경우 "다른 건"으로 오인해 이미 검토완료된
+    옛 행은 그대로 둔 채 새 행이 또 생겨 수량이 중복 반영되는 문제가 있었다(2026-07-30 확인,
+    실제로 6월 데이터에서 동일 날짜·TM-NO·공정·수량인데 불량명만 다른 행 쌍 2건 발견).
+    d,tm_no,process 키로 바꾸면 사유만 바뀐 재스캔은 "이미 검토된 건"으로 인식해 건너뛰므로
+    중복이 생기지 않는다(단, 사유가 정말 바뀐 경우 새 사유가 반영되지 않고 예전 사유로 남는데,
+    이는 검토완료 행을 재스캔이 건드리지 않는 기존 설계와 일관된 동작이다).
     반환: (적재건수, 검토완료라 건너뛴 건수, 과거월 잠금이라 건너뛴 건수)."""
+    cols = key_cols.split(",")
+    col_idx = {"d": 0, "tm_no": 1, "defect_name": 2, "process": 5}
+    idxs = [col_idx[c] for c in cols]
     cur_month_start = _lock_cutoff()
-    reviewed_keys = {(r["d"], r["tm_no"], r["defect_name"]) for r in conn.execute(
-        "SELECT d,tm_no,defect_name FROM defect_entry WHERE source=? AND reviewed=1", (source,))}
+    reviewed_keys = {tuple(r[c] for c in cols) for r in conn.execute(
+        f"SELECT {key_cols} FROM defect_entry WHERE source=? AND reviewed=1", (source,))}
     conn.execute("DELETE FROM defect_entry WHERE source=? AND reviewed=0 AND d>=?", (source, cur_month_start))
     keep, skipped, locked = [], 0, 0
     for row in rows:
-        d, tm_no, defect_name = row[0], row[1], row[2]
+        d = row[0]
+        key = tuple(row[i] for i in idxs)
         if d < cur_month_start:
             locked += 1
             continue
-        if (d, tm_no, defect_name) in reviewed_keys:
+        if key in reviewed_keys:
             skipped += 1
             continue
         keep.append(row)
@@ -695,7 +708,8 @@ def ingest_scrap_db(conn, path, quarantine_100=True):
     src.close()
     pend = sum(1 for row in rows if row[7] == "pending")
     # 폐기는 마스터 자동등록을 하지 않는다(비고 자유텍스트) — 조회는 '폐기불량'으로 묶어서 본다
-    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows)
+    # 폐기사유(defect_name)가 검토 후 수정될 수 있어 d,tm_no,process 키로 중복을 막는다(2026-07-30).
+    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows, key_cols="d,tm_no,process")
     return n, {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped,
               "검토대기": pend}
 
