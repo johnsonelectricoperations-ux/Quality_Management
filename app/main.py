@@ -1243,6 +1243,20 @@ def defect_types_delete(request: Request, did: int):
 
 
 # ── 목표 관리 ───────────────────────────────────────────
+# 반별목표제(월마감 보고서 §3) 공정별 공정불량 ppm 목표.
+# 파트별로만 존재(통합 없음), 월별 변동 없이 FY 연간 목표 하나만 쓴다(2026-07-30 확정).
+BAN_PROCESSES = ["성형", "소결", "정형", "가공"]
+
+
+def ban_kpi(proc):
+    return "ban_ppm_" + proc
+
+
+BAN_KPIS = [ban_kpi(p) for p in BAN_PROCESSES]
+# 통합에는 목표를 두지 않는 지표(파트별만 의미가 있음)
+PART_ONLY_KPIS = set(MONTHLY_KPIS) | set(BAN_KPIS)
+
+
 @app.get("/admin/target", response_class=HTMLResponse)
 def admin_target(request: Request, fy: int = 27, part: str = "통합"):
     u, g = _perm_guard(request, "target", "view")
@@ -1257,9 +1271,11 @@ def admin_target(request: Request, fy: int = 27, part: str = "통합"):
              ("copq", "COPQ", "%"), ("incident", "Customer Incident", "건"),
              ("warranty", "Warranty", "천원"), ("proc_ppm", "공정불량율", "ppm"),
              ("set_ppm", "셋팅불량율", "ppm")]
+    ban_order = [(ban_kpi(p), f"반별목표제 · {p}", "ppm") for p in BAN_PROCESSES]
     items = [{"kpi": k, "name": n, "unit": un,
-              "value": rows.get((k, 0), ""), "monthly": k in MONTHLY_KPIS}
-             for k, n, un in order]
+              "value": rows.get((k, 0), ""), "monthly": k in MONTHLY_KPIS,
+              "part_only": k in PART_ONLY_KPIS}
+             for k, n, un in order + ban_order]
     # 월별 목표(FY 순서: 4월~익년 3월)
     fy_months = [m for m in range(4, 13)] + [m for m in range(1, 4)]
     monthly = [{"kpi": k, "name": n, "unit": un,
@@ -1280,6 +1296,7 @@ async def admin_target_save(request: Request):
     fy = int(form.get("fy")); part = form.get("part")
     units = {"scrap_cost": "%", "scrap_qty": "%", "copq": "%", "incident": "건",
              "warranty": "천원", "proc_ppm": "ppm", "set_ppm": "ppm"}
+    units.update({k: "ppm" for k in BAN_KPIS})
     conn = db.connect()
 
     def put(kpi, unit, mon, raw):
@@ -1294,7 +1311,7 @@ async def admin_target_save(request: Request):
                      (fy, part, kpi, float(v), unit, mon))
 
     for kpi, unit in units.items():
-        if kpi in MONTHLY_KPIS and part == "통합":
+        if kpi in PART_ONLY_KPIS and part == "통합":
             continue
         raw = form.get("t_" + kpi, "")
         if raw != "" or form.get("t_" + kpi) is not None:

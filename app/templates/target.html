@@ -18,7 +18,7 @@
     <thead><tr><th>지표</th><th>단위</th><th class="num" style="width:200px;">목표값</th></tr></thead>
     <tbody>
     {% for it in items %}
-      {% if not (it.kpi in ['proc_ppm','set_ppm'] and part=='통합') %}
+      {% if not (it.part_only and part=='통합') %}
       <tr><td>{{ it.name }}</td><td>{{ it.unit }}</td>
         <td class="num"><input class="in" style="text-align:right;" name="t_{{ it.kpi }}" value="{{ it.value }}" {{ 'readonly' if not can_edit }}></td></tr>
       {% endif %}
