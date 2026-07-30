@@ -1102,3 +1102,116 @@ def ingest_incident(conn, path):
         n += 1
     conn.commit()
     return n
+
+
+# ── FY26 연간 실적 시드 (월마감 보고서 'FY26' 열) ─────────
+# templates/FY26_실적입력.xlsx 을 읽어 fy_actual/fy_claim/target(FY26 목표)에 적재한다.
+# FY27 이후는 시스템이 원천 데이터로 계산하므로 이 경로는 FY26 일회성 시드 전용이다.
+_FY_PART_COL = {"1PART": "VMS PART", "2PART": "TM PART"}
+
+
+def _fy_num(v):
+    """엑셀 셀 → float 또는 None(빈칸·수식문자열·숫자아님)."""
+    if v is None or isinstance(v, str) and not v.strip():
+        return None
+    try:
+        return float(str(v).replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def ingest_fy_actual_xlsx(conn, path, fy=26):
+    """FY26 실적 입력 양식(5시트) 적재.
+    실적 → fy_actual, 목표 → target(fy=26), 업체별 클레임 → fy_claim.
+    시트/항목 이름으로 값을 찾으므로 양식의 A열 라벨과 시트명을 바꾸면 안 된다.
+    반환: (적재건수, note[dict])"""
+    wb = load_workbook(path, data_only=True)
+    n_act = n_tgt = n_claim = 0
+
+    def put_actual(part, kpi, value, unit):
+        nonlocal n_act
+        if value is None:
+            return
+        conn.execute("INSERT INTO fy_actual(fy,part,kpi,value,unit) VALUES(?,?,?,?,?) "
+                     "ON CONFLICT(fy,part,kpi) DO UPDATE SET value=excluded.value, unit=excluded.unit",
+                     (fy, part, kpi, value, unit))
+        n_act += 1
+
+    def put_target(part, kpi, value, unit):
+        nonlocal n_tgt
+        if value is None:
+            return
+        conn.execute("INSERT INTO target(fy,part,kpi,value,unit,mon) VALUES(?,?,?,?,?,0) "
+                     "ON CONFLICT(fy,part,kpi,mon) DO UPDATE SET value=excluded.value",
+                     (fy, part, kpi, value, unit))
+        n_tgt += 1
+
+    def rows_of(sheet, first_row=4):
+        """(A열 라벨, [B열부터 값...]) 목록."""
+        ws = wb[sheet]
+        out = []
+        for r in range(first_row, ws.max_row + 1):
+            lbl = ws.cell(row=r, column=1).value
+            if lbl is None or not str(lbl).strip():
+                continue
+            out.append((str(lbl).strip(),
+                        [ws.cell(row=r, column=c).value for c in range(2, ws.max_column + 1)]))
+        return out
+
+    # ① 공정불량율: 행=FY26 실적/목표, 열=1PART,2PART
+    for lbl, vals in rows_of("1_공정불량율"):
+        for i, pk in enumerate(("1PART", "2PART")):
+            v = _fy_num(vals[i]) if i < len(vals) else None
+            if "실적" in lbl:
+                put_actual(_FY_PART_COL[pk], "proc_ppm", v, "ppm")
+            elif "목표" in lbl:
+                put_target(_FY_PART_COL[pk], "proc_ppm", v, "ppm")
+
+    # ② 반별목표제: 행=공정, 열=1P실적,1P목표,2P실적,2P목표
+    for proc, vals in rows_of("2_반별목표제"):
+        kpi = "ban_ppm_" + proc
+        for i, (pk, is_actual) in enumerate((("1PART", True), ("1PART", False),
+                                             ("2PART", True), ("2PART", False))):
+            v = _fy_num(vals[i]) if i < len(vals) else None
+            (put_actual if is_actual else put_target)(_FY_PART_COL[pk], kpi, v, "ppm")
+
+    # ③ COPQ: 행=공정불량/클레임/Q-COST/COPQ%/목표%
+    COPQ_KPI = {"공정불량": ("copq_defect_amt", "만원"), "클레임": ("copq_claim_amt", "만원"),
+                "COPQ": ("copq_pct", "%")}
+    for lbl, vals in rows_of("3_COPQ"):
+        if "자동계산" in lbl:                    # Q-COST는 공정불량+클레임이므로 저장 안 함
+            continue
+        key = next((k for k in COPQ_KPI if lbl.startswith(k)), None)
+        for i, pk in enumerate(("1PART", "2PART")):
+            v = _fy_num(vals[i]) if i < len(vals) else None
+            if lbl.startswith("목표"):
+                put_target(_FY_PART_COL[pk], "copq", v, "%")
+            elif key:
+                kpi, unit = COPQ_KPI[key]
+                put_actual(_FY_PART_COL[pk], kpi, v, unit)
+
+    # ④ 고객품질ISSUE: 행=Official/Unofficial
+    for lbl, vals in rows_of("4_고객품질ISSUE"):
+        kpi = "incident_official" if lbl.startswith("Official") else \
+              "incident_unofficial" if lbl.startswith("Unofficial") else None
+        if not kpi:
+            continue
+        for i, pk in enumerate(("1PART", "2PART")):
+            put_actual(_FY_PART_COL[pk], kpi, _fy_num(vals[i]) if i < len(vals) else None, "건")
+
+    # ⑤ 업체별 클레임: 열=업체, 금액(만원), 파트
+    conn.execute("DELETE FROM fy_claim WHERE fy=?", (fy,))
+    for cust, vals in rows_of("5_클레임_업체별"):
+        if "자동계산" in cust or cust.startswith("※"):
+            continue
+        amt = _fy_num(vals[0]) if vals else None
+        if amt is None:
+            continue
+        pk = str(vals[1]).strip() if len(vals) > 1 and vals[1] else ""
+        conn.execute("INSERT INTO fy_claim(fy,part,customer,amount) VALUES(?,?,?,?) "
+                     "ON CONFLICT(fy,part,customer) DO UPDATE SET amount=excluded.amount",
+                     (fy, _FY_PART_COL.get(pk, ""), cust, amt))
+        n_claim += 1
+
+    conn.commit()
+    return n_act + n_tgt + n_claim, {"실적": n_act, "목표": n_tgt, "업체별클레임": n_claim}

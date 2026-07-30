@@ -449,6 +449,26 @@
 
 ## 최근 로그
 
+### 2026-07-30 (36) — [월마감 2/8 완료] FY26 연간실적 저장소 + XLSX 적재 로직
+- 확정: FY26은 **일회성 시드**이고 FY27 이후는 시스템이 원천 데이터로 계산한다("너가 편한방식으로
+  저장" 위임). → `target` 테이블과 대칭되는 단순 구조로 결정.
+- `app/db.py`: 테이블 2개 신설
+  - `fy_actual(fy, part, kpi, value, unit)` UNIQUE(fy,part,kpi) — FY 연간 실적(스칼라)
+  - `fy_claim(fy, part, customer, amount)` UNIQUE(fy,part,customer) — 업체별 FY 클레임(만원)
+- `app/ingest.py`: `ingest_fy_actual_xlsx(conn, path, fy=26)` 신설. `FY26_실적입력.xlsx`의 5시트를
+  읽어 **실적→`fy_actual`, 목표→`target`(fy=26, mon=0), 업체별 클레임→`fy_claim`** 으로 나눠 적재.
+  시트명·A열 라벨로 값을 찾고, 전부 UPSERT라 **재실행해도 중복 없음(멱등 확인)**.
+  kpi 이름: `proc_ppm` / `ban_ppm_{공정}` / `copq_defect_amt` / `copq_claim_amt` / `copq_pct` /
+  `incident_official` / `incident_unofficial`. Q-COST는 공정불량+클레임이라 저장하지 않고 계산.
+- `app/init_data.py`: STEPS 마지막에 "FY26 연간실적" 단계 추가 → 초기 구축 재실행 시 자동 적재.
+- **DB(qms.db)**: PDF 기준값으로 40건 적재(실적 20 · 목표 12 · 업체별클레임 8).
+  기존 FY26 목표(copq 0.22/0.173, incident 3/2)는 값이 동일해 덮어써도 변화 없음을 커밋본과
+  대조해 확인했고, `proc_ppm` FY26 연간목표(1P 1011 / 2P 1458)는 이번에 새로 생긴 값이다.
+- ⚠️ **발견한 데이터 불일치(사용자 확인 필요)**: 보고서 p14의 업체별 클레임 금액을 더하면
+  **73,107만원**인데 같은 표의 '합계' 칸은 **72,944만원**으로 163만원 차이가 난다.
+  업체별 값 중 하나가 다르거나 합계에 빠진 항목이 있는 것으로 보임.
+- ⚠️ `fy_claim`의 part는 현재 전부 **미지정** — XLSX의 '파트' 열이 비어 있어서다(사용자 입력 대기).
+
 ### 2026-07-30 (35) — [월마감 2/8] FY26 입력 양식 XLSX + 고객사 마스터 신설
 - 목표: (a) FY26 실적을 사용자가 채울 수 있는 XLSX 양식을 templates/에 제공,
   (b) 고객 클레임의 1PART/2PART 구분 근거 확보, (c) 고객사명 표기를 통일하는 마스터 화면 신설.

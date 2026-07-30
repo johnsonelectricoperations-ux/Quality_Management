@@ -104,6 +104,20 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS fy_actual (
+  -- FY 연간 실적(월별로 쪼갤 수 없는 과거 집계값). 월마감 보고서의 'FY26' 열 전용.
+  -- FY27 이후는 원천 데이터로 시스템이 직접 계산하므로 여기에 넣지 않는다(FY26 일회성 시드).
+  -- 구조는 target 테이블과 대칭(fy, part, kpi, value, unit).
+  id INTEGER PRIMARY KEY, fy INTEGER NOT NULL, part TEXT NOT NULL,
+  kpi TEXT NOT NULL, value REAL NOT NULL, unit TEXT DEFAULT '',
+  UNIQUE(fy, part, kpi)
+);
+CREATE TABLE IF NOT EXISTS fy_claim (
+  -- FY 연간 고객 클레임 금액(업체별). 보고서 p14의 'FY26' 열 전용, 단위 만원.
+  id INTEGER PRIMARY KEY, fy INTEGER NOT NULL, part TEXT NOT NULL DEFAULT '',
+  customer TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
+  UNIQUE(fy, part, customer)
+);
 CREATE TABLE IF NOT EXISTS customer (
   -- 고객사 마스터. name=정식명(생산량 파일 '주거래처' E열과 동일하게 유지),
   -- short_name=월마감 보고서 표기명(약칭, 예: 현대트랜시스 지곡→HTS). part는 생산량 파일이

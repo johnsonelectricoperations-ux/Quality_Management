@@ -39,7 +39,15 @@ STEPS = [
      lambda conn, p: "%d건" % ingest.ingest_scrap_db(conn, p)[0]),
     ("과거 KPI 실적", "과거데이터.xlsx",
      lambda conn, p: _history(conn, p)),
+    ("FY26 연간실적 (월마감 보고서용)", "FY26_실적입력.xlsx",
+     lambda conn, p: _fy_actual(conn, p)),
 ]
+
+
+def _fy_actual(conn, path):
+    n, note = ingest.ingest_fy_actual_xlsx(conn, path, fy=26)
+    return "%d건 (실적 %d · 목표 %d · 업체별클레임 %d)" % (
+        n, note["실적"], note["목표"], note["업체별클레임"])
 
 
 def _history(conn, path):
