@@ -6,6 +6,7 @@
 import os
 import secrets
 import sqlite3
+import datetime as _dt
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends
@@ -117,6 +118,7 @@ def _guard(u):
 PERM_MENUS = [
     ("dash", "대시보드"),
     ("rdetail", "세부지표현황"),
+    ("monthly", "월마감 보고서"),
     ("svp", "SVP 입력"),
     ("claim", "Claim 입력"),
     ("incident", "Customer Incident 관리"),
@@ -578,6 +580,73 @@ def report_tmno_defects(request: Request, tm: str = ""):
 def report_defect_redirect(request: Request, part: str = "통합", kind: str = "공정"):
     tab = "process1" if part == "VMS PART" else "process2"
     return RedirectResponse(f"/report/detail?tab={tab}", status_code=303)
+
+
+# ── 월마감 보고서 ───────────────────────────────────────
+# 데이터로 뽑을 수 없는 서술 항목만 사람이 입력한다(그 외 모든 수치는 시스템이 계산).
+# 보고서는 '해당 마감월'의 내용만 담는다(예: 7월마감 → 7월 이슈만) — 2026-07-30 확정.
+REPORT_SECTIONS = [
+    ("main_tasks", "주요 업무 진행 현황",
+     "이번 달 주요 업무 진행 현황을 줄바꿈으로 구분해 입력하세요.\n"
+     "보고서에는 입력한 줄바꿈이 그대로 유지됩니다."),
+]
+
+
+def _report_months(conn, n=13):
+    """월마감 대상 후보 (년,월) 목록 — 생산량 데이터가 있는 마지막 달부터 과거 n개월."""
+    cy, cm = latest_month(conn)
+    return calc.trailing_months(cy, cm, n)[::-1]      # 최신월이 위로
+
+
+@app.get("/report/monthly", response_class=HTMLResponse)
+def monthly_close(request: Request, ym: str = "", msg: str = "", err: str = ""):
+    """월마감 보고서 — 서술 항목 작성 화면. 마감월을 골라 텍스트를 입력/수정한다."""
+    u, g = _perm_guard(request, "monthly", "view")
+    if g:
+        return g
+    conn = db.connect()
+    months = _report_months(conn)
+    valid = {"%04d-%02d" % (y, mo) for (y, mo) in months}
+    if ym not in valid:
+        y0, m0 = months[0]
+        ym = "%04d-%02d" % (y0, m0)
+    saved = {r["section"]: dict(r) for r in conn.execute(
+        "SELECT section, content, updated_at, updated_by FROM report_text WHERE ym=?", (ym,))}
+    conn.close()
+    sections = [{"key": k, "name": n, "hint": h,
+                 "content": saved.get(k, {}).get("content", ""),
+                 "updated_at": saved.get(k, {}).get("updated_at", ""),
+                 "updated_by": saved.get(k, {}).get("updated_by", "")}
+                for k, n, h in REPORT_SECTIONS]
+    return render(request, "monthly_close.html", u, active="monthly", heading="월마감 보고서",
+                  crumb="리포트", pending=pending_count(), ym=ym, sections=sections,
+                  ym_opts=["%04d-%02d" % (y, mo) for (y, mo) in months],
+                  msg=msg, err=err,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "monthly", "edit")))
+
+
+@app.post("/report/monthly/save")
+async def monthly_close_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "monthly", "edit")):
+        return RedirectResponse("/report/monthly", status_code=303)
+    form = await request.form()
+    ym = (form.get("ym") or "").strip()
+    if len(ym) != 7:
+        return RedirectResponse("/report/monthly?err=마감월이 올바르지 않습니다", status_code=303)
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = db.connect()
+    for key, _name, _hint in REPORT_SECTIONS:
+        if key not in form:
+            continue
+        conn.execute(
+            "INSERT INTO report_text(ym,section,content,updated_at,updated_by) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(ym,section) DO UPDATE SET content=excluded.content, "
+            "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+            (ym, key, (form.get(key) or "").strip(), now, u["name"]))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/report/monthly?ym={ym}&msg=저장됨", status_code=303)
 
 
 # ── 마스터 ──────────────────────────────────────────────

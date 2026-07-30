@@ -104,6 +104,14 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS report_text (
+  -- 월마감 보고서에 사람이 직접 쓰는 서술 항목(예: '주요 업무 진행 현황').
+  -- 데이터로 뽑을 수 없는 내용만 여기 둔다. ym='YYYY-MM'(마감월), section=항목키.
+  id INTEGER PRIMARY KEY, ym TEXT NOT NULL, section TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TEXT DEFAULT '', updated_by TEXT DEFAULT '',
+  UNIQUE(ym, section)
+);
 CREATE TABLE IF NOT EXISTS fy_actual (
   -- FY 연간 실적(월별로 쪼갤 수 없는 과거 집계값). 월마감 보고서의 'FY26' 열 전용.
   -- FY27 이후는 원천 데이터로 시스템이 직접 계산하므로 여기에 넣지 않는다(FY26 일회성 시드).
@@ -285,7 +293,7 @@ def init_db():
 
 
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
-PERM_MENU_KEYS = ("dash", "rdetail", "svp", "claim", "incident", "oreview",
+PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "oreview",
                   "data_check", "products", "processes", "defect_types",
                   "customers", "scan", "masters", "target")
 # 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.

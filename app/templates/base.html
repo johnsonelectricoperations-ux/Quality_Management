@@ -19,6 +19,7 @@
   <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
   {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span></a>{% endif %}
   <div class="cap">리포트</div>
+  <a class="nav {{ 'on' if active=='monthly' }}" href="/report/monthly">📋 월마감</a>
   <div class="cap">관리</div>
   <a class="nav {{ 'on' if active=='data_check' }}" href="/admin/data-check">🩺 데이터 점검{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}</a>
   <a class="nav {{ 'on' if active=='products' }}" href="/admin/products">📦 제품 마스터 (단가 포함)</a>
