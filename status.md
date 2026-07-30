@@ -449,6 +449,26 @@
 
 ## 최근 로그
 
+### 2026-07-30 (59) — "내부품질 Issue 관리" 메뉴 신설 (Customer Incident 방식 + 공정명 항목)
+- **새 메뉴 추가**: 데이터 입력 메뉴에 "내부품질 Issue 관리"를 Customer Incident 관리와 동일한
+  방식(건별 직접 등록·수정·삭제, 불량사진/세부자료 첨부, 공식 여부 체크)으로 신설.
+  경로 `/input/internal-issue`. 사이드바는 Customer Incident 관리 바로 아래에 배치.
+- **고객명 대신 공정명**: Customer Incident와 달리 고객사가 아니라 **내부 어느 공정에서
+  문제가 발생했는지**를 관리해야 해서, 고객명 select를 공정명 select로 교체. 값은 KPI
+  집계에 쓰는 5대 집계공정(`db.AGG_PROCESSES` = 성형·소결·정형·가공·기타)에서 고른다.
+  마스터에 없는 값(과거 데이터 등)이 들어와도 화면에서 깨지지 않도록, 목록에 없는 기존값은
+  옵션에 추가로 얹어 보여준다(Customer Incident의 "마스터 미등록" 처리와 동일한 패턴).
+- **DB**: `internal_issue`(id,d,part,process,location,tm_no,product_name,content,defect_qty,
+  cause,action,is_official,reg_user) / `internal_issue_file`(첨부, incident_file과 동일 구조)
+  테이블 신설. 첨부파일은 `uploads/internal_issue/`에 별도 저장.
+  현재는 **등록·관리 전용 로그**이며 대시보드·월마감 KPI 계산에는 반영하지 않는다(요청 범위에
+  KPI 반영은 없었음 — 필요하면 별도 요청).
+- **권한**: `permission` 테이블의 메뉴 매트릭스(`PERM_MENU_KEYS`)에 `internal_issue` 추가,
+  editor 기본 편집 가능 메뉴에도 포함(`/admin/users` 권한 화면에 자동으로 노출됨).
+- **검증**: Playwright로 로그인 → 메뉴 진입 → 등록(공정명 "소결" 선택 포함) → 이력에 표시
+  확인 → 삭제까지 왕복 테스트. qms.db에 테스트로 등록한 행은 삭제로 정리 확인(count=0).
+  전 15개 메뉴(신규 메뉴 포함) 200 응답 / JS 오류 0.
+
 ### 2026-07-30 (58) — 세부지표현황 TOP20 표에 품명·기간별 분해 추가 + 대시보드 지난주/해당주 토글
 - **세부지표현황 → ITEM(불량유형 필터) → "TM-NO별 수량 (상위20)" 표에 품명 열 추가**:
   기존엔 TM-NO·수량 2열뿐이라 품명을 알 수 없었다. `defect_trend()`에서 `m.product` 딕셔너리로

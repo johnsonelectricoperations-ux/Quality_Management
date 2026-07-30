@@ -141,6 +141,22 @@ CREATE TABLE IF NOT EXISTS incident_file (
   uploaded_at TEXT DEFAULT '', uploaded_by TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_incfile ON incident_file(incident_id);
+CREATE TABLE IF NOT EXISTS internal_issue (
+  -- 내부품질 issue 건별 등록(원장). Customer Incident와 동일 구조이되 고객명 대신
+  -- 문제가 발생한 내부 공정명(process, 5대 집계공정 중 하나)을 관리한다(2026-07-30 신설).
+  id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
+  process TEXT DEFAULT '', location TEXT DEFAULT '', tm_no TEXT DEFAULT '',
+  product_name TEXT DEFAULT '', content TEXT DEFAULT '', defect_qty INTEGER NOT NULL DEFAULT 0,
+  cause TEXT DEFAULT '', action TEXT DEFAULT '', is_official INTEGER NOT NULL DEFAULT 1,
+  reg_user TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS internal_issue_file (
+  id INTEGER PRIMARY KEY, internal_issue_id INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'doc', orig_name TEXT NOT NULL,
+  stored_name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0,
+  uploaded_at TEXT DEFAULT '', uploaded_by TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_intissuefile ON internal_issue_file(internal_issue_id);
 CREATE TABLE IF NOT EXISTS report_text (
   -- 월마감 보고서에 사람이 직접 쓰는 서술 항목(예: '주요 업무 진행 현황').
   -- 데이터로 뽑을 수 없는 내용만 여기 둔다. ym='YYYY-MM'(마감월), section=항목키.
@@ -353,11 +369,11 @@ def _ensure_default_aliases(conn):
 
 
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
-PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "oreview",
+PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "internal_issue", "oreview",
                   "data_check", "products", "processes", "defect_types",
                   "customers", "scan", "target")
 # 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.
-_EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "oreview"}
+_EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "internal_issue", "oreview"}
 
 
 def _ensure_default_permissions(conn):

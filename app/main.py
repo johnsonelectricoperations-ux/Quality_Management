@@ -147,6 +147,7 @@ PERM_MENUS = [
     ("svp", "SVP 입력"),
     ("claim", "Claim 입력"),
     ("incident", "Customer Incident 관리"),
+    ("internal_issue", "내부품질 Issue 관리"),
     ("oreview", "불량 검토(100EA↑)"),
     ("data_check", "데이터 점검"),
     ("products", "제품 마스터"),
@@ -2104,6 +2105,176 @@ def incident_delete(request: Request, iid: int):
     conn.commit()
     conn.close()
     return RedirectResponse("/input/incident?msg=삭제됨", status_code=303)
+
+
+# ── 내부품질 Issue 관리 (건별 직접 등록, Customer Incident와 동일 방식) ─────
+@app.get("/input/internal-issue", response_class=HTMLResponse)
+def internal_issue_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
+    u, g = _perm_guard(request, "internal_issue", "view")
+    if g:
+        return g
+    conn = db.connect()
+    cols = ("id,d,part,process,location,tm_no,product_name,content,defect_qty,cause,action,is_official")
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT {cols} FROM internal_issue ORDER BY d DESC,id DESC LIMIT 200")]
+    files = defaultdict(list)
+    for f in conn.execute("SELECT id,internal_issue_id,kind,orig_name,size FROM internal_issue_file ORDER BY id"):
+        files[f["internal_issue_id"]].append(dict(f))
+    for r in rows:
+        r["files"] = files.get(r["id"], [])
+    edit_row = None
+    if edit:
+        r = conn.execute(f"SELECT {cols} FROM internal_issue WHERE id=?", (edit,)).fetchone()
+        if r:
+            edit_row = dict(r)
+            edit_row["files"] = files.get(edit_row["id"], [])
+    conn.close()
+    return render(request, "internal_issue.html", u, active="internal_issue", heading="내부품질 Issue 관리",
+                  crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  processes=db.AGG_PROCESSES,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "internal_issue", "edit")), msg=msg, err=err)
+
+
+@app.post("/input/internal-issue/save")
+async def internal_issue_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "internal_issue", "edit")):
+        return RedirectResponse("/input/internal-issue", status_code=303)
+    form = await request.form()
+    orig_id = (form.get("orig_id") or "").strip()
+    d = (form.get("d") or "").strip()
+    part = form.get("part") or "VMS PART"
+    process = (form.get("process") or "").strip()
+    location = (form.get("location") or "").strip()
+    tm_no = calc.base_tmno((form.get("tm_no") or "").strip())
+    product_name = (form.get("product_name") or "").strip()
+    content = (form.get("content") or "").strip()
+    cause = (form.get("cause") or "").strip()
+    action = (form.get("action") or "").strip()
+    try:
+        defect_qty = int((form.get("defect_qty") or "0").replace(",", "").strip() or 0)
+    except ValueError:
+        defect_qty = 0
+    is_official = 1 if form.get("is_official") else 0
+    if not d:
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/input/internal-issue?err=날짜는 필수입니다{eq}", status_code=303)
+    conn = db.connect()
+    if orig_id:
+        conn.execute(
+            "UPDATE internal_issue SET d=?,part=?,process=?,location=?,tm_no=?,product_name=?,content=?,"
+            "defect_qty=?,cause=?,action=?,is_official=? WHERE id=?",
+            (d, part, process, location, tm_no, product_name, content,
+             defect_qty, cause, action, is_official, orig_id))
+        iid = int(orig_id)
+        msg = "수정됨"
+    else:
+        cur = conn.execute(
+            "INSERT INTO internal_issue(d,part,process,location,tm_no,product_name,content,"
+            "defect_qty,cause,action,is_official,reg_user) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (d, part, process, location, tm_no, product_name, content,
+             defect_qty, cause, action, is_official, u["name"]))
+        iid = cur.lastrowid
+        msg = "등록됨"
+    n_up = 0
+    for field, kind in (("photo", "photo"), ("doc", "doc")):
+        for up in form.getlist(field):
+            if getattr(up, "filename", ""):
+                _save_internal_issue_file(conn, iid, kind, up, u["name"])
+                n_up += 1
+    conn.commit()
+    conn.close()
+    if n_up:
+        msg += f" (첨부 {n_up}건)"
+    return RedirectResponse(f"/input/internal-issue?msg={msg}", status_code=303)
+
+
+# ── 내부품질 issue 첨부파일 ───────────────────────────────
+INTERNAL_ISSUE_UPLOAD_ROOT = os.path.abspath(os.path.join(BASE, "..", "uploads", "internal_issue"))
+
+
+def _save_internal_issue_file(conn, internal_issue_id, kind, upload, user_name):
+    data = upload.file.read()
+    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return None
+    os.makedirs(INTERNAL_ISSUE_UPLOAD_ROOT, exist_ok=True)
+    orig = _safe_name(upload.filename)
+    stored = f"{internal_issue_id}_{secrets.token_hex(6)}_{orig}"
+    with open(os.path.join(INTERNAL_ISSUE_UPLOAD_ROOT, stored), "wb") as f:
+        f.write(data)
+    conn.execute(
+        "INSERT INTO internal_issue_file(internal_issue_id,kind,orig_name,stored_name,size,uploaded_at,uploaded_by) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (internal_issue_id, kind, orig, stored, len(data),
+         _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), user_name))
+    return stored
+
+
+@app.get("/input/internal-issue/file/{fid}")
+def internal_issue_file_get(request: Request, fid: int):
+    u, g = _perm_guard(request, "internal_issue", "view")
+    if g:
+        return g
+    conn = db.connect()
+    r = conn.execute("SELECT orig_name, stored_name FROM internal_issue_file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if not r:
+        return RedirectResponse("/input/internal-issue?err=파일을 찾을 수 없습니다", status_code=303)
+    path = os.path.join(INTERNAL_ISSUE_UPLOAD_ROOT, r["stored_name"])
+    if not os.path.isfile(path):
+        return RedirectResponse("/input/internal-issue?err=파일이 서버에 없습니다", status_code=303)
+    return FileResponse(path, filename=r["orig_name"])
+
+
+@app.post("/input/internal-issue/file/{fid}/delete")
+def internal_issue_file_delete(request: Request, fid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "internal_issue", "edit")):
+        return RedirectResponse("/input/internal-issue", status_code=303)
+    conn = db.connect()
+    r = conn.execute("SELECT internal_issue_id, stored_name FROM internal_issue_file WHERE id=?", (fid,)).fetchone()
+    if r:
+        try:
+            os.remove(os.path.join(INTERNAL_ISSUE_UPLOAD_ROOT, r["stored_name"]))
+        except OSError:
+            pass
+        conn.execute("DELETE FROM internal_issue_file WHERE id=?", (fid,))
+        conn.commit()
+        iid = r["internal_issue_id"]
+    else:
+        iid = 0
+    conn.close()
+    return RedirectResponse(f"/input/internal-issue?edit={iid}&msg=첨부 삭제됨", status_code=303)
+
+
+@app.post("/input/internal-issue/{iid}/toggle-official")
+def internal_issue_toggle_official(request: Request, iid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "internal_issue", "edit")):
+        return RedirectResponse("/input/internal-issue", status_code=303)
+    conn = db.connect()
+    conn.execute("UPDATE internal_issue SET is_official=1-is_official WHERE id=?", (iid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/internal-issue", status_code=303)
+
+
+@app.post("/input/internal-issue/{iid}/delete")
+def internal_issue_delete(request: Request, iid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "internal_issue", "edit")):
+        return RedirectResponse("/input/internal-issue", status_code=303)
+    conn = db.connect()
+    for f in conn.execute("SELECT stored_name FROM internal_issue_file WHERE internal_issue_id=?", (iid,)):
+        try:
+            os.remove(os.path.join(INTERNAL_ISSUE_UPLOAD_ROOT, f["stored_name"]))
+        except OSError:
+            pass
+    conn.execute("DELETE FROM internal_issue_file WHERE internal_issue_id=?", (iid,))
+    conn.execute("DELETE FROM internal_issue WHERE id=?", (iid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/internal-issue?msg=삭제됨", status_code=303)
 
 
 SOURCE_LABEL = {"outsource": "외주소재불량", "discard": "폐기불량"}

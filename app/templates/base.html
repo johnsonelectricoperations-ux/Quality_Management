@@ -26,6 +26,7 @@
   {% call nav('svp', '/input/svp') %}₩ SVP 입력{% endcall %}
   {% call nav('claim', '/input/claim') %}▤ Claim 입력{% endcall %}
   {% call nav('incident', '/input/incident') %}◎ Customer Incident 관리{% endcall %}
+  {% call nav('internal_issue', '/input/internal-issue') %}◈ 내부품질 Issue 관리{% endcall %}
   {% if pending %}
   {% call nav('oreview', '/input/outsource-review') %}✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span>{% endcall %}
   {% endif %}
