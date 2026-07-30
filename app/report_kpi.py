@@ -360,10 +360,16 @@ def tmno_search(conn, q, part=""):
     return [r["tm"] for r in conn.execute(sql, args)]
 
 
-def defect_names_for_tm(conn, tm):
-    """그 TM-NO에 실제 발생한 불량유형명 목록."""
-    return [r["defect_name"] for r in conn.execute(
-        "SELECT DISTINCT defect_name FROM defect_entry WHERE tm_no=? ORDER BY defect_name", (tm,))]
+def defect_names_for_tm(conn, m, tm):
+    """그 TM-NO에 실제 발생한 **공정불량** 유형명 목록(셋팅불량 제외, 2026-07-30 확정)."""
+    out = set()
+    for r in conn.execute(
+            "SELECT DISTINCT defect_name, part, kind FROM defect_entry WHERE tm_no=?", (tm,)):
+        prod = m.product.get(tm)
+        part = prod[1] if prod else (r["part"] or "")
+        if m.kind_from(part, r["defect_name"], r["kind"]) == "공정":
+            out.add(r["defect_name"])
+    return sorted(out)
 
 
 def _period_setup(cy, cm, unit, date_from=None, date_to=None):
@@ -416,9 +422,18 @@ def _period_setup(cy, cm, unit, date_from=None, date_to=None):
     return d0, d1, labels, day_idx
 
 
-def defect_trend(conn, part, tm_q, defect_name, unit, date_from=None, date_to=None):
+ALL_SERIES_LABEL = "전체 공정불량"
+
+
+def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to=None):
     """[ITEM] Part·TM-NO/품명·불량유형·집계단위(일/주/월)로 필터링한 불량 발생 추이.
-    반환: {"labels":[...], "series":{불량명:[qty...]}, "qty_total":int, "tm_rows":[...]}"""
+
+    **공정불량만 집계한다(셋팅불량 제외, 2026-07-30 확정).** 판정은 `m.kind_from()`으로 한다 —
+    불량명 '기타'가 공정·셋팅 양쪽 마스터에 다 있어서 이름만으로는 구분할 수 없기 때문이다.
+
+    불량유형을 '전체'로 두면 **전체 공정불량을 하나로 합한 단일 시리즈**를 돌려주고,
+    개별 유형을 고르면 그 유형만 돌려준다(2026-07-30 확정).
+    반환: {"labels":[...], "series":{계열명:[qty...]}, "qty_total":int, "tm_rows":[...]}"""
     parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
     cutoff = latest_actual_month(conn) or (_dt.date.today().year, _dt.date.today().month)
     cy, cm = cutoff
@@ -432,31 +447,34 @@ def defect_trend(conn, part, tm_q, defect_name, unit, date_from=None, date_to=No
     if tm_q:
         where.append("(tm_no LIKE ? OR tm_no=?)")
         args += [f"%{tm_q}%", tm_q]
-    q = f"SELECT d,tm_no,defect_name,qty,part FROM defect_entry WHERE {' AND '.join(where)}"
-    rows = []
-    for r in conn.execute(q, args):
-        if r["part"] and r["part"] not in parts and part != "통합":
-            continue
-        rows.append(r)
+    q = (f"SELECT d,tm_no,defect_name,qty,part,kind FROM defect_entry "
+         f"WHERE {' AND '.join(where)}")
 
-    by_type = defaultdict(lambda: [0] * len(labels))
+    name = defect_name or ALL_SERIES_LABEL
+    vals = [0] * len(labels)
     by_tm = defaultdict(int)
     total = 0
-    for r in rows:
+    for r in conn.execute(q, args):
+        prod = m.product.get(r["tm_no"])
+        rpart = prod[1] if prod else (r["part"] or "")
+        if part != "통합" and rpart and rpart not in parts:
+            continue
+        if m.kind_from(rpart, r["defect_name"], r["kind"]) != "공정":
+            continue                       # 셋팅불량 제외
         by_tm[r["tm_no"] or "(미지정)"] += r["qty"]
         total += r["qty"]
         i = day_idx.get(r["d"])
         if i is not None:
-            by_type[r["defect_name"]][i] += r["qty"]
+            vals[i] += r["qty"]
 
-    top_types = sorted(by_type, key=lambda k: -sum(by_type[k]))[:8]
-    series = {t: by_type[t] for t in top_types}
+    series = {name: vals} if total else {}
     tm_rows = sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]
     return {"labels": labels, "series": series, "qty_total": total, "tm_rows": tm_rows}
 
 
 def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_to=None):
     """[불량유형] Part·불량유형(최대 3개)·집계단위(일/주/월)로 필터링한 발생 추이.
+    **공정불량만 집계한다(셋팅불량 제외, 2026-07-30 확정).**
     반환: {"labels":[...], "series":{불량명:[qty...]}}"""
     parts = calc._parts_for(part) if part != "통합" else ["VMS PART", "TM PART"]
     names = [n for n in defect_names if n][:3]
@@ -470,17 +488,16 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
     where = ["status='confirmed'", "d BETWEEN ? AND ?",
             "defect_name IN (%s)" % ",".join("?" * len(names))]
     args = [d0, d1] + names
-    rows = []
+    series = {n: [0] * len(labels) for n in names}
     for r in conn.execute(
-            f"SELECT d,tm_no,defect_name,qty,part FROM defect_entry WHERE {' AND '.join(where)}", args):
+            f"SELECT d,tm_no,defect_name,qty,part,kind FROM defect_entry "
+            f"WHERE {' AND '.join(where)}", args):
         prod = m.product.get(r["tm_no"])
         rpart = prod[1] if prod else (r["part"] or "")
         if part != "통합" and rpart and rpart not in parts:
             continue
-        rows.append(r)
-
-    series = {n: [0] * len(labels) for n in names}
-    for r in rows:
+        if m.kind_from(rpart, r["defect_name"], r["kind"]) != "공정":
+            continue                       # 셋팅불량 제외
         i = day_idx.get(r["d"])
         if i is not None:
             series[r["defect_name"]][i] += r["qty"]

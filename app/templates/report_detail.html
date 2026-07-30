@@ -159,7 +159,7 @@
   })();
   </script>
 
-  <div class="panel"><div class="phead"><h2>불량 발생 추이 ({{ d_unit }} 단위)</h2>
+  <div class="panel"><div class="phead"><h2>공정불량 발생 추이 ({{ d_unit }} 단위)</h2>
     <span class="tot">{{ d_from }} ~ {{ d_to }} · 총 {{ trend.qty_total|cf }}건</span></div>
     <div class="pbody">
       {% if trend.series %}
@@ -168,7 +168,7 @@
         <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'][loop.index0 % 8] }}"></i>{{ nm }}</span>
         {% endfor %}
       </div>
-      <div class="jchart" data-type="{{ 'multi' if d_unit=='일' else 'multibar' }}" data-unit="EA" data-dec="0"
+      <div class="jchart" data-type="multibar" data-unit="EA" data-dec="0"
            data-labels="{{ trend.labels_csv }}" data-names="{{ trend.chart_names }}"
            data-sets="{{ trend.chart_sets }}"></div>
       {% else %}
@@ -255,7 +255,7 @@
   })();
   </script>
 
-  <div class="panel"><div class="phead"><h2>불량유형별 발생 추이 ({{ t_unit }} 단위)</h2></div>
+  <div class="panel"><div class="phead"><h2>불량유형별 공정불량 발생 추이 ({{ t_unit }} 단위)</h2></div>
     <div class="pbody">
       {% if trend2.series %}
       <div class="lgd">
@@ -263,7 +263,7 @@
         <span><i style="background:{{ ['var(--p-500)','var(--sec)','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'][loop.index0 % 8] }}"></i>{{ nm }}</span>
         {% endfor %}
       </div>
-      <div class="jchart" data-type="{{ 'multi' if t_unit=='일' else 'multibar' }}" data-unit="EA" data-dec="0"
+      <div class="jchart" data-type="multibar" data-unit="EA" data-dec="0"
            data-labels="{{ trend2.labels_csv }}" data-names="{{ trend2.chart_names }}"
            data-sets="{{ trend2.chart_sets }}"></div>
       {% else %}

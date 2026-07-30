@@ -524,13 +524,14 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
         if tpart not in ("통합", "VMS PART", "TM PART"):
             tpart = "통합"
         sub = sub if sub in ("item", "type") else "item"
+        # 불량유형 목록도 공정불량만 (셋팅불량 유형은 제외 — 2026-07-30 확정)
         dtypes = [r["name"] for r in conn.execute(
-            "SELECT DISTINCT name FROM defect_type ORDER BY name")]
+            "SELECT DISTINCT name FROM defect_type WHERE kind='공정' ORDER BY name")]
         ctx.update({"sub": sub, "tpart": tpart, "defect_type_opts": dtypes})
         if sub == "item":
             d_unit = d_unit if d_unit in ("일", "주", "월") else "일"
             df, dt = d_from or f"{cy:04d}-{cm:02d}-01", d_to or f"{cy:04d}-{cm:02d}-28"
-            trend = report_kpi.defect_trend(conn, tpart, d_tm, d_name, d_unit, df, dt)
+            trend = report_kpi.defect_trend(conn, m, tpart, d_tm, d_name, d_unit, df, dt)
             trend["chart_names"] = "|".join(trend["series"].keys())
             trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
             trend["labels_csv"] = ",".join(trend["labels"])
@@ -570,7 +571,7 @@ def report_tmno_defects(request: Request, tm: str = ""):
     if u is None:
         return JSONResponse([])
     conn = db.connect()
-    rows = report_kpi.defect_names_for_tm(conn, tm.strip())
+    rows = report_kpi.defect_names_for_tm(conn, calc.Masters(conn), tm.strip())
     conn.close()
     return JSONResponse(rows)
 
