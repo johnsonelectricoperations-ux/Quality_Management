@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 10
+CACHE_VERSION = 11
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -385,25 +385,25 @@ def _issue_block(conn, fy, part, upto):
 # ── (3) 내부품질 Issue ─────────────────────────────────
 def _internal_issue_block(conn, fy, part, upto):
     """Customer Incident(_issue_block)와 동일 구조. 고객사 대신 공정명으로 집계하고,
-    이 지표는 KPI 목표가 없어(내부 등록·관리용 로그) 목표/달성율 계산은 하지 않는다."""
+    이 지표는 KPI 목표가 없어(내부 등록·관리용 로그) 목표/달성율 계산은 하지 않는다.
+    공식/비공식 구분도 KPI 집계용이 아니라(Customer Incident와 달리 반영되는 KPI가 없음)
+    보고서에서는 구분 없이 '관리건수' 하나로만 보여준다(2026-07-30 확정)."""
     months = [mo for (_y, mo) in calc.fy_months(fy)]
     ymlist = _fy_ym(fy)
     upto_i = months.index(upto)
-    off, unoff = [], []
+    cnt = []
     for i, ym in enumerate(ymlist):
         if i > upto_i:
-            off.append(None); unoff.append(None); continue
-        o = conn.execute("SELECT COUNT(*) c FROM internal_issue WHERE is_official=1 AND d LIKE ? AND part=?",
+            cnt.append(None); continue
+        c = conn.execute("SELECT COUNT(*) c FROM internal_issue WHERE d LIKE ? AND part=?",
                          (ym + "%", part)).fetchone()["c"]
-        u = conn.execute("SELECT COUNT(*) c FROM internal_issue WHERE is_official=0 AND d LIKE ? AND part=?",
-                         (ym + "%", part)).fetchone()["c"]
-        off.append(o); unoff.append(u)
-    by_proc = defaultdict(lambda: [0, 0])
+        cnt.append(c)
+    by_proc = defaultdict(int)
     for r in conn.execute(
-            "SELECT process, is_official, COUNT(*) c FROM internal_issue "
-            "WHERE part=? AND d BETWEEN ? AND ? GROUP BY process, is_official",
+            "SELECT process, COUNT(*) c FROM internal_issue "
+            "WHERE part=? AND d BETWEEN ? AND ? GROUP BY process",
             (part, ymlist[0] + "-01", ymlist[upto_i] + "-31")):
-        by_proc[r["process"] or "(미지정)"][0 if r["is_official"] else 1] += r["c"]
+        by_proc[r["process"] or "(미지정)"] += r["c"]
     upto_ym = ymlist[upto_i]
     details = []
     for r in conn.execute(
@@ -417,12 +417,11 @@ def _internal_issue_block(conn, fy, part, upto):
             "SELECT id, orig_name FROM internal_issue_file WHERE internal_issue_id=? AND kind='doc' ORDER BY id",
             (r["id"],))]
         details.append(row)
-    fy_official = sum(v for v in off if v)
-    return {"months": months, "upto_i": upto_i, "official": off, "unofficial": unoff,
-            "fy_official": fy_official, "fy_unofficial": sum(v for v in unoff if v),
-            "by_proc": sorted(([k] + v for k, v in by_proc.items()), key=lambda x: -(x[1] + x[2])),
+    fy_count = sum(v for v in cnt if v)
+    return {"months": months, "upto_i": upto_i, "count": cnt, "fy_count": fy_count,
+            "by_proc": sorted(by_proc.items(), key=lambda x: -x[1]),
             "details": details,
-            "vmax": max([v for v in off if v] + [1])}
+            "vmax": max([v for v in cnt if v] + [1])}
 
 
 # ── (4) 고객 Claim 현황 ─────────────────────────────────
@@ -452,7 +451,7 @@ def _claim_block(conn, fy, upto):
         row[0] = sum(v for v in row[1:] if v)
     details = []
     for r in conn.execute(
-            "SELECT d,part,customer,tm_no,product_name,item,amount,reclaim,content FROM claim "
+            "SELECT d,part,customer,tm_no,product_name,item,amount,reclaim,content,use_agg FROM claim "
             "WHERE d BETWEEN ? AND ? ORDER BY d",
             (ymlist[0] + "-01", ymlist[upto_i] + "-31")):
         details.append({"ym": r["d"][:7], "part": PART_LABEL.get(r["part"], r["part"]),
@@ -460,7 +459,7 @@ def _claim_block(conn, fy, upto):
                         "product_name": r["product_name"], "item": r["item"],
                         "amount": round(r["amount"] / 10), "reclaim": round(r["reclaim"] / 10),
                         "net": round((r["amount"] - r["reclaim"]) / 10),
-                        "content": r["content"]})
+                        "content": r["content"], "use_agg": bool(r["use_agg"])})
     return {"months": months, "upto_i": upto_i, "monthly": monthly,
             "fy_total": sum(v for v in monthly if v),
             "by_cust": sorted(([k] + v for k, v in by_cust.items()), key=lambda x: -sum(x[1:])),

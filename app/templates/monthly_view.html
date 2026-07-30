@@ -44,6 +44,7 @@ tr.tgt td{color:#7f7f7f;}
 tr.ach td{color:#1f6f3c;font-weight:700;}
 tr.sum td{background:#f5f7fa;font-weight:800;}
 .up{color:#c00000;} .dn{color:#1f6f3c;}
+.reg-y{background:#fbe3e3;}
 
 /* 미니 막대 차트 (CSS만 사용 — 렌더 지연 없음) */
 .mchart{display:flex;align-items:flex-end;gap:5px;height:100%;padding:14px 4px 0;position:relative;}
@@ -202,8 +203,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 <section class="slide">
   <div class="stitle">(2) {{ lbl }} 공정불량 현황 <small>— 단위 PPM</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
-    {# KOI 현황과 같은 구성: FY 누계(단일 막대) → 월별 → 아래 실적표(2026-07-30 확정). #}
-    <div style="height:46%;min-height:0;display:flex;gap:12px;">
+    {# KOI 현황과 같은 구성: FY 누계(단일 막대) → 월별 → 아래 실적표(2026-07-30 확정).
+       그래프 y축이 작아 보인다는 피드백으로 차트+표 칸을 확대. 처음엔 고정 50%로 했더니
+       TOP5는 항상 5행 고정이라 아래쪽에 빈 공간이 크게 남았다(2026-07-30 재조정) — TOP5
+       카드는 내용 크기만큼만 차지하게 하고, 차트+표 칸이 flex:1로 나머지를 전부 흡수하도록
+       바꿔 빈 공간 없이 그래프가 최대한 커지게 했다. #}
+    <div style="flex:1;min-height:0;display:flex;gap:12px;">
       <div class="card" style="flex:1;display:flex;flex-direction:column;">
         <div class="twoch">
           <div style="flex:.35;">
@@ -229,7 +234,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         </table>
       </div>
     </div>
-    <div class="card" style="flex:1;min-height:0;">
+    <div class="card" style="flex:none;">
       <h3>공정불량 TOP 5 — {{ d.ym }}</h3>
       <table>
         <thead><tr><th style="width:28px;">#</th><th>TM-NO</th><th class="l">품명</th>
@@ -322,28 +327,26 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       <div class="card">
         <h3>발생 현황</h3>
         <div class="chartbox" style="height:70px;">
-          {{ chart(ii.official, none, ii.vmax, ii.months, 0, ii.upto_i, none, '월', False) }}
+          {{ chart(ii.count, none, ii.vmax, ii.months, 0, ii.upto_i, none, '월', False) }}
         </div>
         <table style="margin-top:6px;">
           <thead><tr><th class="l" style="width:74px;"></th><th>{{ d.fy_label }}<br>누계</th>
             {% for mo in ii.months %}{% if loop.index0 <= ii.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
           <tbody>
-            <tr class="act"><td class="l">Official</td><td class="r">{{ num(ii.fy_official) }}</td>
-              {% for v in ii.official %}{% if loop.index0 <= ii.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
-            <tr class="tgt"><td class="l">(Unofficial)</td><td class="r">({{ num(ii.fy_unofficial) }})</td>
-              {% for v in ii.unofficial %}{% if loop.index0 <= ii.upto_i %}<td>({{ num(v) }})</td>{% endif %}{% endfor %}</tr>
+            <tr class="act"><td class="l">관리건수</td><td class="r">{{ num(ii.fy_count) }}</td>
+              {% for v in ii.count %}{% if loop.index0 <= ii.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
           </tbody>
         </table>
       </div>
       <div class="card" style="flex:1;min-height:0;">
         <h3>공정별 ({{ d.fy_label }} 누계)</h3>
         <table>
-          <thead><tr><th class="l">공정명</th><th>Official</th><th>(Unofficial)</th></tr></thead>
+          <thead><tr><th class="l">공정명</th><th>관리건수</th></tr></thead>
           <tbody>
-          {% for row in ii.by_proc %}
-            <tr><td class="l">{{ row[0] }}</td><td>{{ row[1] or '' }}</td><td>{{ '(%d)'|format(row[2]) if row[2] else '' }}</td></tr>
+          {% for name, c in ii.by_proc %}
+            <tr><td class="l">{{ name }}</td><td>{{ c }}</td></tr>
           {% else %}
-            <tr><td colspan="3" class="empty">{{ d.fy_label }} 발생 건이 없습니다.</td></tr>
+            <tr><td colspan="2" class="empty">{{ d.fy_label }} 발생 건이 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -481,15 +484,16 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       <h3>{{ d.fy_label }} 발생 내역</h3>
       <table>
         <thead><tr><th>집계월</th><th>부서</th><th class="l">고객</th><th>품번</th><th class="l">품명</th>
-          <th class="l">CLAIM 내용</th><th>전표금액</th><th>Re-claim</th><th>합계</th></tr></thead>
+          <th class="l">CLAIM 내용</th><th>전표금액</th><th>Re-claim</th><th>합계</th><th>지표등록여부</th></tr></thead>
         <tbody>
         {% for r in c.details[:9] %}
           <tr><td>{{ r.ym }}</td><td>{{ r.part }}</td><td class="l">{{ r.customer or '-' }}</td>
             <td>{{ r.tm_no or '-' }}</td><td class="l">{{ (r.product_name or '')[:16] }}</td>
             <td class="l">{{ r.content or r.item }}</td><td class="r">{{ num(r.amount) }}</td>
-            <td class="r">{{ num(r.reclaim) }}</td><td class="r">{{ num(r.net) }}</td></tr>
+            <td class="r">{{ num(r.reclaim) }}</td><td class="r">{{ num(r.net) }}</td>
+            <td class="{{ 'reg-y' if r.use_agg }}">{{ '집계' if r.use_agg else '미집계' }}</td></tr>
         {% else %}
-          <tr><td colspan="9" class="empty">발생 내역이 없습니다.</td></tr>
+          <tr><td colspan="10" class="empty">발생 내역이 없습니다.</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -503,7 +507,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 <section class="slide">
   <div class="stitle">(6) 품질 COST — Scrap Cost <small>— 단위 만원</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
-    <div class="card" style="height:46%;min-height:0;">
+    {# 실적표 박스가 고정 46%라 표 내용(8행)보다 훨씬 커서 아래 빈 공간이 많았다. 표 내용
+       높이에 맞춰 자동으로 줄이고(고정 height 제거), 아래 grid2가 flex:1로 남는 공간을
+       그대로 흡수해 그래프 y축이 커지도록 한다(2026-07-30). #}
+    <div class="card">
       <table>
         <thead>
           <tr><th class="l" rowspan="2" style="width:96px;">구분</th>
