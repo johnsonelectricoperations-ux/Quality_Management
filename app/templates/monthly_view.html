@@ -157,14 +157,18 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       <h3>{{ mt.name }} ({{ mt.unit }})</h3>
       {# 좌→우 순서: FY26 종합 · FY27 누적 · 월별. 목표선은 FY27(누적/월별)에만 긋는다
          (FY26은 이미 끝난 해의 실적이라 목표 비교 대상이 아님 — 2026-07-30 확정). #}
+      {# FY26 종합·FY27 누적은 각각 '현재까지의 총계' 단일 막대다(같은 모양의 4개월 막대가
+         월별 패널과 나란히 있으면 중복처럼 보인다는 피드백으로 2026-07-30 변경). 월별만 4개월
+         막대로 추이를 보여준다. FY26·FY27누적 두 단일 막대는 같은 축(cum_vmax)을 써서 크기를
+         바로 비교할 수 있게 한다. #}
       <div class="twoch">
         <div style="flex:.5;">
           <div class="ct">{{ d.prev_fy_label }} 종합</div>
           <div class="chartbox">{{ chart([mt.prev], none, mt.cum_vmax, [d.prev_fy_label], mt.dec, none, none, '') }}</div>
         </div>
-        <div>
+        <div style="flex:.5;">
           <div class="ct">{{ d.fy_label }} 누적 <b>{{ pc(mt.cum_ach) }}</b></div>
-          <div class="chartbox">{{ chart(mt.cum, mt.cum_target, mt.cum_vmax, k.months, mt.dec, none, none, '월', False) }}</div>
+          <div class="chartbox">{{ chart([mt.cum[-1] if mt.cum else none], [mt.fy_target], mt.cum_vmax, [d.fy_label], mt.dec, none, none, '') }}</div>
         </div>
         <div>
           <div class="ct">월별</div>
