@@ -5,10 +5,30 @@
   <select onchange="location.href='/report/monthly?ym='+this.value">
     {% for o in ym_opts %}<option value="{{ o }}" {{ 'selected' if o==ym }}>{{ o }}</option>{% endfor %}
   </select>
+  <a class="btn btn-sm btn-p" href="/report/monthly/view?ym={{ ym }}" target="_blank"
+     style="text-decoration:none;margin-left:8px;">▶ 보고서 보기 (새창)</a>
+  {% if can_edit %}
+  <form method="post" action="/report/monthly/rebuild" style="display:inline;">
+    <input type="hidden" name="ym" value="{{ ym }}">
+    <button class="btn btn-s btn-sm">↻ 재계산</button>
+  </form>
+  {% endif %}
   <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">
     수치는 시스템이 자동 계산합니다. 여기에는 데이터로 뽑을 수 없는 서술 내용만 입력하세요.
   </span>
 </div>
+
+<div class="panel"><div class="pbody" style="display:flex;align-items:center;gap:10px;font-size:12px;">
+  {% if cache %}
+    <span class="badge bg-info">계산됨</span>
+    <span style="color:var(--tx3);">최종 계산 {{ cache.built_at }}{% if cache.built_by %} · {{ cache.built_by }}{% endif %}</span>
+    <span style="color:var(--tx3);">— 발표 화면은 이 계산 결과를 즉시 불러오므로 지연이 없습니다.
+      원천 데이터나 위 서술 내용을 바꿨으면 <b>↻ 재계산</b>을 누르세요.</span>
+  {% else %}
+    <span class="badge bg-hold">미계산</span>
+    <span style="color:var(--tx3);">'보고서 보기'를 처음 열 때 자동으로 계산됩니다(약 0.3초).</span>
+  {% endif %}
+</div></div>
 
 <form method="post" action="/report/monthly/save">
   <input type="hidden" name="ym" value="{{ ym }}">

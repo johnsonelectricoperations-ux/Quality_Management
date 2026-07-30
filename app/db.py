@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS report_cache (
+  -- 월마감 보고서 조립 결과(JSON). 발표 중 화면 지연을 막기 위한 캐시일 뿐,
+  -- 마감 후 수정불가 규칙은 없다(2026-07-30 확정) — '재계산'으로 언제든 갱신한다.
+  ym TEXT PRIMARY KEY, payload TEXT NOT NULL,
+  built_at TEXT DEFAULT '', built_by TEXT DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS incident_file (
   -- 고객 품질이슈 첨부파일. kind='photo'(불량사진, 보고서에 표시) | 'doc'(세부자료, 보관용).
   -- 나중에 TM-NO별 품질이슈 통계/분석에 쓰려고 incident_id로 묶어 이력을 남긴다.

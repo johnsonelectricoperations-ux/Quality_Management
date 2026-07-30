@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{{ d.fy_label }} 월간 품질실적 보고 ({{ d.m }}월)</title>
+<style>
+/* 발표용 슬라이드 — 1280x720 고정 캔버스를 화면에 맞춰 scale 하므로 스크롤이 생기지 않는다. */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:#111;font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;}
+#stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+.slide{width:1280px;height:720px;background:#fff;color:#1b1b1b;position:relative;
+  display:none;flex-direction:column;padding:34px 40px 44px;transform-origin:center center;}
+.slide.on{display:flex;}
+.stitle{font-size:23px;font-weight:800;color:#1f3864;border-bottom:3px solid #1f3864;
+  padding-bottom:7px;margin-bottom:14px;display:flex;align-items:baseline;gap:10px;}
+.stitle small{font-size:13px;font-weight:600;color:#7f7f7f;}
+.foot{position:absolute;left:40px;right:40px;bottom:14px;display:flex;justify-content:space-between;
+  font-size:11px;color:#8c8c8c;border-top:1px solid #e4e4e4;padding-top:6px;}
+.body{flex:1;min-height:0;overflow:hidden;}
+
+/* 표지 */
+.cover{background:linear-gradient(135deg,#1f3864,#2e5c9a);color:#fff;justify-content:center;align-items:center;}
+.cover h1{font-size:52px;font-weight:800;letter-spacing:-1px;}
+.cover p{margin-top:16px;font-size:20px;opacity:.9;}
+.cover .badge2{margin-top:34px;border:2px solid rgba(255,255,255,.6);border-radius:999px;
+  padding:8px 22px;font-size:14px;letter-spacing:3px;}
+
+/* 목차 */
+.toc{display:flex;flex-direction:column;gap:12px;justify-content:center;height:100%;padding-left:60px;}
+.toc li{list-style:none;font-size:24px;font-weight:700;color:#1f3864;display:flex;align-items:center;gap:16px;}
+.toc li span{width:34px;height:34px;border-radius:50%;background:#1f3864;color:#fff;font-size:14px;
+  display:flex;align-items:center;justify-content:center;}
+
+/* 표 */
+table{border-collapse:collapse;width:100%;font-size:11px;}
+th,td{border:1px solid #cfcfcf;padding:3px 5px;text-align:center;white-space:nowrap;}
+th{background:#eaeef5;font-weight:700;color:#1f3864;}
+td.l,th.l{text-align:left;}
+td.r{text-align:right;}
+tr.act td{font-weight:700;}
+tr.tgt td{color:#7f7f7f;}
+tr.ach td{color:#1f6f3c;font-weight:700;}
+tr.sum td{background:#f5f7fa;font-weight:800;}
+.up{color:#c00000;} .dn{color:#1f6f3c;}
+
+/* 미니 막대 차트 (CSS만 사용 — 렌더 지연 없음) */
+.mchart{display:flex;align-items:flex-end;gap:5px;height:100%;padding:14px 4px 0;position:relative;}
+.mchart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;}
+.mchart .bar{width:74%;background:linear-gradient(180deg,#4472c4,#2e5c9a);border-radius:2px 2px 0 0;min-height:1px;}
+.mchart .bar.over{background:linear-gradient(180deg,#e06666,#c00000);}
+.mchart .bar.etc{background:linear-gradient(180deg,#bdbdbd,#909090);}
+.mchart .v{font-size:10px;font-weight:700;margin-bottom:2px;color:#333;}
+.mchart .x{font-size:10px;color:#666;margin-top:3px;}
+.tline{position:absolute;left:4px;right:4px;border-top:2px dashed #ed7d31;}
+.tlab{position:absolute;right:4px;font-size:9px;color:#ed7d31;font-weight:700;
+  transform:translateY(-12px);background:#fff;padding:0 3px;border-radius:2px;}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;height:100%;}
+.grid2r{display:grid;grid-template-rows:1fr 1fr;gap:12px;height:100%;}
+.card{border:1px solid #d9d9d9;border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;min-height:0;}
+.card h3{font-size:13px;font-weight:800;color:#1f3864;margin-bottom:5px;}
+.koi5{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:10px;height:100%;}
+.chartbox{flex:1;min-height:0;}
+.narr{font-size:11px;line-height:1.6;}
+.narr b{color:#1f3864;}
+.narr .row{display:flex;gap:6px;padding:2px 0;border-bottom:1px dotted #e0e0e0;}
+.narr .k{width:62px;color:#7f7f7f;flex:none;}
+.photos{display:flex;gap:6px;margin-top:5px;}
+.photos img{height:96px;border:1px solid #ccc;border-radius:3px;object-fit:cover;}
+.tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
+.empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
+
+/* 조작 바 */
+#nav{transition:opacity .4s;}
+#nav.dim{opacity:.12;}
+#nav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;
+  align-items:center;background:rgba(0,0,0,.62);border-radius:999px;padding:7px 14px;z-index:50;}
+#nav button{border:0;background:#fff;color:#111;border-radius:999px;width:32px;height:32px;
+  font-size:15px;cursor:pointer;font-weight:700;}
+#nav button:disabled{opacity:.35;cursor:default;}
+#nav .pg{color:#fff;font-size:12px;min-width:66px;text-align:center;}
+#nav a{color:#fff;font-size:11px;text-decoration:none;border:1px solid rgba(255,255,255,.5);
+  border-radius:999px;padding:4px 10px;}
+#hint{position:fixed;top:12px;right:14px;color:rgba(255,255,255,.55);font-size:11px;z-index:50;}
+
+@media print{
+  @page{size:A4 landscape;margin:0;}
+  html,body{overflow:visible;background:#fff;}
+  #stage{position:static;display:block;}
+  #nav,#hint{display:none!important;}
+  .slide{display:flex!important;transform:none!important;page-break-after:always;
+    width:100%;height:100vh;}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+
+{% macro chart(series, target, vmax, months, dec=0, upto=None) %}
+  {% set vm = (vmax or 1) * 1.25 %}
+  <div class="mchart">
+    {% if target and target[0] %}
+      <div class="tline" style="bottom:calc({{ (target[0] / vm * 100)|round(1) }}% * 0.86 + 14px)">
+        <span class="tlab">목표 {{ '{:,.3f}'.format(target[0]) if dec else '{:,.0f}'.format(target[0]) }}</span>
+      </div>
+    {% endif %}
+    {% for v in series %}
+      {% if upto is none or loop.index0 <= upto %}
+      <div class="col">
+        <div class="v">{% if v is not none %}{{ '{:,.3f}'.format(v) if dec else '{:,.0f}'.format(v) }}{% endif %}</div>
+        <div class="bar {{ 'over' if (target and target[loop.index0] and v and v > target[loop.index0]) }}"
+             style="height:calc({{ ((v or 0) / vm * 100)|round(1) }}% * 0.86)"></div>
+        <div class="x">{{ months[loop.index0] }}월</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro num(v, dec=0) %}{% if v is none %}-{% elif dec %}{{ '{:,.3f}'.format(v) }}{% else %}{{ '{:,.0f}'.format(v) }}{% endif %}{% endmacro %}
+{% macro pc(v) %}{% if v is none %}-{% else %}{{ v }}%{% endif %}{% endmacro %}
+
+{# ───────── 1. 표지 ───────── #}
+<section class="slide on cover">
+  <h1>{{ d.fy_label }} 월간 품질실적 보고</h1>
+  <p>{{ d.m }}월 마감 · {{ d.ym }}</p>
+  <div class="badge2">CONFIDENTIAL</div>
+</section>
+
+{# ───────── 2. 목차 ───────── #}
+<section class="slide">
+  <div class="stitle">CONTENTS</div>
+  <div class="body"><ul class="toc">
+    {% for c in d.contents %}<li><span>{{ loop.index }}</span>{{ c[4:] }}</li>{% endfor %}
+  </ul></div>
+  <div class="foot"><span>Page 2</span><span>Confidential</span></div>
+</section>
+
+{# ───────── 3~5. KOI 현황 ───────── #}
+{% for lbl in ['합계','생산1P','생산2P'] %}
+{% set k = d.koi[lbl] %}
+<section class="slide">
+  <div class="stitle">(1) KOI 현황 <small>— {{ lbl }} · {{ d.fy_label }}</small></div>
+  <div class="body"><div class="koi5">
+    {% for mt in k.metrics %}
+    <div class="card">
+      <h3>{{ mt.name }} ({{ mt.unit }})</h3>
+      <div class="chartbox">{{ chart(mt.actual, mt.target, mt.vmax, k.months, mt.dec) }}</div>
+      <table style="margin-top:5px;">
+        <tr class="tgt"><td class="l" style="width:44px;">목표</td>
+          {% for t in mt.target %}<td>{{ num(t, mt.dec) }}</td>{% endfor %}</tr>
+        <tr class="ach"><td class="l">달성</td>
+          {% for a in mt.achieve %}<td>{{ pc(a) }}</td>{% endfor %}</tr>
+      </table>
+    </div>
+    {% endfor %}
+  </div></div>
+  <div class="foot"><span>Page {{ 2 + loop.index }}</span><span>Confidential</span></div>
+</section>
+{% endfor %}
+
+{# ───────── 6~11. 공정불량 + 반별목표제 (파트별) ───────── #}
+{% for lbl in ['생산1P','생산2P'] %}
+{% set p = d.proc[lbl] %}
+{% set base = 5 + (loop.index0 * 3) %}
+<section class="slide">
+  <div class="stitle">(2) {{ lbl }} 공정불량 현황 <small>— 단위 PPM</small></div>
+  <div class="body" style="display:flex;flex-direction:column;gap:10px;">
+    <div style="height:40%;min-height:0;display:flex;gap:12px;">
+      <div class="card" style="flex:1;">
+        <div class="chartbox">{{ chart(p.ppm, p.target, p.vmax, p.months, 0, p.upto_i) }}</div>
+      </div>
+      <div class="card" style="width:210px;">
+        <h3>요약</h3>
+        <table>
+          <tr><th class="l">{{ d.prev_fy_label }} 실적</th><td class="r">{{ num(p.prev_actual) }}</td></tr>
+          <tr><th class="l">{{ d.prev_fy_label }} 목표</th><td class="r">{{ num(p.prev_target) }}</td></tr>
+          <tr><th class="l">{{ d.fy_label }} 누계</th><td class="r">{{ num(p.fy_cum) }}</td></tr>
+          <tr><th class="l">{{ d.fy_label }} 목표</th><td class="r">{{ num(p.fy_target) }}</td></tr>
+          <tr class="ach"><th class="l">누계 달성율</th><td class="r">{{ pc(p.fy_cum_ach) }}</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-height:0;">
+      <h3>공정불량 TOP 5 — {{ d.ym }}</h3>
+      <table>
+        <thead><tr><th style="width:28px;">#</th><th>TM-NO</th><th class="l">품명</th>
+          <th>생산/입고(EA)</th><th>불량(EA)</th><th>불량율(PPM)</th><th>점유율</th><th class="l">주요 불량 내용</th></tr></thead>
+        <tbody>
+        {% for r in d.top5[lbl] %}
+          <tr><td>{{ loop.index }}</td><td>{{ r.tm }}</td><td class="l">{{ r.name }}</td>
+            <td class="r">{{ num(r.prod) }}</td><td class="r">{{ num(r.defect) }}</td>
+            <td class="r">{{ num(r.ppm) }}</td><td class="r">{{ r.share }}%</td>
+            <td class="l">{{ r.by_txt }}</td></tr>
+        {% else %}
+          <tr><td colspan="8" class="empty">해당 월 불량 데이터가 없습니다.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>Page {{ base + 1 }}</span><span>Confidential</span></div>
+</section>
+
+{% for pair in [['성형','소결'], ['정형','가공']] %}
+<section class="slide">
+  <div class="stitle">(2) {{ lbl }} 반별목표제 현황 <small>— 단위 PPM · 서술은 해당월 상위 품목 자동 집계</small></div>
+  <div class="body"><div class="grid2r">
+    {% for proc in pair %}
+    {% set b = d.ban[lbl][proc] %}
+    <div class="card">
+      <h3>{{ proc }}</h3>
+      <div style="display:flex;gap:10px;flex:1;min-height:0;">
+        <div style="flex:1.15;min-width:0;display:flex;flex-direction:column;">
+          <div class="chartbox">{{ chart(b.ppm, b.target, b.vmax, b.months, 0, b.upto_i) }}</div>
+        </div>
+        <table style="width:150px;height:min-content;">
+          <tr><th class="l">{{ d.prev_fy_label }}</th><td class="r">{{ num(b.prev_actual) }}</td></tr>
+          <tr><th class="l">{{ d.fy_label }} 누계</th><td class="r">{{ num(b.fy_cum) }}</td></tr>
+          <tr><th class="l">목표</th><td class="r">{{ num(b.fy_target) }}</td></tr>
+          <tr class="ach"><th class="l">달성율</th><td class="r">{{ pc(b.fy_cum_ach) }}</td></tr>
+        </table>
+        <div class="narr" style="flex:1.25;min-width:0;">
+          {% for it in b.top_items %}
+          <div style="margin-bottom:5px;">
+            <div class="row"><span class="k">발생일자</span><b>{{ it.dates }}</b></div>
+            <div class="row"><span class="k">품명(품번)</span>
+              <b>{% if it.no_tm %}(품목 미지정){% else %}{{ it.name }}({{ it.tm_no }}){% endif %}</b></div>
+            <div class="row"><span class="k">발생수량</span><b>{{ num(it.qty) }} EA</b></div>
+            <div class="row" style="border:0;"><span class="k">불량내용</span>{{ it.defects }}</div>
+          </div>
+          {% else %}
+          <div class="empty">해당월 발생 없음</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div></div>
+  <div class="foot"><span>Page {{ base + 1 + loop.index }}</span><span>Confidential</span></div>
+</section>
+{% endfor %}
+{% endfor %}
+
+{# ───────── 12~13. 고객 품질 ISSUE ───────── #}
+{% for lbl in ['생산1P','생산2P'] %}
+{% set s = d.issue[lbl] %}
+<section class="slide">
+  <div class="stitle">(3) 고객 품질 ISSUE <small>— {{ lbl }} · 단위 건</small></div>
+  <div class="body" style="display:flex;gap:12px;">
+    <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
+      <div class="card">
+        <h3>발생 현황</h3>
+        <table>
+          <thead><tr><th class="l">구분</th><th>{{ d.prev_fy_label }}</th><th>{{ d.fy_label }}</th>
+            {% for mo in s.months %}{% if loop.index0 <= s.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
+          <tbody>
+            <tr class="act"><td class="l">Official</td><td>{{ num(s.prev_official) }}</td><td>{{ num(s.fy_official) }}</td>
+              {% for v in s.official %}{% if loop.index0 <= s.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+            <tr class="tgt"><td class="l">(Unofficial)</td><td>({{ num(s.prev_unofficial) }})</td><td>({{ num(s.fy_unofficial) }})</td>
+              {% for v in s.unofficial %}{% if loop.index0 <= s.upto_i %}<td>({{ num(v) }})</td>{% endif %}{% endfor %}</tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1;min-height:0;">
+        <h3>업체별 ({{ d.fy_label }} 누계)</h3>
+        <table>
+          <thead><tr><th class="l">업체</th><th>Official</th><th>(Unofficial)</th></tr></thead>
+          <tbody>
+          {% for row in s.by_cust %}
+            <tr><td class="l">{{ row[0] }}</td><td>{{ row[1] or '' }}</td><td>{{ '(%d)'|format(row[2]) if row[2] else '' }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="empty">{{ d.fy_label }} 발생 건이 없습니다.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:0;">
+      <h3>{{ d.ym }} 발생 상세</h3>
+      <div style="overflow:hidden;flex:1;min-height:0;">
+      {% for it in s.details %}
+        <div class="narr" style="border-bottom:1px solid #e6e6e6;padding-bottom:6px;margin-bottom:6px;">
+          <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b></div>
+          <div class="row"><span class="k">발생일자/위치</span>{{ it.d }} / {{ it.location or '-' }}</div>
+          <div class="row"><span class="k">품번/수량</span>{{ it.tm_no or '-' }} / {{ num(it.defect_qty) }} EA</div>
+          <div class="row"><span class="k">발생원인</span>{{ it.cause or '-' }}</div>
+          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action or '-' }}</div>
+          {% if it.photos %}
+          <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="">{% endfor %}</div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty">{{ d.ym }} 발생한 고객 품질 ISSUE가 없습니다.</div>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Page {{ 11 + loop.index }}</span><span>Confidential</span></div>
+</section>
+{% endfor %}
+
+{# ───────── 14. 고객 Claim ───────── #}
+{% set c = d.claim %}
+<section class="slide">
+  <div class="stitle">(4) 고객 Claim 현황 <small>— 단위 만원 (전표금액 − 협력사 Re-claim)</small></div>
+  <div class="body" style="display:flex;flex-direction:column;gap:10px;">
+    <div class="card" style="height:44%;min-height:0;">
+      <h3>업체별 발생 금액</h3>
+      <table>
+        <thead><tr><th class="l">업체</th><th>{{ d.prev_fy_label }}</th>
+          {% for mo in c.months %}{% if loop.index0 <= c.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in c.by_cust[:9] %}
+          <tr><td class="l">{{ row[0] }}</td><td class="r">{{ num(row[1]) if row[1] else '' }}</td>
+            {% for v in row[2:] %}{% if loop.index0 <= c.upto_i %}<td class="r">{{ num(v) if v else '' }}</td>{% endif %}{% endfor %}</tr>
+        {% else %}
+          <tr><td colspan="14" class="empty">클레임 데이터가 없습니다.</td></tr>
+        {% endfor %}
+          <tr class="sum"><td class="l">합계</td><td class="r">{{ num(c.prev_total) }}</td>
+            {% for v in c.monthly %}{% if loop.index0 <= c.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="flex:1;min-height:0;">
+      <h3>{{ d.fy_label }} 발생 내역</h3>
+      <table>
+        <thead><tr><th>집계월</th><th>부서</th><th class="l">고객</th><th>품번</th><th class="l">품명</th>
+          <th class="l">구분</th><th>전표금액</th><th>Re-claim</th><th>합계</th></tr></thead>
+        <tbody>
+        {% for r in c.details[:9] %}
+          <tr><td>{{ r.ym }}</td><td>{{ r.part }}</td><td class="l">{{ r.customer or '-' }}</td>
+            <td>{{ r.tm_no or '-' }}</td><td class="l">{{ (r.product_name or '')[:16] }}</td>
+            <td class="l">{{ r.item }}</td><td class="r">{{ num(r.amount) }}</td>
+            <td class="r">{{ num(r.reclaim) }}</td><td class="r">{{ num(r.net) }}</td></tr>
+        {% else %}
+          <tr><td colspan="9" class="empty">발생 내역이 없습니다.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>Page 14</span><span>Confidential</span></div>
+</section>
+
+{# ───────── 15. Scrap Cost ───────── #}
+{% set sc = d.scrap %}
+<section class="slide">
+  <div class="stitle">(5) 품질 COST — Scrap Cost <small>— 단위 만원 · {{ sc.prev_ym }} vs {{ sc.cur_ym }}</small></div>
+  <div class="body" style="display:flex;flex-direction:column;gap:10px;">
+    <div class="card" style="height:46%;min-height:0;">
+      <table>
+        <thead>
+          <tr><th class="l" rowspan="2" style="width:96px;">구분</th>
+            <th colspan="3">생산 1P</th><th colspan="3">생산 2P</th><th colspan="3">합계</th></tr>
+          <tr>{% for _i in range(3) %}<th>{{ sc.prev_ym[5:] }}월</th><th>{{ sc.cur_ym[5:] }}월</th><th>증감률</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+        {% for row in sc.rows %}
+          <tr><td class="l">{{ row.name }}</td>
+            {% for pk in ['VMS PART','TM PART','통합'] %}
+            {% set cc = row.cells[pk] %}
+            <td class="r">{{ num(cc.prev) }}</td><td class="r">{{ num(cc.cur) }}</td>
+            <td class="{{ 'up' if cc.up else 'dn' }}">{% if cc.rate is none %}-{% else %}{{ cc.rate }}% {{ '▲' if cc.up else '▼' }}{% endif %}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+          <tr class="sum"><td class="l">합계</td>
+            {% for pk in ['VMS PART','TM PART','통합'] %}
+            {% set cc = sc.total[pk] %}
+            <td class="r">{{ num(cc.prev) }}</td><td class="r">{{ num(cc.cur) }}</td>
+            <td class="{{ 'up' if cc.up else 'dn' }}">{% if cc.rate is none %}-{% else %}{{ cc.rate }}% {{ '▲' if cc.up else '▼' }}{% endif %}</td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid2" style="flex:1;min-height:0;">
+      {% for pk, lbl in [('VMS PART','생산1P'), ('TM PART','생산2P')] %}
+      <div class="card">
+        <h3>{{ lbl }} 품명별 발생비용 (상위 5 + 기타)</h3>
+        <div class="chartbox" style="flex:none;height:52%;">
+          <div class="mchart">
+          {% for b in sc.pareto[pk].bars %}
+            <div class="col">
+              <div class="v">{{ num(b.value) }}<span style="color:#ed7d31;font-weight:600;"> {{ b.cum }}%</span></div>
+              <div class="bar {{ 'etc' if b.etc }}" style="height:calc({{ (b.value / (sc.pareto[pk].vmax * 1.25) * 100)|round(1) }}% * 0.84)"></div>
+              <div class="x">{{ b.label }}</div>
+            </div>
+          {% else %}
+            <div class="empty">데이터 없음</div>
+          {% endfor %}
+          </div>
+        </div>
+        <table style="margin-top:4px;">
+          <thead><tr><th style="width:22px;">#</th><th class="l">품명</th><th>품번</th>
+            <th>발생비용</th><th>발생공정</th><th class="l">발생유형</th></tr></thead>
+          <tbody>
+          {% for t in sc.top3[pk] %}
+            <tr><td>{{ loop.index }}</td><td class="l">{{ (t.name or '-')[:14] }}</td>
+              <td>{{ t.tm_no or '-' }}</td><td class="r">{{ num(t.cost) }}만</td>
+              <td>{{ t.proc }}</td><td class="l">{{ t.defect }}</td></tr>
+          {% else %}
+            <tr><td colspan="6" class="empty">데이터 없음</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="foot"><span>Page 15</span><span>Confidential</span></div>
+</section>
+
+{# ───────── 16. COPQ ───────── #}
+<section class="slide">
+  <div class="stitle">(5) 품질 COST — COPQ <small>— 금액 만원 / 비율 %</small></div>
+  <div class="body"><div class="grid2">
+    {% for lbl in ['생산1P','생산2P'] %}
+    {% set q = d.copq[lbl] %}
+    <div class="card">
+      <h3>{{ lbl }}</h3>
+      <table>
+        <thead><tr><th class="l">구분</th><th>{{ d.prev_fy_label }}</th><th>{{ d.fy_label }}</th>
+          {% for mo in q.months %}{% if loop.index0 <= q.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
+        <tbody>
+          <tr><td class="l">공정불량</td><td class="r">{{ num(q.prev_defect) }}</td><td class="r">{{ num(q.fy_defect) }}</td>
+            {% for v in q.defect %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr><td class="l">클레임</td><td class="r">{{ num(q.prev_claim) }}</td><td class="r">{{ num(q.fy_claim) }}</td>
+            {% for v in q.claim %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="sum"><td class="l">Q-COST</td>
+            <td class="r">{{ num((q.prev_defect or 0) + (q.prev_claim or 0)) }}</td>
+            <td class="r">{{ num(q.fy_qcost) }}</td>
+            {% for v in q.qcost %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="act"><td class="l">COPQ (%)</td><td class="r">{{ num(q.prev_pct, 3) }}</td><td class="r">{{ num(q.fy_pct, 3) }}</td>
+            {% for v in q.pct %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ num(v, 3) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="tgt"><td class="l">목표 (%)</td><td class="r">{{ num(q.prev_target, 3) }}</td><td class="r">{{ num(q.fy_target, 3) }}</td>
+            {% for v in q.target %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ num(v, 3) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="ach"><td class="l">달성율</td><td class="r">-</td><td class="r">{{ pc(q.fy_ach) }}</td>
+            {% for v in q.achieve %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ pc(v) }}</td>{% endif %}{% endfor %}</tr>
+        </tbody>
+      </table>
+      <div class="chartbox" style="margin-top:8px;">
+        {{ chart(q.qcost, none, q.vmax, q.months, 0, q.upto_i) }}
+      </div>
+    </div>
+    {% endfor %}
+  </div></div>
+  <div class="foot"><span>Page 16</span><span>Confidential</span></div>
+</section>
+
+{# ───────── 17. 주요 업무 진행 현황 ───────── #}
+<section class="slide">
+  <div class="stitle">(6) 주요 업무 진행 현황 <small>— {{ d.ym }}</small></div>
+  <div class="body">
+    {% if d.main_tasks %}
+    <div class="tasks">{{ d.main_tasks }}</div>
+    {% else %}
+    <div class="empty">입력된 내용이 없습니다. [리포트 → 월마감] 화면에서 작성하세요.</div>
+    {% endif %}
+  </div>
+  <div class="foot"><span>Page 17</span><span>Confidential</span></div>
+</section>
+
+</div>
+
+<div id="hint">← → 이동 · F 전체화면 · P 인쇄(PDF) · Esc 닫기</div>
+<div id="nav">
+  <button id="prev" title="이전 (←)">‹</button>
+  <span class="pg" id="pg">1 / 1</span>
+  <button id="next" title="다음 (→)">›</button>
+  <a href="/report/monthly/view?ym={{ ym }}&rebuild=1" title="데이터를 다시 계산합니다">↻ 재계산</a>
+  <a href="javascript:window.print()" title="PDF로 저장">⤓ PDF</a>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0, stage = document.getElementById('stage');
+  var pg = document.getElementById('pg'), prev = document.getElementById('prev'), next = document.getElementById('next');
+
+  // 1280x720 캔버스를 화면에 맞춰 축소 — 스크롤바가 생기지 않게 한다.
+  function fit(){
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    slides.forEach(function(el){ el.style.transform = 'scale(' + s + ')'; });
+  }
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(el, idx){ el.classList.toggle('on', idx === i); });
+    pg.textContent = (i + 1) + ' / ' + slides.length;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    try { location.hash = 'p' + (i + 1); } catch (e) {}
+  }
+  prev.addEventListener('click', function(){ show(i - 1); });
+  next.addEventListener('click', function(){ show(i + 1); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(i + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(i - 1); e.preventDefault(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'Escape') window.close();
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } else if (e.key === 'p' || e.key === 'P') { window.print(); e.preventDefault(); }
+  });
+  window.addEventListener('resize', fit);
+
+  // 조작바 자동 숨김 — 발표 중 화면을 가리지 않게 3초 후 흐려지고, 마우스를 움직이면 되돌아온다.
+  var nav = document.getElementById('nav'), hint = document.getElementById('hint'), t;
+  function wake(){
+    nav.classList.remove('dim'); hint.style.opacity = '';
+    clearTimeout(t);
+    t = setTimeout(function(){ nav.classList.add('dim'); hint.style.opacity = '0'; }, 3000);
+  }
+  ['mousemove', 'keydown', 'click'].forEach(function(ev){ document.addEventListener(ev, wake); });
+  hint.style.transition = 'opacity .4s';
+  wake();
+
+  fit();
+  var h = (location.hash || '').match(/^#p(\d+)$/);
+  show(h ? parseInt(h[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>

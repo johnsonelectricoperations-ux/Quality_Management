@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan, init_data, price_calc, report_kpi
+from . import db, calc, ingest, scan, init_data, price_calc, report_kpi, report_monthly
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -612,6 +612,8 @@ def monthly_close(request: Request, ym: str = "", msg: str = "", err: str = ""):
         ym = "%04d-%02d" % (y0, m0)
     saved = {r["section"]: dict(r) for r in conn.execute(
         "SELECT section, content, updated_at, updated_by FROM report_text WHERE ym=?", (ym,))}
+    cache = conn.execute("SELECT built_at, built_by FROM report_cache WHERE ym=?", (ym,)).fetchone()
+    cache = dict(cache) if cache else None
     conn.close()
     sections = [{"key": k, "name": n, "hint": h,
                  "content": saved.get(k, {}).get("content", ""),
@@ -621,8 +623,47 @@ def monthly_close(request: Request, ym: str = "", msg: str = "", err: str = ""):
     return render(request, "monthly_close.html", u, active="monthly", heading="월마감 보고서",
                   crumb="리포트", pending=pending_count(), ym=ym, sections=sections,
                   ym_opts=["%04d-%02d" % (y, mo) for (y, mo) in months],
-                  msg=msg, err=err,
+                  cache=cache, msg=msg, err=err,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "monthly", "edit")))
+
+
+@app.get("/report/monthly/view", response_class=HTMLResponse)
+def monthly_view(request: Request, ym: str = "", rebuild: str = ""):
+    """월마감 보고서 발표 화면(새창). 캐시된 결과를 즉시 렌더 — 발표 중 지연 방지.
+    rebuild=1 이면 다시 계산해 캐시를 갱신한다."""
+    u, g = _perm_guard(request, "monthly", "view")
+    if g:
+        return g
+    conn = db.connect()
+    months = _report_months(conn)
+    valid = {"%04d-%02d" % (y, mo): (y, mo) for (y, mo) in months}
+    if ym not in valid:
+        y0, m0 = months[0]
+        ym = "%04d-%02d" % (y0, m0)
+    y, mth = valid[ym]
+    m = calc.Masters(conn)
+    if rebuild == "1":
+        data = report_monthly.rebuild(conn, m, y, mth, u["name"])
+    else:
+        data = report_monthly.get_or_build(conn, m, y, mth, u["name"])
+    conn.close()
+    return tpl.TemplateResponse(request, "monthly_view.html",
+                                {"user": u, "d": data, "ym": ym})
+
+
+@app.post("/report/monthly/rebuild")
+def monthly_rebuild(request: Request, ym: str = Form(...)):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "monthly", "edit")):
+        return RedirectResponse("/report/monthly", status_code=303)
+    conn = db.connect()
+    months = _report_months(conn)
+    valid = {"%04d-%02d" % (y, mo): (y, mo) for (y, mo) in months}
+    if ym in valid:
+        y, mth = valid[ym]
+        report_monthly.rebuild(conn, calc.Masters(conn), y, mth, u["name"])
+    conn.close()
+    return RedirectResponse(f"/report/monthly?ym={ym}&msg=재계산 완료", status_code=303)
 
 
 @app.post("/report/monthly/save")
