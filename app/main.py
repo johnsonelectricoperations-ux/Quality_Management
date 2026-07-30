@@ -5,6 +5,7 @@
 """
 import os
 import secrets
+import sqlite3
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends
@@ -124,6 +125,7 @@ PERM_MENUS = [
     ("products", "제품 마스터"),
     ("processes", "공정 관리"),
     ("defect_types", "불량유형 마스터"),
+    ("customers", "고객사 마스터"),
     ("scan", "폴더 반영"),
     ("masters", "마스터 조회"),
     ("target", "목표 관리"),
@@ -1240,6 +1242,80 @@ def defect_types_delete(request: Request, did: int):
     conn.commit()
     conn.close()
     return RedirectResponse("/admin/defect-types?msg=삭제됨", status_code=303)
+
+
+# ── 고객사 마스터 ───────────────────────────────────────
+# 정식명(name)은 생산량 파일의 '주거래처'(E열)와 같게 유지한다 — 그 파일이 파트별로 나뉘어 있어
+# 고객사→파트가 유일하게 결정되고, Claim·Customer Incident의 파트 판정 근거가 된다.
+# short_name은 월마감 보고서 표기명(약칭)으로, 보고서에서 업체별 행 이름으로 쓴다.
+@app.get("/admin/customers", response_class=HTMLResponse)
+def customers_list(request: Request, q: str = "", part: str = "", edit: int = 0,
+                   msg: str = "", err: str = ""):
+    u, g = _perm_guard(request, "customers", "view")
+    if g:
+        return g
+    conn = db.connect()
+    where, args = [], []
+    if q:
+        where.append("(name LIKE ? OR short_name LIKE ?)")
+        args += [f"%{q}%", f"%{q}%"]
+    if part in ("VMS PART", "TM PART"):
+        where.append("part=?")
+        args.append(part)
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT * FROM customer {wsql} ORDER BY part, name", args)]
+    edit_row = None
+    if edit:
+        r = conn.execute("SELECT * FROM customer WHERE id=?", (edit,)).fetchone()
+        edit_row = dict(r) if r else None
+    conn.close()
+    return render(request, "customers.html", u, active="customers", heading="고객사 마스터",
+                  crumb="관리", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  q=q, part=part, msg=msg, err=err,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "customers", "edit")))
+
+
+@app.post("/admin/customers/save")
+async def customers_save(request: Request, cid: str = Form(""), name: str = Form(...),
+                         short_name: str = Form(""), part: str = Form(""),
+                         active: str = Form(""), memo: str = Form("")):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "customers", "edit")):
+        return RedirectResponse("/admin/customers", status_code=303)
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/admin/customers?err=고객사명은 필수입니다", status_code=303)
+    if part not in ("VMS PART", "TM PART", ""):
+        part = ""
+    act = 1 if active else 0
+    conn = db.connect()
+    try:
+        if cid:
+            conn.execute("UPDATE customer SET name=?,short_name=?,part=?,active=?,memo=? WHERE id=?",
+                        (name, short_name.strip(), part, act, memo.strip(), int(cid)))
+        else:
+            conn.execute("INSERT INTO customer(name,short_name,part,active,memo) VALUES(?,?,?,?,?)",
+                        (name, short_name.strip(), part, act, memo.strip()))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return RedirectResponse(f"/admin/customers?err=이미 등록된 고객사명입니다: {name}", status_code=303)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/admin/customers?msg=저장됨: {name}", status_code=303)
+
+
+@app.post("/admin/customers/{cid}/delete")
+def customers_delete(request: Request, cid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "customers", "edit")):
+        return RedirectResponse("/admin/customers", status_code=303)
+    conn = db.connect()
+    conn.execute("DELETE FROM customer WHERE id=?", (cid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/admin/customers?msg=삭제됨", status_code=303)
 
 
 # ── 목표 관리 ───────────────────────────────────────────

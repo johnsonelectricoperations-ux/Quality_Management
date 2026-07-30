@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="fbar panel" method="get" action="/admin/customers" style="padding:12px 14px;">
+  <div class="frow" style="grid-template-columns:1fr 140px 90px;">
+    <div class="f"><label>검색 (고객사명 · 표기명)</label>
+      <input class="in" name="q" value="{{ q }}" placeholder="예: 만도, HTS"></div>
+    <div class="f"><label>파트</label><select class="in" name="part">
+      <option value="">전체</option>
+      {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if part==pv }}>{{ pl }}</option>{% endfor %}
+    </select></div>
+    <div class="f" style="justify-content:flex-end;"><button class="btn btn-p">조회</button></div>
+  </div>
+</form>
+
+<div class="panel"><div class="phead"><h2>고객사 목록</h2><span class="tot">{{ rows|length }}개사</span></div>
+  <table>
+    <thead><tr><th>고객사명 (정식)</th><th>보고서 표기명</th><th>파트</th><th>사용</th><th>메모</th>
+      {% if can_edit %}<th style="width:130px;"></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr{{ ' style="opacity:.5;"' if not r.active }}>
+        <td>{{ r.name }}</td>
+        <td>{% if r.short_name %}<span class="badge bg-info">{{ r.short_name }}</span>{% else %}<span style="color:var(--tx3);">-</span>{% endif %}</td>
+        <td>{{ r.part|pl if r.part else '-' }}</td>
+        <td>{{ '사용' if r.active else '미사용' }}</td>
+        <td style="color:var(--tx3);">{{ r.memo or '' }}</td>
+        {% if can_edit %}<td style="display:flex;gap:6px;">
+          <a class="btn btn-s btn-sm" href="/admin/customers?edit={{ r.id }}&q={{ q }}&part={{ part }}" style="text-decoration:none;">수정</a>
+          <form method="post" action="/admin/customers/{{ r.id }}/delete" style="display:inline;"
+                onsubmit="return confirm('{{ r.name }} 을 삭제할까요?');">
+            <button type="submit" class="btn btn-ghost btn-sm">삭제</button>
+          </form>
+        </td>{% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ 6 if can_edit else 5 }}" style="color:var(--tx3);">조건에 맞는 고객사가 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if can_edit %}
+<div class="panel"><div class="phead"><h2>{{ '고객사 수정' if edit_row else '고객사 추가' }}</h2>
+  {% if edit_row %}<a class="btn btn-s btn-sm" href="/admin/customers" style="margin-left:auto;text-decoration:none;">+ 새 고객사</a>{% endif %}</div>
+  <div class="pbody">
+    <div style="color:var(--tx3);font-size:11.5px;margin:-2px 0 10px;">
+      <b>고객사명(정식)</b>은 생산량 파일의 '주거래처'(E열)와 똑같이 적어야 파트 판정·자동 매칭이 됩니다.
+      <b>보고서 표기명</b>은 월마감 보고서에서 업체별 행에 쓰는 약칭입니다(예: 현대트랜시스 지곡 → HTS).
+    </div>
+    <form method="post" action="/admin/customers/save">
+      {% if edit_row %}<input type="hidden" name="cid" value="{{ edit_row.id }}">{% endif %}
+      <div class="frow" style="grid-template-columns:1fr 160px 140px 90px 1fr 100px;">
+        <div class="f"><label>고객사명 (정식)</label>
+          <input class="in" name="name" value="{{ edit_row.name if edit_row else '' }}" required></div>
+        <div class="f"><label>보고서 표기명</label>
+          <input class="in" name="short_name" value="{{ edit_row.short_name if edit_row else '' }}" placeholder="예: HTS"></div>
+        <div class="f"><label>파트</label><select class="in" name="part">
+          <option value="">(미지정)</option>
+          {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}
+        </select></div>
+        <div class="f"><label>사용</label>
+          <input type="checkbox" name="active" value="1" style="margin-top:8px;"
+                 {{ 'checked' if (edit_row.active if edit_row else 1) }}></div>
+        <div class="f"><label>메모</label>
+          <input class="in" name="memo" value="{{ edit_row.memo if edit_row else '' }}"></div>
+        <div class="f" style="justify-content:flex-end;"><button class="btn btn-p">저장</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

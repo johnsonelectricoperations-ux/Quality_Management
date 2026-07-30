@@ -104,6 +104,14 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS customer (
+  -- 고객사 마스터. name=정식명(생산량 파일 '주거래처' E열과 동일하게 유지),
+  -- short_name=월마감 보고서 표기명(약칭, 예: 현대트랜시스 지곡→HTS). part는 생산량 파일이
+  -- 1파트/2파트로 나뉘어 있어 고객사별로 유일하게 정해진다(2026-07-30 확인, 중복 0건).
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+  short_name TEXT NOT NULL DEFAULT '', part TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1, memo TEXT DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS permission (
   -- editor/viewer 메뉴별 보기/편집 권한(관리자는 항상 전기능이라 여기 저장하지 않음)
   role TEXT NOT NULL, menu_key TEXT NOT NULL,
@@ -265,20 +273,26 @@ def init_db():
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
 PERM_MENU_KEYS = ("dash", "rdetail", "svp", "claim", "incident", "oreview",
                   "data_check", "products", "processes", "defect_types",
-                  "scan", "masters", "target")
+                  "customers", "scan", "masters", "target")
 # 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.
 _EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "oreview"}
 
 
 def _ensure_default_permissions(conn):
-    if conn.execute("SELECT COUNT(*) c FROM permission").fetchone()["c"] > 0:
-        return
+    """아직 행이 없는 (role, menu_key) 조합만 기본값으로 채운다.
+    메뉴가 새로 추가돼도(PERM_MENU_KEYS에 항목 추가) 그 메뉴만 기본값이 들어가고,
+    관리자가 이미 조정해 둔 기존 권한은 건드리지 않는다."""
+    have = {(r["role"], r["menu_key"]) for r in
+            conn.execute("SELECT role, menu_key FROM permission")}
     rows = []
     for key in PERM_MENU_KEYS:
-        rows.append(("viewer", key, 1, 0))
-        rows.append(("editor", key, 1, 1 if key in _EDITOR_DEFAULT_EDIT else 0))
-    conn.executemany("INSERT INTO permission(role,menu_key,can_view,can_edit) VALUES(?,?,?,?)", rows)
-    conn.commit()
+        if ("viewer", key) not in have:
+            rows.append(("viewer", key, 1, 0))
+        if ("editor", key) not in have:
+            rows.append(("editor", key, 1, 1 if key in _EDITOR_DEFAULT_EDIT else 0))
+    if rows:
+        conn.executemany("INSERT INTO permission(role,menu_key,can_view,can_edit) VALUES(?,?,?,?)", rows)
+        conn.commit()
 
 
 def _prune_noncanonical_processes(conn):
