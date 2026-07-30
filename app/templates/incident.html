@@ -1,26 +1,91 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+.attach{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.attach .fchip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--bd);
+  border-radius:6px;font:500 11px/1.4 inherit;background:var(--card);}
+.attach .fchip a{color:var(--tx2);text-decoration:none;}
+.attach .fchip form{display:inline;}
+.attach .fchip button{border:0;background:none;color:var(--err);cursor:pointer;font-size:12px;padding:0 2px;}
+.thumb{height:52px;border:1px solid var(--bd);border-radius:5px;object-fit:cover;}
+</style>
 {% if can_edit %}
 <div class="panel"><div class="phead"><h2>{{ 'Customer Incident 수정' if edit_row else 'Customer Incident 등록' }}</h2>
   {% if edit_row %}<a class="btn btn-s btn-sm" href="/input/incident" style="margin-left:auto;text-decoration:none;">취소</a>{% endif %}</div>
   <div class="pbody">
-    <form method="post" action="/input/incident/save">
+    <form method="post" action="/input/incident/save" enctype="multipart/form-data">
       {% if edit_row %}<input type="hidden" name="orig_id" value="{{ edit_row.id }}">{% endif %}
-      <div class="frow" style="grid-template-columns:150px 120px 200px 1fr;">
-        <div class="f"><label>날짜</label><input class="in" type="date" name="d" value="{{ edit_row.d if edit_row }}" required></div>
+      <div class="frow" style="grid-template-columns:150px 120px 200px 1fr 120px;">
+        <div class="f"><label>발생일자</label><input class="in" type="date" name="d" value="{{ edit_row.d if edit_row }}" required></div>
         <div class="f"><label>파트</label><select class="in" name="part">
           {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
-        <div class="f"><label>고객명</label><input class="in" name="customer" value="{{ edit_row.customer if edit_row }}" placeholder="예: 현대모비스"></div>
-        <div class="f"><label>내용</label><input class="in" name="content" value="{{ edit_row.content if edit_row }}" placeholder="발생 내용"></div>
-      </div>
-      <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
-        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1545-01"></div>
-        <div class="f"><label>품명</label><input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}" placeholder="품명"></div>
+        <div class="f"><label>고객명</label><select class="in" name="customer">
+          <option value="">(선택)</option>
+          {% for c in cust_opts %}
+          <option value="{{ c.name }}" {{ 'selected' if edit_row and edit_row.customer==c.name }}>{{ c.name }}{% if c.short_name %} ({{ c.short_name }}){% endif %}</option>
+          {% endfor %}
+          {% if edit_row and edit_row.customer and edit_row.customer not in cust_opts|map(attribute='name')|list %}
+          <option value="{{ edit_row.customer }}" selected>{{ edit_row.customer }} (마스터 미등록)</option>
+          {% endif %}
+        </select></div>
+        <div class="f"><label>발생위치</label><input class="in" name="location" value="{{ edit_row.location if edit_row }}" placeholder="예: HTS 서산 조립라인"></div>
         <div class="f" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:6px;">
           <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" name="is_official" {{ 'checked' if (not edit_row) or edit_row.is_official }}> 공식</label>
         </div>
       </div>
+
+      <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
+        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1545-01"></div>
+        <div class="f"><label>품명</label><input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}" placeholder="품명"></div>
+        <div class="f"><label>불량수량 (EA)</label><input class="in" type="number" min="0" name="defect_qty"
+               value="{{ edit_row.defect_qty if edit_row else '' }}" style="text-align:right;"></div>
+      </div>
+
+      <div class="frow" style="grid-template-columns:1fr;margin-top:10px;">
+        <div class="f"><label>문제사항 (내용)</label>
+          <input class="in" name="content" value="{{ edit_row.content if edit_row }}"
+                 placeholder="예: HTS TMEDII CARRIER (TM6027) 내경 찍힘 – 가유 귀책"></div>
+      </div>
+      <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
+        <div class="f"><label>발생원인</label>
+          <textarea class="in" name="cause" rows="3" style="resize:vertical;"
+                    placeholder="예: OP10 가공 → 선삭 인서트 홀더 제품 간섭">{{ edit_row.cause if edit_row }}</textarea></div>
+        <div class="f"><label>개선대책</label>
+          <textarea class="in" name="action" rows="3" style="resize:vertical;"
+                    placeholder="예: 1) 선삭 홀더 변경 및 좌표 조정&#10;2) MCT 3차 작업 후 외관검사 추가">{{ edit_row.action if edit_row }}</textarea></div>
+      </div>
+
+      <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
+        <div class="f"><label>불량사진 (보고서에 표시, 여러 장 가능)</label>
+          <input class="in" type="file" name="photo" accept="image/*" multiple></div>
+        <div class="f"><label>세부자료 (보관용, 여러 개 가능)</label>
+          <input class="in" type="file" name="doc" multiple></div>
+      </div>
+      <div style="color:var(--tx3);font-size:11.5px;margin-top:6px;">
+        · 고객명은 <b>고객사 마스터</b>에서 고릅니다. 목록에 없으면
+        <a href="/admin/customers" style="color:var(--p-600);">고객사 마스터</a>에 먼저 추가하세요.
+        · 파일 1개당 최대 {{ 20 }}MB. 첨부는 TM-NO별 품질이슈 통계·분석에 쓰기 위해 이슈 단위로 보관됩니다.
+      </div>
+
+      {% if edit_row and edit_row.files %}
+      <div style="margin-top:12px;">
+        <label style="font:600 11px/1 inherit;color:var(--tx3);">등록된 첨부</label>
+        <div class="attach">
+          {% for f in edit_row.files %}
+          <span class="fchip">
+            {% if f.kind == 'photo' %}<img class="thumb" src="/input/incident/file/{{ f.id }}" alt="">{% endif %}
+            <a href="/input/incident/file/{{ f.id }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+            <span style="color:var(--tx3);">{% if f.size >= 1048576 %}{{ '%.1f'|format(f.size / 1048576) }}MB{% elif f.size >= 1024 %}{{ (f.size / 1024)|round|int }}KB{% else %}{{ f.size }}B{% endif %}</span>
+            <form method="post" action="/input/incident/file/{{ f.id }}/delete"
+                  onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
+              <button type="submit" title="삭제">✕</button></form>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">{{ '수정 저장' if edit_row else '등록' }}</button></div>
     </form>
   </div>
@@ -29,13 +94,22 @@
 
 <div class="panel"><div class="phead"><h2>Incident 이력</h2><span class="tot">{{ rows|length }}건 · 공식 건만 KPI 집계</span></div>
   <table>
-    <thead><tr><th>날짜</th><th>파트</th><th>고객명</th><th>TM-NO</th><th>품명</th><th>내용</th><th style="width:60px;">공식</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <thead><tr><th>발생일자</th><th>파트</th><th>고객명</th><th>발생위치</th><th>TM-NO</th><th>품명</th>
+      <th class="num">불량수량</th><th>문제사항</th><th>첨부</th><th style="width:60px;">공식</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
       <tr {% if not r.is_official %}style="color:var(--tx3);"{% endif %}>
         <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.customer or '-' }}</td>
+        <td>{{ r.location or '-' }}</td>
         <td class="mono">{{ r.tm_no or '-' }}</td><td>{{ r.product_name or '-' }}</td>
+        <td class="num">{{ r.defect_qty|cf if r.defect_qty else '-' }}</td>
         <td>{{ r.content or '-' }}</td>
+        <td style="white-space:nowrap;">
+          {% if r.files %}
+            {% for f in r.files %}<a href="/input/incident/file/{{ f.id }}" target="_blank"
+               title="{{ f.orig_name }}" style="text-decoration:none;">{{ '🖼' if f.kind=='photo' else '📄' }}</a>{% endfor %}
+          {% else %}<span style="color:var(--tx3);">-</span>{% endif %}
+        </td>
         <td>
           <form method="post" action="/input/incident/{{ r.id }}/toggle-official" style="display:inline;">
             <input type="checkbox" onchange="this.form.submit()" {{ 'checked' if r.is_official }} {{ 'disabled' if not can_edit }}>
@@ -43,10 +117,10 @@
         </td>
         {% if can_edit %}<td style="white-space:nowrap;">
           <a class="btn btn-ghost btn-sm" href="/input/incident?edit={{ r.id }}" style="text-decoration:none;">수정</a>
-          <form method="post" action="/input/incident/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요?');">
+          <form method="post" action="/input/incident/{{ r.id }}/delete" style="display:inline;" onsubmit="return confirm('삭제할까요? (첨부파일도 함께 삭제됩니다)');">
             <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}</tr>
     {% else %}
-      <tr><td colspan="8" style="color:var(--tx3);">등록된 Incident가 없습니다.</td></tr>
+      <tr><td colspan="{{ 11 if can_edit else 10 }}" style="color:var(--tx3);">등록된 Incident가 없습니다.</td></tr>
     {% endfor %}
     </tbody>
   </table>

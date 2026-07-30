@@ -104,6 +104,15 @@ CREATE TABLE IF NOT EXISTS upload_log (
 CREATE TABLE IF NOT EXISTS data_check_hidden (
   tm_no TEXT PRIMARY KEY, hidden_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS incident_file (
+  -- 고객 품질이슈 첨부파일. kind='photo'(불량사진, 보고서에 표시) | 'doc'(세부자료, 보관용).
+  -- 나중에 TM-NO별 품질이슈 통계/분석에 쓰려고 incident_id로 묶어 이력을 남긴다.
+  id INTEGER PRIMARY KEY, incident_id INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'doc', orig_name TEXT NOT NULL,
+  stored_name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0,
+  uploaded_at TEXT DEFAULT '', uploaded_by TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_incfile ON incident_file(incident_id);
 CREATE TABLE IF NOT EXISTS report_text (
   -- 월마감 보고서에 사람이 직접 쓰는 서술 항목(예: '주요 업무 진행 현황').
   -- 데이터로 뽑을 수 없는 내용만 여기 둔다. ym='YYYY-MM'(마감월), section=항목키.
@@ -280,6 +289,11 @@ def init_db():
     _add_col(conn, "incident", "tm_no", "TEXT DEFAULT ''")
     _add_col(conn, "incident", "product_name", "TEXT DEFAULT ''")
     _add_col(conn, "incident", "is_official", "INTEGER NOT NULL DEFAULT 1")
+    # 월마감 보고서 '고객 품질 ISSUE' 장에 필요한 항목 (2026-07-30 추가)
+    _add_col(conn, "incident", "location", "TEXT DEFAULT ''")       # 발생위치 (예: HTS 서산 조립라인)
+    _add_col(conn, "incident", "defect_qty", "INTEGER NOT NULL DEFAULT 0")   # 불량수량
+    _add_col(conn, "incident", "cause", "TEXT DEFAULT ''")          # 발생원인
+    _add_col(conn, "incident", "action", "TEXT DEFAULT ''")         # 개선대책
     _migrate_defect_type(conn)
     _migrate_product_price(conn)
     _migrate_claim(conn)

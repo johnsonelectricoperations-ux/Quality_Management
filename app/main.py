@@ -10,7 +10,7 @@ import datetime as _dt
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1780,19 +1780,28 @@ def incident_page(request: Request, edit: int = 0, msg: str = "", err: str = "")
     if g:
         return g
     conn = db.connect()
+    cols = ("id,d,part,customer,location,tm_no,product_name,content,defect_qty,cause,action,is_official")
     rows = [dict(r) for r in conn.execute(
-        "SELECT id,d,part,customer,tm_no,product_name,content,is_official FROM incident "
-        "ORDER BY d DESC,id DESC LIMIT 200")]
+        f"SELECT {cols} FROM incident ORDER BY d DESC,id DESC LIMIT 200")]
+    # 첨부파일을 이슈별로 묶어 목록에 개수/링크를 보여준다
+    files = defaultdict(list)
+    for f in conn.execute("SELECT id,incident_id,kind,orig_name,size FROM incident_file ORDER BY id"):
+        files[f["incident_id"]].append(dict(f))
+    for r in rows:
+        r["files"] = files.get(r["id"], [])
     edit_row = None
     if edit:
-        r = conn.execute(
-            "SELECT id,d,part,customer,tm_no,product_name,content,is_official FROM incident WHERE id=?",
-            (edit,)).fetchone()
+        r = conn.execute(f"SELECT {cols} FROM incident WHERE id=?", (edit,)).fetchone()
         if r:
             edit_row = dict(r)
+            edit_row["files"] = files.get(edit_row["id"], [])
+    # 고객명은 고객사 마스터에서 고른다(표기 통일). 목록에 없으면 마스터에 먼저 추가.
+    cust_opts = [dict(r) for r in conn.execute(
+        "SELECT name, short_name, part FROM customer WHERE active=1 ORDER BY part, name")]
     conn.close()
     return render(request, "incident.html", u, active="incident", heading="Customer Incident 관리",
                   crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  cust_opts=cust_opts,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "incident", "edit")), msg=msg, err=err)
 
 
@@ -1806,9 +1815,16 @@ async def incident_save(request: Request):
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     customer = (form.get("customer") or "").strip()
+    location = (form.get("location") or "").strip()
     tm_no = calc.base_tmno((form.get("tm_no") or "").strip())
     product_name = (form.get("product_name") or "").strip()
     content = (form.get("content") or "").strip()
+    cause = (form.get("cause") or "").strip()
+    action = (form.get("action") or "").strip()
+    try:
+        defect_qty = int((form.get("defect_qty") or "0").replace(",", "").strip() or 0)
+    except ValueError:
+        defect_qty = 0
     is_official = 1 if form.get("is_official") else 0
     if not d:
         eq = f"&edit={orig_id}" if orig_id else ""
@@ -1816,19 +1832,101 @@ async def incident_save(request: Request):
     conn = db.connect()
     if orig_id:
         conn.execute(
-            "UPDATE incident SET d=?,part=?,customer=?,tm_no=?,product_name=?,content=?,is_official=? "
-            "WHERE id=?",
-            (d, part, customer, tm_no, product_name, content, is_official, orig_id))
+            "UPDATE incident SET d=?,part=?,customer=?,location=?,tm_no=?,product_name=?,content=?,"
+            "defect_qty=?,cause=?,action=?,is_official=? WHERE id=?",
+            (d, part, customer, location, tm_no, product_name, content,
+             defect_qty, cause, action, is_official, orig_id))
+        iid = int(orig_id)
         msg = "수정됨"
     else:
-        conn.execute(
-            "INSERT INTO incident(d,part,customer,tm_no,product_name,content,is_official,reg_user) "
-            "VALUES(?,?,?,?,?,?,?,?)",
-            (d, part, customer, tm_no, product_name, content, is_official, u["name"]))
+        cur = conn.execute(
+            "INSERT INTO incident(d,part,customer,location,tm_no,product_name,content,"
+            "defect_qty,cause,action,is_official,reg_user) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (d, part, customer, location, tm_no, product_name, content,
+             defect_qty, cause, action, is_official, u["name"]))
+        iid = cur.lastrowid
         msg = "등록됨"
+    # 첨부파일(불량사진 photo / 세부자료 doc)은 저장 후 그 이슈에 붙인다
+    n_up = 0
+    for field, kind in (("photo", "photo"), ("doc", "doc")):
+        for up in form.getlist(field):
+            if getattr(up, "filename", ""):
+                _save_incident_file(conn, iid, kind, up, u["name"])
+                n_up += 1
     conn.commit()
     conn.close()
+    if n_up:
+        msg += f" (첨부 {n_up}건)"
     return RedirectResponse(f"/input/incident?msg={msg}", status_code=303)
+
+
+# ── 고객 품질이슈 첨부파일 ───────────────────────────────
+# static이 아닌 uploads/ 에 두고 **로그인·권한 확인 후에만** 내려준다(세부자료가 섞여 있으므로).
+UPLOAD_ROOT = os.path.abspath(os.path.join(BASE, "..", "uploads", "incident"))
+MAX_UPLOAD_MB = 20
+
+
+def _safe_name(name):
+    """경로 조작·이상문자 제거. 확장자는 살린다."""
+    base = os.path.basename(str(name or "")).replace("\\", "_").replace("/", "_")
+    keep = [c for c in base if c.isalnum() or c in " ._-()[]가-힣" or ord(c) > 127]
+    out = "".join(keep).strip() or "file"
+    return out[:120]
+
+
+def _save_incident_file(conn, incident_id, kind, upload, user_name):
+    data = upload.file.read()
+    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return None
+    os.makedirs(UPLOAD_ROOT, exist_ok=True)
+    orig = _safe_name(upload.filename)
+    stored = f"{incident_id}_{secrets.token_hex(6)}_{orig}"
+    with open(os.path.join(UPLOAD_ROOT, stored), "wb") as f:
+        f.write(data)
+    conn.execute(
+        "INSERT INTO incident_file(incident_id,kind,orig_name,stored_name,size,uploaded_at,uploaded_by) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (incident_id, kind, orig, stored, len(data),
+         _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), user_name))
+    return stored
+
+
+@app.get("/input/incident/file/{fid}")
+def incident_file_get(request: Request, fid: int):
+    """첨부파일 다운로드/표시. 보고서에서 <img src>로도 쓴다."""
+    u, g = _perm_guard(request, "incident", "view")
+    if g:
+        return g
+    conn = db.connect()
+    r = conn.execute("SELECT orig_name, stored_name FROM incident_file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if not r:
+        return RedirectResponse("/input/incident?err=파일을 찾을 수 없습니다", status_code=303)
+    path = os.path.join(UPLOAD_ROOT, r["stored_name"])
+    if not os.path.isfile(path):
+        return RedirectResponse("/input/incident?err=파일이 서버에 없습니다", status_code=303)
+    return FileResponse(path, filename=r["orig_name"])
+
+
+@app.post("/input/incident/file/{fid}/delete")
+def incident_file_delete(request: Request, fid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "incident", "edit")):
+        return RedirectResponse("/input/incident", status_code=303)
+    conn = db.connect()
+    r = conn.execute("SELECT incident_id, stored_name FROM incident_file WHERE id=?", (fid,)).fetchone()
+    if r:
+        try:
+            os.remove(os.path.join(UPLOAD_ROOT, r["stored_name"]))
+        except OSError:
+            pass                        # 파일이 이미 없어도 DB 행은 지운다
+        conn.execute("DELETE FROM incident_file WHERE id=?", (fid,))
+        conn.commit()
+        iid = r["incident_id"]
+    else:
+        iid = 0
+    conn.close()
+    return RedirectResponse(f"/input/incident?edit={iid}&msg=첨부 삭제됨", status_code=303)
 
 
 @app.post("/input/incident/{iid}/toggle-official")
@@ -1850,6 +1948,13 @@ def incident_delete(request: Request, iid: int):
     if u is None or not (u["role"] == "admin" or has_perm(u["role"], "incident", "edit")):
         return RedirectResponse("/input/incident", status_code=303)
     conn = db.connect()
+    # 첨부파일도 함께 정리(디스크에 고아 파일이 남지 않게)
+    for f in conn.execute("SELECT stored_name FROM incident_file WHERE incident_id=?", (iid,)):
+        try:
+            os.remove(os.path.join(UPLOAD_ROOT, f["stored_name"]))
+        except OSError:
+            pass
+    conn.execute("DELETE FROM incident_file WHERE incident_id=?", (iid,))
     conn.execute("DELETE FROM incident WHERE id=?", (iid,))
     conn.commit()
     conn.close()
