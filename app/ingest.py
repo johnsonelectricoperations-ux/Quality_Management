@@ -280,16 +280,19 @@ def _reingest_preserve_reviewed(conn, source, rows, key_cols="d,tm_no,defect_nam
     재적재한다.
 
     key_cols: "같은 건"으로 볼 컬럼 조합(기본 d,tm_no,defect_name). **폐기(discard)는
-    "d,tm_no,process"를 쓴다** — 원본 폐기사유(defect_name)가 검토 승인 이후 더 구체적인
+    "d,tm_no,process,qty"를 쓴다** — 원본 폐기사유(defect_name)가 검토 승인 이후 더 구체적인
     이름으로 수정되면, defect_name까지 키에 넣을 경우 "다른 건"으로 오인해 이미 검토완료된
     옛 행은 그대로 둔 채 새 행이 또 생겨 수량이 중복 반영되는 문제가 있었다(2026-07-30 확인,
     실제로 6월 데이터에서 동일 날짜·TM-NO·공정·수량인데 불량명만 다른 행 쌍 2건 발견).
-    d,tm_no,process 키로 바꾸면 사유만 바뀐 재스캔은 "이미 검토된 건"으로 인식해 건너뛰므로
+    d,tm_no,process,qty 키로 바꾸면 사유만 바뀐 재스캔은 "이미 검토된 건"으로 인식해 건너뛰므로
     중복이 생기지 않는다(단, 사유가 정말 바뀐 경우 새 사유가 반영되지 않고 예전 사유로 남는데,
-    이는 검토완료 행을 재스캔이 건드리지 않는 기존 설계와 일관된 동작이다).
+    이는 검토완료 행을 재스캔이 건드리지 않는 기존 설계와 일관된 동작이다). qty까지 키에 넣은
+    이유는, 같은 날짜·TM-NO·공정에서 사유가 다른 폐기가 실제로 2건 발생하는 정상 케이스는
+    수량까지 우연히 같을 가능성이 낮아, defect_name만 빠진 키보다 오탐(서로 다른 두 건을 하나로
+    오인)이 훨씬 줄어들기 때문이다(2026-07-30, 사용자 제안으로 반영).
     반환: (적재건수, 검토완료라 건너뛴 건수, 과거월 잠금이라 건너뛴 건수)."""
     cols = key_cols.split(",")
-    col_idx = {"d": 0, "tm_no": 1, "defect_name": 2, "process": 5}
+    col_idx = {"d": 0, "tm_no": 1, "defect_name": 2, "qty": 3, "process": 5}
     idxs = [col_idx[c] for c in cols]
     cur_month_start = _lock_cutoff()
     reviewed_keys = {tuple(r[c] for c in cols) for r in conn.execute(
@@ -708,8 +711,8 @@ def ingest_scrap_db(conn, path, quarantine_100=True):
     src.close()
     pend = sum(1 for row in rows if row[7] == "pending")
     # 폐기는 마스터 자동등록을 하지 않는다(비고 자유텍스트) — 조회는 '폐기불량'으로 묶어서 본다
-    # 폐기사유(defect_name)가 검토 후 수정될 수 있어 d,tm_no,process 키로 중복을 막는다(2026-07-30).
-    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows, key_cols="d,tm_no,process")
+    # 폐기사유(defect_name)가 검토 후 수정될 수 있어 d,tm_no,process,qty 키로 중복을 막는다(2026-07-30).
+    n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows, key_cols="d,tm_no,process,qty")
     return n, {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped,
               "검토대기": pend}
 
