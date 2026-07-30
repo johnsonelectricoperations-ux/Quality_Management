@@ -33,12 +33,21 @@
   <span class="fitem">Customer Incident <b>{{ fresh.incident or '-' }}</b></span>
 </div>
 
-{% macro top_table(title, sub, rows, part_label) %}
+{# 이번주/지난주, 이번달/지난달 전환 가능한 버전 — 행 tbody 두 벌을 함께 그려두고 버튼으로
+   보이는 것만 바꾼다(1PART/2PART 전환과 같은 방식, 2026-07-30 신설). #}
+{% macro top_table_week(cur_sub, cur_rows, prev_sub, prev_rows, part_label) %}
 <div class="panel">
-  <div class="phead"><h2>{{ title }}</h2><span class="tot">{{ sub }} · {{ part_label|pl }}</span></div>
+  <div class="phead"><h2>이번주 누적</h2>
+    <div class="seg wkseg" style="margin-left:10px;">
+      <a class="segb on" data-wk="cur" href="javascript:void(0)">이번주</a>
+      <a class="segb" data-wk="prev" href="javascript:void(0)">지난주</a>
+    </div>
+    <span class="tot" data-wksub-cur="{{ cur_sub }}" data-wksub-prev="{{ prev_sub }}">{{ cur_sub }} · {{ part_label|pl }}</span>
+  </div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th class="num">불량율(ppm)</th><th>불량유형별 수량</th></tr></thead>
-    <tbody>
+    {% for wk, rows in [('cur', cur_rows), ('prev', prev_rows)] %}
+    <tbody data-wkrows="{{ wk }}"{% if wk == 'prev' %} style="display:none;"{% endif %}>
     {% for r in rows %}
       <tr><td><span class="rank {{ 'r1' if loop.index==1 }}{{ 'r2' if loop.index==2 }}{{ 'r3' if loop.index==3 }}">{{ loop.index }}</span></td>
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
@@ -49,25 +58,24 @@
       <tr><td colspan="7" style="color:var(--tx3);">데이터 없음</td></tr>
     {% endfor %}
     </tbody>
+    {% endfor %}
   </table>
 </div>
 {% endmacro %}
 
-{# 해당주/지난주 전환 가능한 버전 — 행 tbody 두 벌을 함께 그려두고 버튼으로 보이는 것만 바꾼다
-   (1PART/2PART 전환과 같은 방식, 2026-07-30 신설). #}
-{% macro top_table_week(cur_sub, cur_rows, prev_sub, prev_rows, part_label) %}
+{% macro top_table_month(cur_sub, cur_rows, prev_sub, prev_rows, part_label) %}
 <div class="panel">
-  <div class="phead"><h2>해당주 누적</h2>
-    <div class="seg wkseg" style="margin-left:10px;">
-      <a class="segb on" data-wk="cur" href="javascript:void(0)">해당주</a>
-      <a class="segb" data-wk="prev" href="javascript:void(0)">지난주</a>
+  <div class="phead"><h2>이번달 누적</h2>
+    <div class="seg moseg" style="margin-left:10px;">
+      <a class="segb on" data-mo="cur" href="javascript:void(0)">이번달</a>
+      <a class="segb" data-mo="prev" href="javascript:void(0)">지난달</a>
     </div>
-    <span class="tot" data-wksub-cur="{{ cur_sub }}" data-wksub-prev="{{ prev_sub }}">{{ cur_sub }} · {{ part_label|pl }}</span>
+    <span class="tot" data-mosub-cur="{{ cur_sub }}" data-mosub-prev="{{ prev_sub }}">{{ cur_sub }} · {{ part_label|pl }}</span>
   </div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th class="num">불량율(ppm)</th><th>불량유형별 수량</th></tr></thead>
-    {% for wk, rows in [('cur', cur_rows), ('prev', prev_rows)] %}
-    <tbody data-wkrows="{{ wk }}"{% if wk == 'prev' %} style="display:none;"{% endif %}>
+    {% for mo, rows in [('cur', cur_rows), ('prev', prev_rows)] %}
+    <tbody data-morows="{{ mo }}"{% if mo == 'prev' %} style="display:none;"{% endif %}>
     {% for r in rows %}
       <tr><td><span class="rank {{ 'r1' if loop.index==1 }}{{ 'r2' if loop.index==2 }}{{ 'r3' if loop.index==3 }}">{{ loop.index }}</span></td>
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
@@ -143,11 +151,11 @@
   </div>
   <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">발생 수량 순 · 불량유형별 수량</span></div>
 <div class="grid2" data-topgrid="VMS PART" style="{{ '' if d.top_part_default=='VMS PART' else 'display:none;' }}">
-  {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top5['VMS PART'].month, 'VMS PART') }}
+  {{ top_table_month('%04d-%02d'|format(d.cy, d.cm), d.top5['VMS PART'].month, d.prev_month_label, d.top5['VMS PART'].prev_month, 'VMS PART') }}
   {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['VMS PART'].week, d.prev_week_label, d.top5['VMS PART'].prev_week, 'VMS PART') }}
 </div>
 <div class="grid2" data-topgrid="TM PART" style="{{ '' if d.top_part_default=='TM PART' else 'display:none;' }}">
-  {{ top_table("당월 월간누적", '%04d-%02d'|format(d.cy, d.cm), d.top5['TM PART'].month, 'TM PART') }}
+  {{ top_table_month('%04d-%02d'|format(d.cy, d.cm), d.top5['TM PART'].month, d.prev_month_label, d.top5['TM PART'].prev_month, 'TM PART') }}
   {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['TM PART'].week, d.prev_week_label, d.top5['TM PART'].prev_week, 'TM PART') }}
 </div>
 {% endblock %}
@@ -229,7 +237,7 @@
     });
   });
 
-  // 공정불량 TOP5 '해당주 누적' 카드: 해당주/지난주 선택바 — 각 카드 안에서만 전환된다.
+  // 공정불량 TOP5 '이번주 누적' 카드: 이번주/지난주 선택바 — 각 카드 안에서만 전환된다.
   document.querySelectorAll(".wkseg .segb").forEach(function (el) {
     el.addEventListener("click", function () {
       var wk = el.dataset.wk, panel = el.closest(".panel");
@@ -239,6 +247,19 @@
       });
       var sub = panel.querySelector(".tot");
       sub.textContent = sub.dataset["wksub" + (wk === "cur" ? "Cur" : "Prev")] + " · " + sub.textContent.split(" · ").pop();
+    });
+  });
+
+  // 공정불량 TOP5 '월간누적' 카드: 이번달/지난달 선택바 — 같은 방식으로 카드 안에서만 전환된다.
+  document.querySelectorAll(".moseg .segb").forEach(function (el) {
+    el.addEventListener("click", function () {
+      var mo = el.dataset.mo, panel = el.closest(".panel");
+      panel.querySelectorAll(".moseg .segb").forEach(function (s) { s.classList.toggle("on", s === el); });
+      panel.querySelectorAll("tbody[data-morows]").forEach(function (tb) {
+        tb.style.display = tb.dataset.morows === mo ? "" : "none";
+      });
+      var sub = panel.querySelector(".tot");
+      sub.textContent = sub.dataset["mosub" + (mo === "cur" ? "Cur" : "Prev")] + " · " + sub.textContent.split(" · ").pop();
     });
   });
 })();

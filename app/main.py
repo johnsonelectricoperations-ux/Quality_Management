@@ -395,15 +395,21 @@ def build_dashboard(conn, m, daily, part):
     pw_s = (_dt.date.fromisoformat(ws) - _dt.timedelta(days=7)).isoformat()
     pw_e = (_dt.date.fromisoformat(we) - _dt.timedelta(days=7)).isoformat()
     prev_week_label = f"{int(pw_s[5:7])}/{int(pw_s[8:10])}~{int(pw_e[5:7])}/{int(pw_e[8:10])}"
+    # 지난달 = 이번달의 바로 전 달(월 경계).
+    pm_y, pm_m = (cy - 1, 12) if cm == 1 else (cy, cm - 1)
+    pmstart = f"{pm_y:04d}-{pm_m:02d}-01"
+    pmend = f"{pm_y:04d}-{pm_m:02d}-31"
+    prev_month_label = f"{pm_y:04d}-{pm_m:02d}"
     top5 = {}
     for tp in ("VMS PART", "TM PART"):
         top5[tp] = {"month": calc.top5_defect(conn, m, mstart, mend, tp),
+                    "prev_month": calc.top5_defect(conn, m, pmstart, pmend, tp),
                     "week": calc.top5_defect(conn, m, ws, we, tp),
                     "prev_week": calc.top5_defect(conn, m, pw_s, pw_e, tp)}
     top_part_default = "TM PART" if part == "TM PART" else "VMS PART"
     return {"cy": cy, "cm": cm, "cur_fy": calc.fy_label(cur_fy), "cards": cards,
             "charts": charts, "top5": top5, "top_part_default": top_part_default,
-            "prev_week_label": prev_week_label,
+            "prev_week_label": prev_week_label, "prev_month_label": prev_month_label,
             "cur_week": cur_week}
 
 
