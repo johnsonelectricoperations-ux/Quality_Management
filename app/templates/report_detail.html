@@ -43,10 +43,13 @@
 </div></div>
 {% endmacro %}
 
-{% macro row(label, vals, cls='', dec=0, cum=none) %}
+{# mdec: 월별 칸만 소수자리를 달리 쓸 때. warranty·incident는 FY 목표를 12로 균등배분하므로
+   월별 목표가 0.4건처럼 소수가 되는데, 정수로 반올림하면 '0'이 되어 목표가 없는 것처럼 보인다. #}
+{% macro row(label, vals, cls='', dec=0, cum=none, mdec=none) %}
+{% set md = dec if mdec is none else mdec %}
 <tr class="{{ cls }}"><td>{{ label }}</td>
   <td class="cumcol">{{ ('%.'+dec|string+'f')|format(cum or 0) if dec else '{:,.0f}'.format(cum or 0) if cum is not none else '' }}</td>
-  {% for v in vals %}<td>{{ ('%.'+dec|string+'f')|format(v or 0) if dec else '{:,.0f}'.format(v or 0) }}</td>{% endfor %}
+  {% for v in vals %}<td>{{ ('%.'+md|string+'f')|format(v or 0) if md else '{:,.0f}'.format(v or 0) }}</td>{% endfor %}
 </tr>
 {% endmacro %}
 
@@ -88,7 +91,7 @@
       {{ row('발생(건) 소계', b.sub) }}
       {{ row('공식', b.official, cum=b.cum.official) }}
       {{ row('비공식', b.unofficial) }}
-      {{ row('지표(건) 목표', b.target, cum=b.cum.target) }}
+      {{ row('지표(건) 목표', b.target, cum=b.cum.target, mdec=1) }}
     {% endcall %}
   {% endfor %}
 
@@ -97,7 +100,7 @@
     {% set b = data[lbl] %}
     {% call block_table(lbl, None, months) %}
       {{ row('Warranty(천원)', b.actual, cum=b.cum.actual) }}
-      {{ row('목표(천원)', b.target, cum=b.cum.target) }}
+      {{ row('목표(천원)', b.target, cum=b.cum.target, mdec=1) }}
     {% endcall %}
   {% endfor %}
 

@@ -278,7 +278,9 @@ def build_dashboard(conn, m, daily, part):
         fy_lbls = f"{calc.fy_label(fys[0])},{calc.fy_label(fys[-1])}"
 
     def targets(kpi):
-        return [target_val(conn, fy, part, kpi) for fy in fys]
+        """월별 실적과 나란히 놓는 목표선. warranty·incident는 FY 목표가 연간 합계라
+        그대로 두면 월 실적과 자릿수가 안 맞으므로 12개월 균등배분값을 쓴다."""
+        return [calc.monthly_target(target_val(conn, fy, part, kpi), kpi) for fy in fys]
 
     cur = series[-1]
     prev = series[-2] if len(series) > 1 else cur
@@ -1466,7 +1468,12 @@ def admin_target(request: Request, fy: int = 27, part: str = "통합"):
     ban_order = [(ban_kpi(p), f"반별목표제 · {p}", "ppm") for p in BAN_PROCESSES]
     items = [{"kpi": k, "name": n, "unit": un,
               "value": rows.get((k, 0), ""), "monthly": k in MONTHLY_KPIS,
-              "part_only": k in PART_ONLY_KPIS}
+              "part_only": k in PART_ONLY_KPIS,
+              # warranty·incident는 FY 목표가 연간 합계라 월별 비교에는 12로 균등배분한 값을 쓴다.
+              # 입력은 연간 목표 하나만 받고, 균등배분값은 화면에 계산해서 보여준다.
+              "fy_total": k in calc.FY_TOTAL_KPIS,
+              "per_month": (round(rows[(k, 0)] / 12, 1)
+                            if k in calc.FY_TOTAL_KPIS and rows.get((k, 0)) else None)}
              for k, n, un in order + ban_order]
     # 월별 목표(FY 순서: 4월~익년 3월)
     fy_months = [m for m in range(4, 13)] + [m for m in range(1, 4)]

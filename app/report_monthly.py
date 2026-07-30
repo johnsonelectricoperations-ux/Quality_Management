@@ -26,13 +26,21 @@ BUCKETS = ["성형", "소결", "정형", "가공", "기타"]
 BAN_PROCS = ["성형", "소결", "정형", "가공"]        # 반별목표제 대상(기타후공정 제외)
 PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
-# KOI 5개 지표: (target kpi, 표시명, 단위, 소수자리, month_kpi 키)
+# 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
+# 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
+CACHE_VERSION = 4
+
+# (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
+# 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
+#          ("ratio", 분자, 분모) — 분자합/분모합 으로 다시 계산 (비율은 월 평균이 아니라 누적비율)
 KOI_METRICS = [
-    ("warranty", "Customer Warranty Cost", "천원", 0, "warranty"),
-    ("copq", "Cost of Poor Quality", "%", 3, "copq_pct"),
-    ("incident", "Customer Incidents", "건수", 0, "incident"),
-    ("scrap_qty", "Total Internal Scrap/Reject Qty", "%", 3, "scrap_qty_pct"),
-    ("scrap_cost", "Total Internal Scrap Cost", "%", 3, "scrap_cost_pct"),
+    ("warranty", "Customer Warranty Cost", "천원", 0, "warranty", ("sum", "warranty")),
+    ("copq", "Cost of Poor Quality", "%", 3, "copq_pct", ("ratio", "copq_cost", "denom")),
+    ("incident", "Customer Incidents", "건수", 0, "incident", ("sum", "incident")),
+    ("scrap_qty", "Total Internal Scrap/Reject Qty", "%", 3, "scrap_qty_pct",
+     ("ratio", "scrap_qty", "prod_qty")),
+    ("scrap_cost", "Total Internal Scrap Cost", "%", 3, "scrap_cost_pct",
+     ("ratio", "scrap_cost", "denom")),
 ]
 
 CONTENTS = [
@@ -150,26 +158,73 @@ def _ppm(a, b):
 
 
 # ── (1) KOI 현황 ────────────────────────────────────────
+def _koi_prev(conn, prev_fy, part, tkpi):
+    """직전 FY(FY26) 종합 실적. fy_actual에 입력된 값만 쓰고, 없으면 None(화면에 '-').
+
+    FY26은 원천 데이터가 없어 보고된 공식 수치를 시드로 넣어 둔 것이다(2026-07-30 확인).
+    통합(합계)은 비율 지표를 파트끼리 더할 수 없어(분모가 달라짐) 건수만 합산한다.
+    """
+    if tkpi == "incident":
+        parts = ["VMS PART", "TM PART"] if part == "통합" else [part]
+        got = False
+        tot = 0
+        for p in parts:
+            for key in ("incident_official", "incident_unofficial"):
+                v = _fy_actual(conn, prev_fy, p, key)
+                if v is not None:
+                    got = True
+                    tot += v
+        return tot if got else None
+    if tkpi == "copq" and part != "통합":
+        return _fy_actual(conn, prev_fy, part, "copq_pct")
+    return None
+
+
 def _koi_block(conn, m, daily, fy, part, upto):
-    """지표 5종 × (FY 연간목표 + 4월~마감월 실적/목표/달성율)."""
+    """지표 5종 × (FY 연간목표 + 4월~마감월 실적/목표/달성율 + FY 누적추이).
+
+    월별 목표는 warranty·incident만 FY 목표를 12개월 균등배분한다(calc.monthly_target).
+    FY 누적 그래프의 목표선은 균등배분값이 아니라 **FY 목표 원본**(연말 도달점)을 쓴다.
+    """
     months = [mo for (_y, mo) in calc.fy_months(fy)]
     idx = months.index(upto) + 1
     use = calc.fy_months(fy)[:idx]
     ppm_part = part if part != "통합" else "VMS PART"
     out = []
-    for tkpi, name, unit, dec, mkey in KOI_METRICS:
-        acts, tgts, achs = [], [], []
+    for tkpi, name, unit, dec, mkey, cumspec in KOI_METRICS:
+        tpart = ppm_part if tkpi in ("proc_ppm", "set_ppm") else part
+        fy_target = _target(conn, fy, tpart, tkpi)
+        mt = calc.monthly_target(fy_target, tkpi)
+        acts, cums = [], []
+        run_num = run_den = 0.0
         for (y, mo) in use:
             k = calc.month_kpi(conn, m, daily, y, mo, part)
-            v = k.get(mkey)
-            t = _target(conn, fy, ppm_part if tkpi in ("proc_ppm", "set_ppm") else part, tkpi)
-            acts.append(v)
-            tgts.append(t)
-            achs.append(achieve(v, t))
-        out.append({"name": name, "unit": unit, "dec": dec,
-                    "fy_target": _target(conn, fy, part, tkpi),
-                    "actual": acts, "target": tgts, "achieve": achs,
-                    "vmax": max([a for a in acts if a is not None] + [t for t in tgts if t] + [0])})
+            acts.append(k.get(mkey))
+            if cumspec[0] == "sum":
+                run_num += k.get(cumspec[1]) or 0
+                cums.append(round(run_num, dec) if dec else round(run_num))
+            else:
+                run_num += k.get(cumspec[1]) or 0
+                run_den += k.get(cumspec[2]) or 0
+                cums.append(_ratio(run_num, run_den, dec))
+        tgts = [mt] * len(acts)
+        prev = _koi_prev(conn, fy - 1, part, tkpi)
+        # 균등배분한 월 목표는 0.42건처럼 소수가 나오므로 목표 표기는 한 자리 더 쓴다.
+        tdec = max(dec, 1) if tkpi in calc.FY_TOTAL_KPIS else dec
+        out.append({"name": name, "unit": unit, "dec": dec, "tdec": tdec,
+                    "fy_target": fy_target,
+                    "actual": acts, "target": tgts,
+                    "achieve": [achieve(v, mt) for v in acts],
+                    "cum": cums, "cum_target": [fy_target] * len(cums),
+                    "cum_ach": achieve(cums[-1] if cums else None, fy_target),
+                    "prev": prev,
+                    # FY26 종합과 FY27 누적은 같은 축을 쓴다 — 나란히 놓고 크기를 비교하는 게
+                    # 이 두 그래프의 목적이므로 축이 다르면 비교가 안 된다.
+                    # 월별은 자릿수가 달라(누적은 월의 몇 배) 별도 축을 쓴다.
+                    "vmax": max([a for a in acts if a is not None] + [t for t in tgts if t] + [0]),
+                    "cum_vmax": max([c for c in cums if c is not None]
+                                    + ([fy_target] if fy_target else [])
+                                    + ([prev] if prev else []) + [0])})
     return {"months": [mo for (_y, mo) in use], "metrics": out}
 
 
@@ -451,7 +506,9 @@ def _copq_block(conn, m, agg, fy, part, upto):
             "prev_claim": _fy_actual(conn, fy - 1, part, "copq_claim_amt"),
             "prev_pct": _fy_actual(conn, fy - 1, part, "copq_pct"),
             "prev_target": _target(conn, fy - 1, part, "copq"),
-            "vmax": max([v for v in qcost if v] + [1])}
+            "vmax": max([v for v in qcost if v] + [1]),
+            # 비율 그래프용 상한 — 목표선이 그래프 밖으로 나가지 않도록 목표도 후보에 넣는다.
+            "pct_vmax": max([v for v in pct if v] + [t for t in tgt if t] + [0.001])}
 
 
 # ── 전체 조립 ───────────────────────────────────────────
@@ -480,6 +537,7 @@ def build(conn, m, y, mth):
                  for p in ("VMS PART", "TM PART")},
         "main_tasks": (txt["content"] if txt else ""),
         "built_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "v": CACHE_VERSION,
     }
 
 
@@ -492,6 +550,10 @@ def get_cached(conn, ym):
     try:
         data = json.loads(r["payload"])
     except ValueError:
+        return None
+    # 화면이 쓰는 항목이 바뀌면 옛 캐시에는 그 항목이 없어 발표 중에 화면이 깨진다.
+    # 버전이 다르면 캐시를 버리고 다시 계산한다(약 0.3초).
+    if data.get("v") != CACHE_VERSION:
         return None
     data["built_at"] = r["built_at"]
     data["built_by"] = r["built_by"]

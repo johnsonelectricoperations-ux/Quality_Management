@@ -63,6 +63,11 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .card h3{font-size:13px;font-weight:800;color:#1f3864;margin-bottom:5px;}
 .koi5{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:10px;height:100%;}
 .chartbox{flex:1;min-height:0;}
+/* KOI 카드: 월별 / FY누적 두 개의 차트를 나란히 둔다 */
+.twoch{display:flex;gap:8px;flex:1;min-height:0;}
+.twoch>div{flex:1;display:flex;flex-direction:column;min-height:0;}
+.ct{font-size:9.5px;font-weight:700;color:#7f7f7f;text-align:center;flex:none;}
+.ct b{color:#1f3864;}
 .narr{font-size:11px;line-height:1.6;}
 .narr b{color:#1f3864;}
 .narr .row{display:flex;gap:6px;padding:2px 0;border-bottom:1px dotted #e0e0e0;}
@@ -98,28 +103,30 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 <body>
 <div id="stage">
 
-{% macro chart(series, target, vmax, months, dec=0, upto=None) %}
+{% macro chart(series, target, vmax, months, dec=0, upto=None, tdec=None, suffix='월', tlab=True) %}
   {% set vm = (vmax or 1) * 1.25 %}
+  {% set td = dec if tdec is none else tdec %}
   <div class="mchart">
     {% if target and target[0] %}
+      {# 좁은 차트에서는 목표 숫자가 막대 값과 겹치므로 선만 긋는다(값은 아래 표에 있다). #}
       <div class="tline" style="bottom:calc({{ (target[0] / vm * 100)|round(1) }}% * 0.86 + 14px)">
-        <span class="tlab">목표 {{ '{:,.3f}'.format(target[0]) if dec else '{:,.0f}'.format(target[0]) }}</span>
+        {% if tlab %}<span class="tlab">목표 {{ '{:,.{}f}'.format(target[0], td) }}</span>{% endif %}
       </div>
     {% endif %}
     {% for v in series %}
       {% if upto is none or loop.index0 <= upto %}
       <div class="col">
-        <div class="v">{% if v is not none %}{{ '{:,.3f}'.format(v) if dec else '{:,.0f}'.format(v) }}{% endif %}</div>
+        <div class="v">{% if v is not none %}{{ '{:,.{}f}'.format(v, dec) }}{% endif %}</div>
         <div class="bar {{ 'over' if (target and target[loop.index0] and v and v > target[loop.index0]) }}"
              style="height:calc({{ ((v or 0) / vm * 100)|round(1) }}% * 0.86)"></div>
-        <div class="x">{{ months[loop.index0] }}월</div>
+        <div class="x">{{ months[loop.index0] }}{{ suffix }}</div>
       </div>
       {% endif %}
     {% endfor %}
   </div>
 {% endmacro %}
 
-{% macro num(v, dec=0) %}{% if v is none %}-{% elif dec %}{{ '{:,.3f}'.format(v) }}{% else %}{{ '{:,.0f}'.format(v) }}{% endif %}{% endmacro %}
+{% macro num(v, dec=0) %}{% if v is none %}-{% else %}{{ '{:,.{}f}'.format(v, dec) }}{% endif %}{% endmacro %}
 {% macro pc(v) %}{% if v is none %}-{% else %}{{ v }}%{% endif %}{% endmacro %}
 
 {# ───────── 1. 표지 ───────── #}
@@ -148,12 +155,35 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     {% for mt in k.metrics %}
     <div class="card">
       <h3>{{ mt.name }} ({{ mt.unit }})</h3>
-      <div class="chartbox">{{ chart(mt.actual, mt.target, mt.vmax, k.months, mt.dec) }}</div>
+      {# 좌→우 순서: FY26 종합 · FY27 누적 · 월별. 목표선은 FY27(누적/월별)에만 긋는다
+         (FY26은 이미 끝난 해의 실적이라 목표 비교 대상이 아님 — 2026-07-30 확정). #}
+      <div class="twoch">
+        <div style="flex:.5;">
+          <div class="ct">{{ d.prev_fy_label }} 종합</div>
+          <div class="chartbox">{{ chart([mt.prev], none, mt.cum_vmax, [d.prev_fy_label], mt.dec, none, none, '') }}</div>
+        </div>
+        <div>
+          <div class="ct">{{ d.fy_label }} 누적 <b>{{ pc(mt.cum_ach) }}</b></div>
+          <div class="chartbox">{{ chart(mt.cum, mt.cum_target, mt.cum_vmax, k.months, mt.dec, none, none, '월', False) }}</div>
+        </div>
+        <div>
+          <div class="ct">월별</div>
+          <div class="chartbox">{{ chart(mt.actual, mt.target, mt.vmax, k.months, mt.dec, none, mt.tdec, '월', False) }}</div>
+        </div>
+      </div>
       <table style="margin-top:5px;">
-        <tr class="tgt"><td class="l" style="width:44px;">목표</td>
-          {% for t in mt.target %}<td>{{ num(t, mt.dec) }}</td>{% endfor %}</tr>
-        <tr class="ach"><td class="l">달성</td>
-          {% for a in mt.achieve %}<td>{{ pc(a) }}</td>{% endfor %}</tr>
+        <tr><th class="l" style="width:40px;"></th><th>{{ d.prev_fy_label }}</th>
+          <th>{{ d.fy_label }}<br>누적</th>
+          {% for mo in k.months %}<th>{{ mo }}월</th>{% endfor %}</tr>
+        <tr><td class="l">실적</td><td class="r">{{ num(mt.prev, mt.dec) }}</td>
+          <td class="r">{{ num(mt.cum[-1] if mt.cum else none, mt.dec) }}</td>
+          {% for a in mt.actual %}<td class="r">{{ num(a, mt.dec) }}</td>{% endfor %}</tr>
+        <tr class="tgt"><td class="l">목표</td><td>-</td>
+          <td class="r">{{ num(mt.fy_target, mt.dec) }}</td>
+          {% for t in mt.target %}<td class="r">{{ num(t, mt.tdec) }}</td>{% endfor %}</tr>
+        <tr class="ach"><td class="l">달성</td><td>-</td>
+          <td class="r">{{ pc(mt.cum_ach) }}</td>
+          {% for a in mt.achieve %}<td class="r">{{ pc(a) }}</td>{% endfor %}</tr>
       </table>
     </div>
     {% endfor %}
@@ -443,8 +473,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             {% for v in q.achieve %}{% if loop.index0 <= q.upto_i %}<td class="r">{{ pc(v) }}</td>{% endif %}{% endfor %}</tr>
         </tbody>
       </table>
-      <div class="chartbox" style="margin-top:8px;">
-        {{ chart(q.qcost, none, q.vmax, q.months, 0, q.upto_i) }}
+      {# 목표는 비율(%)로 관리하므로 금액 막대에는 목표선을 그릴 수 없다. 그래서 COPQ 비율
+         그래프로 바꿔 목표선을 긋고, 목표를 넘은 달은 붉게 표시한다(2026-07-30 확정).
+         금액(공정불량·클레임·Q-COST)은 바로 위 표에 그대로 남아 있다. #}
+      <div class="ct" style="margin-top:6px;">COPQ 비율(%) — 목표 초과월은 <b style="color:#c00000;">붉게</b> 표시</div>
+      <div class="chartbox">
+        {{ chart(q.pct, q.target, q.pct_vmax, q.months, 3, q.upto_i) }}
       </div>
     </div>
     {% endfor %}

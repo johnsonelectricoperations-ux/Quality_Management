@@ -108,9 +108,13 @@ def _months_so_far(fy, cutoff):
 
 
 def _target_flat(conn, fy, part, kpi):
-    """MONTHLY_KPIS가 아닌 지표(scrap_cost/scrap_qty/copq)의 FY 단일 목표를 12개월에 반복."""
+    """MONTHLY_KPIS가 아닌 지표의 FY 단일 목표를 12개월에 반복.
+
+    비율 지표(scrap_cost/scrap_qty/copq)는 FY 목표가 그대로 매월의 목표지만,
+    warranty·incident는 FY 목표가 연간 '합계'라 월별 열에는 12개월 균등배분값을 쓴다.
+    """
     v = calc_target_val(conn, fy, part, kpi)
-    return [v] * 12
+    return [calc.monthly_target(v, kpi)] * 12
 
 
 # main.py의 target_val을 이 모듈에서도 쓰기 위한 얇은 래퍼(순환 임포트 방지용으로 지연 임포트)
@@ -257,7 +261,9 @@ def _block_incident(conn, m, fy, part):
 
     idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
     cum_official = sum(official[i] for i in idxs)
-    cum = {"official": cum_official, "target": target[0] if target else 0}
+    # 누계 목표는 균등배분값이 아니라 FY 목표(연간 합계) 원본을 쓴다.
+    cum = {"official": cum_official,
+           "target": calc_target_val(conn, fy, part, "incident") or 0}
     return {"sub": sub, "official": official, "unofficial": unofficial,
            "target": target, "cum": cum}
 
@@ -280,7 +286,9 @@ def _block_warranty(conn, m, fy, part):
 
     idxs = [i for i, (y, mo) in enumerate(months) if (y, mo) in _months_so_far(fy, cutoff)]
     cum_actual = sum(monthly[i] for i in idxs)
-    cum = {"actual": cum_actual, "target": target[0] if target else 0}
+    # 누계 목표는 균등배분값이 아니라 FY 목표(연간 합계) 원본을 쓴다.
+    cum = {"actual": cum_actual,
+           "target": calc_target_val(conn, fy, part, "warranty") or 0}
     return {"actual": monthly, "target": target, "cum": cum}
 
 

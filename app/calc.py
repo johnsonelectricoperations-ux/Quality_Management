@@ -38,6 +38,18 @@ def base_tmno(tm):
 CLAIM_COPQ_ITEMS = ["Warranty", "3rd Party Containment", "Quality Special Freight",
                     "Customer Incident Cost", "Unplanned Inspection & Sorting", "Variance"]
 
+# Warranty·Customer Incident 는 목표가 'FY 연간 합계'다(비율이 아니라 누적 총량).
+# 그래서 월별 실적과 나란히 놓을 목표는 FY 목표를 12개월로 균등배분한 값을 쓴다(2026-07-30 확정).
+# 누계(FY) 비교에는 균등배분값이 아니라 FY 목표 원본을 그대로 쓴다.
+FY_TOTAL_KPIS = ("warranty", "incident")
+
+
+def monthly_target(annual, kpi):
+    """월별 목표. FY 합계로 관리하는 지표(warranty·incident)만 12로 균등배분한다."""
+    if annual is None:
+        return None
+    return annual / 12 if kpi in FY_TOTAL_KPIS else annual
+
 # 외주소재불량 Scrap Cost 단가 = 완제품(기타)단가 × 이 배수 (2026-07-29 확정).
 # 외주에서 받은 소재 상태의 불량이라 공정단가(성형 0.5배 등)가 아니라 별도 배수를 쓴다.
 # 기존 엑셀 실적과 대조한 결과 파트별로 실제 배수가 달라 파트별로 둔다(1PART 0.794 → 0.8).
