@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 7
+CACHE_VERSION = 8
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -211,6 +211,12 @@ def _koi_block(conn, m, daily, fy, part, upto):
         prev = _koi_prev(conn, fy - 1, part, tkpi)
         # 균등배분한 월 목표는 0.42건처럼 소수가 나오므로 목표 표기는 한 자리 더 쓴다.
         tdec = max(dec, 1) if tkpi in calc.FY_TOTAL_KPIS else dec
+        month_vmax = max([a for a in acts if a is not None] + [t for t in tgts if t] + [0])
+        cum_vmax = max([c for c in cums if c is not None]
+                       + ([fy_target] if fy_target else []) + ([prev] if prev else []) + [0])
+        # FY 누적·월별 그래프의 막대 높이를 직접 비교할 수 있도록 같은 축을 쓴다
+        # (2026-07-30 확정 — 전에는 서로 달라 같은 값이라도 높이가 다르게 보였다).
+        shared_vmax = max(month_vmax, cum_vmax)
         out.append({"name": name, "unit": unit, "dec": dec, "tdec": tdec,
                     "fy_target": fy_target,
                     # warranty·incident는 목표가 '연간 합계'라 월별 칸의 목표는 ÷12한 값이다.
@@ -223,13 +229,7 @@ def _koi_block(conn, m, daily, fy, part, upto):
                     "cum": cums, "cum_target": [fy_target] * len(cums),
                     "cum_ach": achieve(cums[-1] if cums else None, fy_target),
                     "prev": prev,
-                    # FY26 종합과 FY27 누적은 같은 축을 쓴다 — 나란히 놓고 크기를 비교하는 게
-                    # 이 두 그래프의 목적이므로 축이 다르면 비교가 안 된다.
-                    # 월별은 자릿수가 달라(누적은 월의 몇 배) 별도 축을 쓴다.
-                    "vmax": max([a for a in acts if a is not None] + [t for t in tgts if t] + [0]),
-                    "cum_vmax": max([c for c in cums if c is not None]
-                                    + ([fy_target] if fy_target else [])
-                                    + ([prev] if prev else []) + [0])})
+                    "vmax": shared_vmax, "cum_vmax": shared_vmax})
     return {"months": [mo for (_y, mo) in use], "metrics": out}
 
 
@@ -253,11 +253,14 @@ def _proc_block(conn, m, agg, fy, part, upto):
     cp = sum(p for p in prod[:upto_i + 1] if p)
     cum = _ppm(cq, cp)
     ft = _target(conn, fy, part, "proc_ppm")
-    return {"months": months, "upto_i": upto_i, "ppm": ppm, "target": tgt, "achieve": ach,
-            "fy_cum": cum, "fy_cum_ach": achieve(cum, ft), "fy_target": ft,
+    vmax = max([v for v in ppm if v] + [t for t in tgt if t] + [0])
+    cum_vmax = max([v for v in [cum, ft] if v] + [0])
+    return {"months": months, "upto_i": upto_i, "qty": qty, "ppm": ppm, "target": tgt, "achieve": ach,
+            "fy_cum": cum, "fy_cum_qty": cq, "fy_cum_ach": achieve(cum, ft), "fy_target": ft,
             "prev_actual": _fy_actual(conn, fy - 1, part, "proc_ppm"),
             "prev_target": _target(conn, fy - 1, part, "proc_ppm"),
-            "vmax": max([v for v in ppm if v] + [t for t in tgt if t] + [0])}
+            # FY누적·월별 그래프의 y축을 하나로 맞춘다(2026-07-30 — 막대 높이가 직접 비교되게).
+            "vmax": max(vmax, cum_vmax), "cum_vmax": max(vmax, cum_vmax)}
 
 
 def _ban_block(conn, m, agg, fy, part, upto, top=2):
@@ -302,15 +305,17 @@ def _ban_block(conn, m, agg, fy, part, upto, top=2):
                 "defects": " / ".join("%s %d" % (n, q) for n, q in
                                       sorted(v["by"].items(), key=lambda kv: -kv[1])[:3]),
             })
+        vmax = max([v for v in ppm if v] + [t for t in tgt if t] + [0])
+        cum_vmax = max([v for v in [cum, ft] if v] + [0])
+        shared_vmax = max(vmax, cum_vmax)
         out[proc] = {"months": months, "upto_i": upto_i, "qty": qty, "ppm": ppm, "target": tgt,
                      "achieve": ach, "fy_cum": cum, "fy_cum_ach": achieve(cum, ft),
                      "fy_cum_qty": cq, "fy_target": ft,
                      "prev_actual": _fy_actual(conn, fy - 1, part, "ban_ppm_" + proc),
                      "prev_target": _target(conn, fy - 1, part, "ban_ppm_" + proc),
                      "top_items": rows,
-                     "vmax": max([v for v in ppm if v] + [t for t in tgt if t] + [0]),
-                     # '누계' 미니 차트(막대 1개)용 축. KOI FY27누적 패널과 같은 방식(2026-07-30).
-                     "cum_vmax": max([v for v in [cum, ft] if v] + [0])}
+                     # FY누적·월별 그래프의 y축을 하나로 맞춘다(2026-07-30 확정).
+                     "vmax": shared_vmax, "cum_vmax": shared_vmax}
     return out
 
 
@@ -492,6 +497,11 @@ def _scrap_block(conn, m, agg, fy, y, mth):
                        "defect": " / ".join(list(dict(sorted(names.items(),
                                                              key=lambda kv: -kv[1])).keys())[:2])})
         top3[part] = t3
+    # 1P·2P 그래프의 y축을 동일하게 맞춘다 — 안 그러면 파트마다 스케일이 달라
+    # 막대 높이만 보고 금액을 비교할 수 없다(2026-07-30 확정).
+    shared_pareto_vmax = max([p["vmax"] for p in pareto.values()] + [1])
+    for p in pareto.values():
+        p["vmax"] = shared_pareto_vmax
     return {"prev_ym": prev, "cur_ym": cur, "rows": table, "total": total,
             "pareto": pareto, "top3": top3}
 
@@ -546,6 +556,11 @@ def build(conn, m, y, mth):
     agg = _collect_fy(conn, m, fy)
     txt = conn.execute("SELECT content FROM report_text WHERE ym=? AND section='main_tasks'",
                        ("%04d-%02d" % (y, mth),)).fetchone()
+    copq = {PART_LABEL[p]: _copq_block(conn, m, agg, fy, p, mth) for p in ("VMS PART", "TM PART")}
+    # 1P·2P COPQ 비율 그래프의 y축도 파레토와 같은 이유로 동일하게 맞춘다(2026-07-30).
+    shared_pct_vmax = max(q["pct_vmax"] for q in copq.values())
+    for q in copq.values():
+        q["pct_vmax"] = shared_pct_vmax
     return {
         "ym": "%04d-%02d" % (y, mth), "y": y, "m": mth,
         "fy_label": calc.fy_label(fy), "prev_fy_label": calc.fy_label(fy - 1),
@@ -560,8 +575,7 @@ def build(conn, m, y, mth):
         "issue": {PART_LABEL[p]: _issue_block(conn, fy, p, mth) for p in ("VMS PART", "TM PART")},
         "claim": _claim_block(conn, fy, mth),
         "scrap": _scrap_block(conn, m, agg, fy, y, mth),
-        "copq": {PART_LABEL[p]: _copq_block(conn, m, agg, fy, p, mth)
-                 for p in ("VMS PART", "TM PART")},
+        "copq": copq,
         "main_tasks": (txt["content"] if txt else ""),
         "built_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "v": CACHE_VERSION,

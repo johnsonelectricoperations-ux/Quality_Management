@@ -171,7 +171,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <div class="chartbox">{{ chart(mt.actual, (none if mt.is_fy_total else mt.target), mt.vmax, k.months, mt.dec, none, mt.tdec, '월', False) }}</div>
         </div>
       </div>
-      <table style="margin-top:5px;">
+      <table style="margin-top:6px;">
         <tr><th class="l" style="width:40px;"></th>
           <th>{{ d.fy_label }}<br>누적</th>
           {% for mo in k.months %}<th>{{ mo }}월</th>{% endfor %}</tr>
@@ -199,18 +199,30 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 <section class="slide">
   <div class="stitle">(2) {{ lbl }} 공정불량 현황 <small>— 단위 PPM</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
-    <div style="height:40%;min-height:0;display:flex;gap:12px;">
-      <div class="card" style="flex:1;">
-        <div class="chartbox">{{ chart(p.ppm, p.target, p.vmax, p.months, 0, p.upto_i) }}</div>
-      </div>
-      <div class="card" style="width:210px;">
-        <h3>요약</h3>
-        <table>
-          <tr><th class="l">{{ d.prev_fy_label }} 실적</th><td class="r">{{ num(p.prev_actual) }}</td></tr>
-          <tr><th class="l">{{ d.prev_fy_label }} 목표</th><td class="r">{{ num(p.prev_target) }}</td></tr>
-          <tr><th class="l">{{ d.fy_label }} 누계</th><td class="r">{{ num(p.fy_cum) }}</td></tr>
-          <tr><th class="l">{{ d.fy_label }} 목표</th><td class="r">{{ num(p.fy_target) }}</td></tr>
-          <tr class="ach"><th class="l">누계 달성율</th><td class="r">{{ pc(p.fy_cum_ach) }}</td></tr>
+    {# KOI 현황과 같은 구성: FY 누계(단일 막대) → 월별 → 아래 실적표(2026-07-30 확정). #}
+    <div style="height:46%;min-height:0;display:flex;gap:12px;">
+      <div class="card" style="flex:1;display:flex;flex-direction:column;">
+        <div class="twoch">
+          <div style="flex:.35;">
+            <div class="ct">{{ d.fy_label }} 누계 <b>{{ pc(p.fy_cum_ach) }}</b></div>
+            <div class="chartbox">{{ chart([p.fy_cum], [p.fy_target], p.cum_vmax, [d.fy_label], 0, none, none, '', False) }}</div>
+          </div>
+          <div>
+            <div class="ct">월별</div>
+            <div class="chartbox">{{ chart(p.ppm, p.target, p.vmax, p.months, 0, p.upto_i, none, '월', False) }}</div>
+          </div>
+        </div>
+        <table style="margin-top:6px;">
+          <tr><th class="l" style="width:74px;"></th><th>{{ d.fy_label }}<br>누계</th>
+            {% for mo in p.months %}{% if loop.index0 <= p.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr>
+          <tr><td class="l">불량(EA)</td><td class="r">{{ num(p.fy_cum_qty) }}</td>
+            {% for v in p.qty %}{% if loop.index0 <= p.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr><td class="l">실적(PPM)</td><td class="r">{{ num(p.fy_cum) }}</td>
+            {% for v in p.ppm %}{% if loop.index0 <= p.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="tgt"><td class="l">목표(PPM)</td><td class="r">{{ num(p.fy_target) }}</td>
+            {% for v in p.target %}{% if loop.index0 <= p.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          <tr class="ach"><td class="l">달성</td><td class="r">{{ pc(p.fy_cum_ach) }}</td>
+            {% for v in p.achieve %}{% if loop.index0 <= p.upto_i %}<td class="r">{{ pc(v) }}</td>{% endif %}{% endfor %}</tr>
         </table>
       </div>
     </div>
@@ -258,8 +270,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
               <div class="chartbox">{{ chart(b.ppm, b.target, b.vmax, b.months, 0, b.upto_i, none, '월', False) }}</div>
             </div>
           </div>
-          <table style="margin-top:5px;font-size:10px;">
-            <tr><th class="l" style="width:58px;"></th><th>{{ d.fy_label }}<br>누계</th>
+          <table style="margin-top:6px;">
+            <tr><th class="l" style="width:74px;"></th><th>{{ d.fy_label }}<br>누계</th>
               {% for mo in b.months %}{% if loop.index0 <= b.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr>
             <tr><td class="l">불량(EA)</td><td class="r">{{ num(b.fy_cum_qty) }}</td>
               {% for v in b.qty %}{% if loop.index0 <= b.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
@@ -455,7 +467,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <div class="col">
               <div class="v">{{ num(b.value) }}<span style="color:#ed7d31;font-weight:600;"> {{ b.cum }}%</span></div>
               <div class="bar {{ 'etc' if b.etc }}" style="height:calc({{ (b.value / (sc.pareto[pk].vmax * 1.25) * 100)|round(1) }}% * 0.84)"></div>
-              <div class="x">{{ b.label }}</div>
+              {# 품명+개수 라벨이 2줄로 접히면 옆 막대와 y축 기준선이 어긋나 보인다.
+                 글자를 줄여 한 줄에 들어가게 한다(2026-07-30). #}
+              <div class="x" style="font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ b.label }}</div>
             </div>
           {% else %}
             <div class="empty">데이터 없음</div>
