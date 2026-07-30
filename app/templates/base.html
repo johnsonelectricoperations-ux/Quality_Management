@@ -10,7 +10,7 @@
 <div class="app">
 <aside class="sidebar">
   <a class="logo" href="/" title="Johnson Electric"><img src="/static/logo_JE.svg" alt="Johnson Electric"></a>
-  <div class="brand"><span class="mark"></span><div>통합품질관리<small>Quality Management</small></div></div>
+  <div class="brand"><div>통합품질관리<small>Quality Management</small></div></div>
   {#- 권한 없는 메뉴는 링크가 아닌 span으로 그려 흐리게 + 클릭 불가로 만든다(2026-07-30 확정) -#}
   {% macro nav(key, href) %}
     {%- if can_menu is not defined or can_menu.get(key, True) -%}
