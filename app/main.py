@@ -894,6 +894,90 @@ def data_check_unhide(request: Request, tm_no: str = Form(...)):
     return RedirectResponse("/admin/data-check?show_hidden=1", status_code=303)
 
 
+# ── 대표품명(품명 그룹) 관리 ────────────────────────────
+# 월마감 p15 품명별 파레토가 TM-NO 단위로 쪼개져 의미가 없던 문제를 품명 단위 집계로 바꾸면서 신설.
+# 자동 규칙(괄호·ASS'Y·구두점 제거)으로 대부분 묶이고, 규칙으로 못 잡는 것(오타 등)만 여기서 지정한다.
+@app.get("/admin/products/alias", response_class=HTMLResponse)
+def product_alias_list(request: Request, part: str = "VMS PART", q: str = "",
+                       msg: str = "", err: str = ""):
+    u, g = _perm_guard(request, "products", "view")
+    if g:
+        return g
+    if part not in ("VMS PART", "TM PART"):
+        part = "VMS PART"
+    conn = db.connect()
+    alias = calc.load_alias(conn)
+    args = [part]
+    wsql = "WHERE part=? AND name<>''"
+    if q:
+        wsql += " AND UPPER(name) LIKE ?"
+        args.append("%" + q.upper() + "%")
+    rows = []
+    for r in conn.execute(f"SELECT name, COUNT(*) n FROM product {wsql} "
+                          f"GROUP BY name ORDER BY name", args):
+        rows.append({"name": r["name"], "cnt": r["n"],
+                     "auto": calc.auto_group_name(r["name"]),
+                     "group": calc.group_of(alias, part, r["name"]),
+                     "saved": alias["exact"].get((part, r["name"]), "")})
+    # 대표품명별로 몇 개 품명이 묶였는지 — 묶임 결과를 눈으로 확인하는 용도
+    merged = {}
+    for r in rows:
+        merged.setdefault(r["group"], []).append(r["name"])
+    groups = sorted(((g, ns) for g, ns in merged.items() if len(ns) > 1),
+                    key=lambda kv: -len(kv[1]))
+    # load_alias가 `*`를 떼어 보관하므로 화면에는 패턴 형태로 되돌려 보여준다.
+    prules = [{"name": n + "*", "group": gp} for (p, n), gp in alias["prefix"] if p == part]
+    conn.close()
+    return render(request, "product_alias.html", u, active="products",
+                  heading="대표품명 (품명 그룹) 관리", crumb="관리 · 제품 마스터",
+                  pending=pending_count(), part=part, q=q, rows=rows, groups=groups,
+                  prules=prules, msg=msg, err=err,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "products", "edit")))
+
+
+@app.post("/admin/products/alias")
+async def product_alias_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "products", "edit")):
+        return RedirectResponse("/admin/products/alias", status_code=303)
+    form = await request.form()
+    part = form.get("part") or "VMS PART"
+    q = (form.get("q") or "").strip()
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = db.connect()
+    n = 0
+    for key in form.keys():
+        if not key.startswith("g_"):
+            continue
+        name = key[2:]
+        val = (form.get(key) or "").strip()
+        if val:
+            conn.execute(
+                "INSERT INTO product_alias(part,name,group_name,updated_at,updated_by) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(part,name) DO UPDATE SET "
+                "group_name=excluded.group_name, updated_at=excluded.updated_at, "
+                "updated_by=excluded.updated_by", (part, name, val, now, u["name"]))
+        else:
+            # 빈칸 = 지정 해제 → 자동 규칙으로 돌아간다
+            conn.execute("DELETE FROM product_alias WHERE part=? AND name=?", (part, name))
+        n += 1
+    conn.commit()
+    conn.close()
+    # 대표품명이 바뀌면 월마감 파레토가 달라지므로 캐시를 버려 다음 조회 때 다시 계산되게 한다.
+    _drop_report_cache()
+    qs = f"?part={part}&msg={n}건 반영 (보고서는 다시 계산됩니다)"
+    if q:
+        qs += f"&q={q}"
+    return RedirectResponse("/admin/products/alias" + qs, status_code=303)
+
+
+def _drop_report_cache():
+    conn = db.connect()
+    conn.execute("DELETE FROM report_cache")
+    conn.commit()
+    conn.close()
+
+
 @app.get("/admin/products", response_class=HTMLResponse)
 def products_list(request: Request, q: str = "", part: str = "", miss: str = "",
                   page: int = 1, msg: str = "", err: str = ""):

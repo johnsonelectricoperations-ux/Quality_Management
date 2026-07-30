@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -436,22 +436,34 @@ def _scrap_block(conn, m, agg, fy, y, mth):
         total[part] = {"prev": round(a), "cur": round(b),
                        "rate": (round((b - a) / a * 100) if a else None), "up": b > a}
 
+    # 파레토는 **대표품명(품명 그룹)** 단위로 묶는다(2026-07-30 확정).
+    # 예전에는 TM-NO 단위여서 같은 품명이 여러 막대로 쪼개졌고, 1PART 7월 기준 상위5가 전체의
+    # 28%밖에 안 돼 파레토 구실을 못 했다(품명으로 묶으면 80%). 아래 표는 TM-NO 상세로 남긴다.
+    alias = calc.load_alias(conn)
     pareto, top3 = {}, {}
     for part in parts:
         items = [(tm, c / 10.0) for (ym, p, tm), c in agg["tmc"].items()
                  if ym == cur and p == part and c > 0]
         items.sort(key=lambda kv: -kv[1])
-        tot = sum(c for _t, c in items) or 1
-        bars, acc = [], 0.0
-        for tm, c in items[:5]:
-            acc += c
+        grp = defaultdict(float)
+        gcount = defaultdict(set)
+        for tm, c in items:
             prod = m.product.get(tm)
-            bars.append({"label": (prod[0] if prod else (tm or "(미지정)"))[:14],
+            g = calc.group_of(alias, part, prod[0]) if prod else (tm or "(미지정)")
+            grp[g] += c
+            gcount[g].add(tm)
+        gitems = sorted(grp.items(), key=lambda kv: -kv[1])
+        tot = sum(grp.values()) or 1
+        bars, acc = [], 0.0
+        for g, c in gitems[:5]:
+            acc += c
+            n = len(gcount[g])
+            bars.append({"label": (g or "(미지정)")[:17] + ("" if n < 2 else " (%d)" % n),
                          "value": round(c), "cum": round(acc / tot * 100), "etc": False})
-        etc = tot - sum(c for _t, c in items[:5])
+        etc = tot - sum(c for _g, c in gitems[:5])
         if etc > 0.5:
             # 품목이 분산된 파트는 '기타'가 상위5보다 클 수 있다 — 회색으로 구분해 오해를 막는다.
-            bars.append({"label": "기타(%d품목)" % max(0, len(items) - 5),
+            bars.append({"label": "기타(%d품명)" % max(0, len(gitems) - 5),
                          "value": round(etc), "cum": 100, "etc": True})
         pareto[part] = {"bars": bars, "vmax": max([b["value"] for b in bars] + [1])}
         t3 = []

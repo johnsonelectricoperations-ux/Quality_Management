@@ -50,6 +50,57 @@ def monthly_target(annual, kpi):
         return None
     return annual / 12 if kpi in FY_TOTAL_KPIS else annual
 
+
+# ── 대표품명(품명 그룹) ─────────────────────────────────
+# 같은 품목이 사양·조립여부 표기 때문에 여러 품명으로 흩어져 있어 품명별 파레토가 쪼개진다.
+# 아래 규칙으로 대부분 묶이고, 규칙으로 못 잡는 것(오타 등)만 product_alias 표에 사람이 등록한다.
+#   HUB(FS20) → HUB   /   VALVE,PISTON → VALVE PISTON   /   ROD GUIDE ASS'Y → ROD GUIDE
+# 괄호 밖의 `_반가공` 같은 접미는 **일부러 남긴다** — 다른 품목에서는 구분이 필요할 수 있어
+# 규칙으로 지우면 위험하다. 그런 건은 별칭표에서 사람이 판단한다.
+_ASSY_RE = re.compile(r"\b(?:ASS'?Y|ASSY|ASM)\b")
+_PAREN_RE = re.compile(r"\([^)]*\)")
+_PUNCT_RE = re.compile(r"[,\-/]")
+_WS_RE = re.compile(r"\s+")
+
+
+def auto_group_name(name):
+    """품명 → 자동 대표품명. 별칭표에 등록이 없을 때 쓰는 기본 규칙."""
+    s = (name or "").upper()
+    s = _PAREN_RE.sub(" ", s)
+    s = _ASSY_RE.sub(" ", s)
+    s = _PUNCT_RE.sub(" ", s)
+    s = _WS_RE.sub(" ", s).strip()
+    return s or (name or "").strip()
+
+
+def load_alias(conn):
+    """사람이 등록한 별칭. 품명 끝에 `*`를 붙이면 그 접두어로 시작하는 품명 전체에 적용된다.
+
+    접두어 규칙이 필요한 이유: 'CARRIER 는 모두 한 그룹' 처럼 앞으로 새 품명이 생겨도 같이
+    묶여야 하는 경우가 있다. 이름을 하나하나 등록해 두면 신규 품명이 조용히 빠진다.
+    """
+    exact, prefix = {}, []
+    for r in conn.execute("SELECT part, name, group_name FROM product_alias"):
+        nm = (r["name"] or "").strip()
+        if nm.endswith("*"):
+            prefix.append(((r["part"], nm[:-1].upper()), r["group_name"]))
+        else:
+            exact[(r["part"], nm)] = r["group_name"]
+    prefix.sort(key=lambda kv: -len(kv[0][1]))      # 더 구체적인(긴) 접두어가 이긴다
+    return {"exact": exact, "prefix": prefix}
+
+
+def group_of(alias, part, name):
+    """대표품명. 별칭 등록(정확일치 → 접두어)이 있으면 그것, 없으면 자동 규칙."""
+    g = alias["exact"].get((part, name))
+    if g:
+        return g
+    up = (name or "").upper()
+    for (p, pre), g in alias["prefix"]:
+        if p == part and up.startswith(pre):
+            return g
+    return auto_group_name(name)
+
 # 외주소재불량 Scrap Cost 단가 = 완제품(기타)단가 × 이 배수 (2026-07-29 확정).
 # 외주에서 받은 소재 상태의 불량이라 공정단가(성형 0.5배 등)가 아니라 별도 배수를 쓴다.
 # 기존 엑셀 실적과 대조한 결과 파트별로 실제 배수가 달라 파트별로 둔다(1PART 0.794 → 0.8).

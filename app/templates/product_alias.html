@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel"><div class="pbody" style="font-size:12px;line-height:1.7;color:var(--tx2);">
+  같은 품목이 사양·조립여부·오타 때문에 여러 품명으로 흩어져 있으면
+  월마감 보고서의 <b>품명별 발생비용 파레토</b>가 쪼개져 의미가 없어집니다.
+  그래서 품명을 <b>대표품명</b>으로 묶습니다.
+  <br>
+  · 괄호 안 사양 · <code>ASS'Y</code> · 쉼표/하이픈은 <b>자동으로</b> 정리됩니다
+    (<code>HUB(FS20)</code> → <code>HUB</code>, <code>VALVE,PISTON</code> → <code>VALVE PISTON</code>).
+  <br>
+  · 자동 규칙으로 못 잡는 것(오타 등)만 아래 <b>대표품명</b> 칸에 직접 적어 주세요.
+    비우면 자동 규칙으로 돌아갑니다.
+  <br>
+  · 품명 끝에 <code>*</code>를 쓴 <b>접두어 규칙</b>은 새 품명이 생겨도 함께 묶입니다
+    (아래 '적용 중인 접두어 규칙' 참고).
+</div></div>
+
+<div class="fyrow" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+  {% for pv, pl in [('VMS PART','1PART'), ('TM PART','2PART')] %}
+  <a class="btn btn-sm {{ 'btn-p' if part==pv else 'btn-s' }}" style="text-decoration:none;"
+     href="/admin/products/alias?part={{ pv }}">{{ pl }}</a>
+  {% endfor %}
+  <form method="get" action="/admin/products/alias" style="display:flex;gap:6px;margin-left:auto;">
+    <input type="hidden" name="part" value="{{ part }}">
+    <input class="in" name="q" value="{{ q }}" placeholder="품명 검색" style="width:180px;">
+    <button class="btn btn-s btn-sm">검색</button>
+  </form>
+  <a class="btn btn-s btn-sm" style="text-decoration:none;" href="/admin/products">← 제품 마스터</a>
+</div>
+
+{% if prules %}
+<div class="panel"><div class="phead"><h2>적용 중인 접두어 규칙</h2>
+  <span class="tot">{{ prules|length }}건</span></div>
+  <table>
+    <thead><tr><th class="l">품명 패턴</th><th class="l">대표품명</th></tr></thead>
+    <tbody>
+    {% for r in prules %}
+      <tr><td class="l"><code>{{ r.name }}</code></td><td class="l"><b>{{ r.group }}</b></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if groups %}
+<div class="panel"><div class="phead"><h2>묶인 결과</h2>
+  <span class="tot">{{ groups|length }}개 그룹</span></div>
+  <table>
+    <thead><tr><th class="l" style="width:200px;">대표품명</th><th class="l">묶인 품명</th></tr></thead>
+    <tbody>
+    {% for g, names in groups %}
+      <tr><td class="l"><b>{{ g }}</b> <span style="color:var(--tx3);">({{ names|length }})</span></td>
+        <td class="l" style="font-size:11.5px;color:var(--tx2);">{{ names|join(' · ') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/products/alias">
+<input type="hidden" name="part" value="{{ part }}">
+<input type="hidden" name="q" value="{{ q }}">
+<div class="panel"><div class="phead"><h2>품명 목록 ({{ part|pl }})</h2>
+  <span class="tot">{{ rows|length }}개 품명</span>
+  {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}</div>
+  <table>
+    <thead><tr><th class="l">품명</th><th>품목수</th><th class="l">자동 규칙 결과</th>
+      <th class="l" style="width:230px;">대표품명 (직접 지정)</th><th class="l">최종 적용</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="l">{{ r.name }}</td>
+        <td class="num">{{ r.cnt }}</td>
+        <td class="l" style="color:var(--tx3);font-size:11.5px;">{{ r.auto }}</td>
+        <td><input class="in" name="g_{{ r.name }}" value="{{ r.saved }}"
+                   placeholder="{{ r.auto }}" {{ 'readonly' if not can_edit }}
+                   style="width:100%;font-size:12px;"></td>
+        <td class="l" style="font-weight:700;{{ 'color:var(--p-600);' if r.group != r.auto }}">{{ r.group }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">품명이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if can_edit %}
+<div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
+  <button class="btn btn-p">저장</button>
+  <span style="color:var(--tx3);font-size:12px;">
+    저장하면 월마감 보고서의 품명별 파레토가 다시 계산됩니다.
+  </span>
+</div></div>
+{% endif %}
+</form>
+{% endblock %}

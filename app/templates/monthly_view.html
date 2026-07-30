@@ -411,7 +411,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     <div class="grid2" style="flex:1;min-height:0;">
       {% for pk, lbl in [('VMS PART','생산1P'), ('TM PART','생산2P')] %}
       <div class="card">
-        <h3>{{ lbl }} 품명별 발생비용 (상위 5 + 기타)</h3>
+        <h3>{{ lbl }} 대표품명별 발생비용 (상위 5 + 기타)</h3>
         <div class="chartbox" style="flex:none;height:52%;">
           <div class="mchart">
           {% for b in sc.pareto[pk].bars %}
@@ -425,8 +425,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           {% endfor %}
           </div>
         </div>
+        {# 위 그래프는 대표품명 단위, 아래 표는 TM-NO 단위 상세 — 둘은 서로 보완한다. #}
         <table style="margin-top:4px;">
-          <thead><tr><th style="width:22px;">#</th><th class="l">품명</th><th>품번</th>
+          <thead><tr><th style="width:22px;">#</th><th class="l">품명</th><th>TM-NO</th>
             <th>발생비용</th><th>발생공정</th><th class="l">발생유형</th></tr></thead>
           <tbody>
           {% for t in sc.top3[pk] %}

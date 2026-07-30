@@ -115,6 +115,17 @@ CREATE TABLE IF NOT EXISTS defect_type_pending (
   src_file TEXT DEFAULT '', dismissed INTEGER NOT NULL DEFAULT 0,
   UNIQUE(part, kind, name)
 );
+CREATE TABLE IF NOT EXISTS product_alias (
+  -- 대표품명(품명 그룹) 별칭표 — 2026-07-30 신설.
+  -- 같은 품목이 사양·조립여부·오타 때문에 여러 품명으로 흩어져 있어(HUB(FS20), ROD GUIDE ASS'Y,
+  -- CARRIER PALNET_반가공 …) 품명별 파레토가 쪼개져 의미가 없었다. 그래서 품명 → 대표품명을 둔다.
+  -- 비어 있으면 자동 정규화 규칙(괄호/ASS'Y/구두점 제거)을 쓰고, 규칙으로 못 잡는 것(오타 등)만
+  -- 여기에 사람이 등록한다. **제품별이 아니라 품명 단위**라 한 줄이 그 품명의 모든 품목에 적용된다.
+  id INTEGER PRIMARY KEY, part TEXT NOT NULL, name TEXT NOT NULL,
+  group_name TEXT NOT NULL,
+  updated_at TEXT DEFAULT '', updated_by TEXT DEFAULT '',
+  UNIQUE(part, name)
+);
 CREATE TABLE IF NOT EXISTS report_cache (
   -- 월마감 보고서 조립 결과(JSON). 발표 중 화면 지연을 막기 위한 캐시일 뿐,
   -- 마감 후 수정불가 규칙은 없다(2026-07-30 확정) — '재계산'으로 언제든 갱신한다.
@@ -320,7 +331,25 @@ def init_db():
     _normalize_tmno(conn)
     _ensure_default_admin(conn)
     _ensure_default_permissions(conn)
+    _ensure_default_aliases(conn)
     conn.close()
+
+
+# 사용자가 확정한 대표품명 규칙(2026-07-30). 끝의 `*`는 접두어 규칙 — 새 품명이 생겨도 같이 묶인다.
+# 나머지(HUB(FS20)·VALVE,PISTON·TELES BLOCK(L) 등)는 자동 규칙으로 묶이므로 등록하지 않는다.
+_DEFAULT_ALIASES = [
+    ("TM PART", "CARRIER*", "CARRIER"),      # CARRIER PALNET/PLANET/-INPUT… 전부 한 그룹
+    ("VMS PART", "ROD GUIDE*", "ROD GUIDE"),  # ROD GUIDE, ROD GUIDE ASS'Y
+    ("VMS PART", "R/GUIDE*", "ROD GUIDE"),    # R/GUIDE ASSY 도 같은 품목
+]
+
+
+def _ensure_default_aliases(conn):
+    """확정 규칙을 없는 것만 채운다. 사람이 고친 값은 절대 덮어쓰지 않는다."""
+    for part, name, group in _DEFAULT_ALIASES:
+        conn.execute("INSERT OR IGNORE INTO product_alias(part,name,group_name,updated_by) "
+                     "VALUES(?,?,?,'기본규칙')", (part, name, group))
+    conn.commit()
 
 
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).

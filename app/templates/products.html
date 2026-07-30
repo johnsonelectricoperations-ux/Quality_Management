@@ -13,6 +13,8 @@
       </select>
       <input class="in" name="q" value="{{ q }}" placeholder="TM-NO / 품명 검색" style="width:190px;padding:6px 10px;">
       <button class="btn btn-s btn-sm">검색</button>
+      <a class="btn btn-s btn-sm" href="/admin/products/alias" style="text-decoration:none;"
+         title="여러 품명을 한 품목으로 묶어 월마감 품명별 파레토에 반영합니다">🏷 대표품명 관리</a>
       {% if can_edit %}<a class="btn btn-p btn-sm" href="/admin/products/new" style="text-decoration:none;">+ 제품 등록</a>{% endif %}
     </form>
   </div>
