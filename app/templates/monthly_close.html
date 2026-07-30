@@ -23,7 +23,8 @@
     <span class="badge bg-info">계산됨</span>
     <span style="color:var(--tx3);">최종 계산 {{ cache.built_at }}{% if cache.built_by %} · {{ cache.built_by }}{% endif %}</span>
     <span style="color:var(--tx3);">— 발표 화면은 이 계산 결과를 즉시 불러오므로 지연이 없습니다.
-      원천 데이터나 위 서술 내용을 바꿨으면 <b>↻ 재계산</b>을 누르세요.</span>
+      아래 서술 내용은 저장하면 자동으로 반영됩니다. <b>↻ 재계산</b>은 원천 데이터(불량·생산량 등)가
+      바뀐 뒤 최신 수치로 갱신할 때 누르세요.</span>
   {% else %}
     <span class="badge bg-hold">미계산</span>
     <span style="color:var(--tx3);">'보고서 보기'를 처음 열 때 자동으로 계산됩니다(약 0.3초).</span>
@@ -37,7 +38,6 @@
     <span class="tot">{{ ym }}</span>
     {% if s.updated_at %}<span style="margin-left:12px;font:500 11px/1 inherit;color:var(--tx3);">
       최종 수정 {{ s.updated_at }} · {{ s.updated_by }}</span>{% endif %}
-    {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}
   </div>
     <div class="pbody">
       <div style="color:var(--tx3);font-size:11.5px;margin:-2px 0 8px;white-space:pre-line;">{{ s.hint }}</div>
@@ -52,7 +52,8 @@
   <div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
     <button class="btn btn-p">저장</button>
     <span style="color:var(--tx3);font-size:12px;">
-      저장한 내용은 해당 마감월({{ ym }}) 보고서에 그대로 실립니다.
+      저장하면 해당 마감월({{ ym }}) 보고서 마지막 장에 <b>바로 반영</b>됩니다.
+      (저장 시 보고서가 자동으로 다시 계산되므로 '재계산'을 따로 누를 필요는 없습니다)
     </span>
   </div></div>
   {% endif %}

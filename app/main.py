@@ -714,8 +714,16 @@ async def monthly_close_save(request: Request):
             "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
             (ym, key, (form.get(key) or "").strip(), now, u["name"]))
     conn.commit()
+    # 서술 내용은 발표용 캐시(report_cache)에 함께 구워져 들어간다. 저장만 하고 캐시를 그대로
+    # 두면 보고서에는 옛 내용이 계속 보이므로, 저장 즉시 다시 계산해 둔다(약 0.3초).
+    # 사용자가 '재계산'을 따로 누르지 않아도 되도록 한 것이다(2026-07-30).
+    valid = {"%04d-%02d" % (y, mo): (y, mo) for (y, mo) in _report_months(conn)}
+    if ym in valid:
+        y, mth = valid[ym]
+        report_monthly.rebuild(conn, calc.Masters(conn), y, mth, u["name"])
     conn.close()
-    return RedirectResponse(f"/report/monthly?ym={ym}&msg=저장됨", status_code=303)
+    return RedirectResponse(f"/report/monthly?ym={ym}&msg=저장됨 (보고서에 바로 반영됨)",
+                            status_code=303)
 
 
 # ── 제품 마스터 관리 (CSV 가져오기 + 등록/수정/삭제) ────
