@@ -221,6 +221,41 @@ def ingest_defect_master(conn, path):
 
 
 # ── 100EA 검토(외주/폐기 공통) ──────────────────────────
+def ensure_defect_types(conn, rows):
+    """**외주소재** 적재분의 세부 불량명을 불량유형 마스터에 자동 등록(2026-07-30 확정).
+
+    외주소재는 세부 불량명이 xlsm의 19종으로 **유한하고 안정적**이라 마스터에 등재해 두면
+    불량유형별 조회에서 개별 선택이 되고, 필요하면 배분규칙도 지정할 수 있다.
+    **폐기불량은 이 함수를 쓰지 않는다** — 비고(remark)가 자유텍스트라 값이 계속 늘어나 마스터
+    등재로는 따라갈 수 없다. 폐기는 조회 화면에서 '폐기불량' 하나로 묶어 보여주고 세부 비고는
+    그래프 툴팁으로 확인한다(2026-07-30 확정).
+
+    ★ **발생공정·배분기준은 반드시 공란으로 등록한다.** `calc.Masters.resolve()` 의
+    `has_master_rule = bool(dt and (dt[1] or dt[2]))` 가 False로 유지돼 기존과 똑같이
+    "저장된 공정 100%"로 계산되기 때문이다 — 즉 **KPI 수치가 바뀌지 않는다.**
+    배분규칙이 필요하면 불량유형 마스터 화면에서 사람이 나중에 지정한다.
+    rows: `_reingest_preserve_reviewed` 와 같은 형태의 튜플 목록.
+    """
+    have = {(r["part"], r["kind"], r["name"])
+            for r in conn.execute("SELECT part,kind,name FROM defect_type")}
+    add, seen = [], set()
+    for row in rows:
+        name, part, kind = row[2], row[4], (row[6] or "공정")
+        if not part or not name:
+            continue
+        key = (part, kind, name)
+        if key in have or key in seen:
+            continue
+        seen.add(key)
+        add.append((part, kind, "", name, ""))
+    if add:
+        conn.executemany(
+            "INSERT INTO defect_type(part,kind,process,name,alloc_rule) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(part,kind,name) DO NOTHING", add)
+        conn.commit()
+    return len(add)
+
+
 def _reingest_preserve_reviewed(conn, source, rows):
     """재스캔 idempotent 적재이면서, 사람이 검토(승인/수정/반려)한 행과 **이번 달 이전(지난달까지) 행**은
     원본이 바뀌어도 건드리지 않고 그대로 보존한다(마감된 과거월 데이터 잠금).
@@ -572,6 +607,7 @@ def ingest_scrap_db(conn, path, quarantine_100=True):
         rows.append((d, tm, name, qty, part, proc, "공정", status, ""))
     src.close()
     pend = sum(1 for row in rows if row[7] == "pending")
+    # 폐기는 마스터 자동등록을 하지 않는다(비고 자유텍스트) — 조회는 '폐기불량'으로 묶어서 본다
     n, _skipped, _locked = _reingest_preserve_reviewed(conn, "discard", rows)
     return n, {"수량없음_스킵": skip_noqty, "파트없음_스킵": skip_nopart, "비표준공정→기타": unmapped,
               "검토대기": pend}
@@ -759,6 +795,7 @@ def ingest_outsource_xlsm(conn, path, quarantine_100=True):
             if status == "pending":
                 pend += 1
             rows.append((d, tm, hdr, qty, part, proc, "공정", status, ""))
+    ensure_defect_types(conn, rows)     # 새 세부불량명을 마스터에 자동 등록(계산 불변)
     n, _skipped, _locked = _reingest_preserve_reviewed(conn, "outsource", rows)
     return n, pend, skip_no_tm, []
 

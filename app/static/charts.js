@@ -5,6 +5,9 @@
     const W = 340, H = 150, pL = 12, pR = 14, pT = 20, pB = 26;
     const plotW = W - pL - pR, plotH = H - pT - pB, baseY = pT + plotH;
     const fmt = (v, d) => (v == null ? "" : v.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d}));
+    // SVG 속성에 넣을 문자열 이스케이프(불량명·비고에 따옴표/부등호가 섞여도 안전하게)
+    const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+                       .replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     function smooth(pts){
       if (pts.length < 2) return "";
@@ -193,9 +196,10 @@
         paths += `<path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`;
         pts.forEach(p => {
           dots += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${c}"/>`;
+          const note = (cfg.notes && cfg.notes[si] && cfg.notes[si][p.i]) ? cfg.notes[si][p.i] : "";
           dots += `<circle class="g-mdot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="7" fill="transparent" `
                 + `style="cursor:pointer;" data-lbl="${cfg.labels[p.i]}" data-nm="${nm}" data-col="${c}" `
-                + `data-val="${fmt(p.v, cfg.dec)}${cfg.unit}"/>`;
+                + `data-note="${esc(note)}" data-val="${fmt(p.v, cfg.dec)}${cfg.unit}"/>`;
         });
       });
       // y축 눈금 3단
@@ -241,9 +245,10 @@
           const x = groupX + si * (barW + gap);
           const yt = y(v), h = Math.max(0, baseY - yt);
           bars += `<rect x="${x.toFixed(1)}" y="${yt.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${c}"/>`;
+          const note = (cfg.notes && cfg.notes[si] && cfg.notes[si][i]) ? cfg.notes[si][i] : "";
           bars += `<rect class="g-mdot" x="${(x - 1).toFixed(1)}" y="${pPT}" width="${(barW + 2).toFixed(1)}" height="${pPlotH.toFixed(1)}" `
                 + `fill="transparent" style="cursor:pointer;" data-lbl="${cfg.labels[i]}" data-nm="${nm}" data-col="${c}" `
-                + `data-val="${fmt(v, cfg.dec)}${cfg.unit}"/>`;
+                + `data-note="${esc(note)}" data-val="${fmt(v, cfg.dec)}${cfg.unit}"/>`;
         });
       });
       let gr = "", ylab = "";
@@ -306,7 +311,9 @@
         mark: d.mark,
         names: d.names ? d.names.split("|") : null,
         sets: d.sets ? d.sets.split("|").map(row =>
-                row.split(",").map(s => { s = s.trim(); return (s === "" || s === "-") ? null : Number(s); })) : null
+                row.split(",").map(s => { s = s.trim(); return (s === "" || s === "-") ? null : Number(s); })) : null,
+        // 구간별 세부 내역(툴팁 보조 설명). 폐기불량의 비고 내역 등에 쓴다.
+        notes: d.notes ? (function(){ try { return JSON.parse(d.notes); } catch (e) { return null; } })() : null
       };
       node.innerHTML = d.type === "bar" ? renderBar(cfg)
                      : d.type === "multi" ? renderMulti(cfg)
@@ -338,10 +345,17 @@
         const showTip = (e, dot) => {
           const lbl = dot.getAttribute("data-lbl"), nm = dot.getAttribute("data-nm"),
                 val = dot.getAttribute("data-val"), col = dot.getAttribute("data-col");
-          tt.innerHTML = `<div>${lbl}</div><div style="color:${col}">${nm ? nm + ": " : ""}${val}</div>`;
+          const note = dot.getAttribute("data-note");
+          tt.innerHTML = `<div>${lbl}</div><div style="color:${col}">${nm ? nm + ": " : ""}${val}</div>`
+            + (note ? `<div style="margin-top:3px;padding-top:3px;border-top:1px solid var(--bd);`
+                    + `font-weight:500;max-width:280px;white-space:normal;line-height:1.5;">${note}</div>` : "");
           const rect = node.getBoundingClientRect();
+          tt.style.display = "block";
+          // 오른쪽/아래 경계를 넘으면 반대쪽으로 뒤집어 잘리지 않게 한다
           let x = e.clientX - rect.left + 12, y = e.clientY - rect.top - 10;
-          tt.style.left = x + "px"; tt.style.top = y + "px"; tt.style.display = "block";
+          if (x + tt.offsetWidth > node.clientWidth - 4) x = Math.max(4, x - tt.offsetWidth - 24);
+          if (y + tt.offsetHeight > node.clientHeight - 4) y = Math.max(4, node.clientHeight - tt.offsetHeight - 4);
+          tt.style.left = x + "px"; tt.style.top = y + "px";
         };
         if (!node._mmBound) {
           node._mmBound = true;

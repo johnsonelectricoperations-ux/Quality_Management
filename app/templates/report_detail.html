@@ -170,7 +170,7 @@
       </div>
       <div class="jchart" data-type="multibar" data-unit="EA" data-dec="0"
            data-labels="{{ trend.labels_csv }}" data-names="{{ trend.chart_names }}"
-           data-sets="{{ trend.chart_sets }}"></div>
+           data-sets="{{ trend.chart_sets }}" data-notes="{{ trend.notes_json }}"></div>
       {% else %}
       <div style="color:var(--tx3);">해당 조건의 불량 데이터가 없습니다.</div>
       {% endif %}
@@ -265,7 +265,7 @@
       </div>
       <div class="jchart" data-type="multibar" data-unit="EA" data-dec="0"
            data-labels="{{ trend2.labels_csv }}" data-names="{{ trend2.chart_names }}"
-           data-sets="{{ trend2.chart_sets }}"></div>
+           data-sets="{{ trend2.chart_sets }}" data-notes="{{ trend2.notes_json }}"></div>
       {% else %}
       <div style="color:var(--tx3);">불량유형을 선택하고 조회하세요.</div>
       {% endif %}

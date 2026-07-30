@@ -4,6 +4,7 @@
 실행: uvicorn app.main:app --host 0.0.0.0 --port 5003
 """
 import os
+import json
 import secrets
 import sqlite3
 import datetime as _dt
@@ -524,9 +525,8 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
         if tpart not in ("통합", "VMS PART", "TM PART"):
             tpart = "통합"
         sub = sub if sub in ("item", "type") else "item"
-        # 불량유형 목록도 공정불량만 (셋팅불량 유형은 제외 — 2026-07-30 확정)
-        dtypes = [r["name"] for r in conn.execute(
-            "SELECT DISTINCT name FROM defect_type WHERE kind='공정' ORDER BY name")]
+        # 불량유형 목록: 실제 발생한 공정불량 기준(셋팅 제외, 폐기는 '폐기불량' 하나로 묶임)
+        dtypes = report_kpi.defect_type_options(conn, m)
         ctx.update({"sub": sub, "tpart": tpart, "defect_type_opts": dtypes})
         if sub == "item":
             d_unit = d_unit if d_unit in ("일", "주", "월") else "일"
@@ -535,6 +535,8 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
             trend["chart_names"] = "|".join(trend["series"].keys())
             trend["chart_sets"] = "|".join(_join(v) for v in trend["series"].values())
             trend["labels_csv"] = ",".join(trend["labels"])
+            trend["notes_json"] = json.dumps(
+                [trend["notes"].get(k, []) for k in trend["series"]], ensure_ascii=False)
             ctx.update({"d_tm": d_tm, "d_name": d_name, "d_from": df, "d_to": dt,
                        "d_unit": d_unit, "trend": trend})
         else:
@@ -545,6 +547,8 @@ def report_detail(request: Request, tab: str = "scrap_cost", fy: int = 0, sub: s
             trend2["chart_names"] = "|".join(trend2["series"].keys())
             trend2["chart_sets"] = "|".join(_join(v) for v in trend2["series"].values())
             trend2["labels_csv"] = ",".join(trend2["labels"])
+            trend2["notes_json"] = json.dumps(
+                [trend2["notes"].get(k, []) for k in trend2["series"]], ensure_ascii=False)
             ctx.update({"t1": t1, "t2": t2, "t3": t3, "t_unit": t_unit,
                        "d_from": df, "d_to": dt, "trend2": trend2})
     conn.close()

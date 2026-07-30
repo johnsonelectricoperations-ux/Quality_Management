@@ -364,11 +364,11 @@ def defect_names_for_tm(conn, m, tm):
     """그 TM-NO에 실제 발생한 **공정불량** 유형명 목록(셋팅불량 제외, 2026-07-30 확정)."""
     out = set()
     for r in conn.execute(
-            "SELECT DISTINCT defect_name, part, kind FROM defect_entry WHERE tm_no=?", (tm,)):
+            "SELECT DISTINCT defect_name, part, kind, source FROM defect_entry WHERE tm_no=?", (tm,)):
         prod = m.product.get(tm)
         part = prod[1] if prod else (r["part"] or "")
         if m.kind_from(part, r["defect_name"], r["kind"]) == "공정":
-            out.add(r["defect_name"])
+            out.add(_disp_name(r["source"], r["defect_name"]))
     return sorted(out)
 
 
@@ -423,6 +423,31 @@ def _period_setup(cy, cm, unit, date_from=None, date_to=None):
 
 
 ALL_SERIES_LABEL = "전체 공정불량"
+# 폐기불량은 불량명이 비고(remark) 자유텍스트라 종류가 계속 늘어난다. 그래서 조회 화면에서는
+# 개별 유형으로 쪼개지 않고 이 이름 하나로 묶고, 세부 비고는 그래프 툴팁으로 보여준다
+# (2026-07-30 확정). 적재된 원래 불량명은 그대로 두므로 다른 집계·배분규칙에는 영향이 없다.
+DISCARD_LABEL = "폐기불량"
+
+
+def _disp_name(source, defect_name):
+    """조회 화면에 보여줄 불량유형명. 폐기불량은 전부 '폐기불량' 하나로 묶는다."""
+    return DISCARD_LABEL if source == "discard" else defect_name
+
+
+def defect_type_options(conn, m):
+    """불량유형 드롭다운 목록 — **실제 발생한 공정불량** 기준(마스터가 아니라 데이터 기준).
+
+    이렇게 하면 ① 셋팅불량 유형이 자동 제외되고, ② 마스터에 미등재된 이름도 빠지지 않으며,
+    ③ 폐기불량은 '폐기불량' 하나로만 나온다. 새 불량명이 들어와도 손댈 곳이 없다."""
+    names = set()
+    for r in conn.execute(
+            "SELECT DISTINCT defect_name, part, kind, source FROM defect_entry "
+            "WHERE status='confirmed'"):
+        part = r["part"] or ""
+        if m.kind_from(part, r["defect_name"], r["kind"]) != "공정":
+            continue
+        names.add(_disp_name(r["source"], r["defect_name"]))
+    return sorted(names)
 
 
 def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to=None):
@@ -441,17 +466,20 @@ def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to
 
     where = ["status='confirmed'", "d BETWEEN ? AND ?"]
     args = [d0, d1]
-    if defect_name:
-        where.append("defect_name=?")
+    if defect_name == DISCARD_LABEL:
+        where.append("source='discard'")            # '폐기불량'은 소스로 필터
+    elif defect_name:
+        where.append("defect_name=? AND source!='discard'")
         args.append(defect_name)
     if tm_q:
         where.append("(tm_no LIKE ? OR tm_no=?)")
         args += [f"%{tm_q}%", tm_q]
-    q = (f"SELECT d,tm_no,defect_name,qty,part,kind FROM defect_entry "
+    q = (f"SELECT d,tm_no,defect_name,qty,part,kind,source FROM defect_entry "
          f"WHERE {' AND '.join(where)}")
 
     name = defect_name or ALL_SERIES_LABEL
     vals = [0] * len(labels)
+    notes = [defaultdict(int) for _ in labels]      # 구간별 세부 불량명(툴팁용)
     by_tm = defaultdict(int)
     total = 0
     for r in conn.execute(q, args):
@@ -466,10 +494,32 @@ def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to
         i = day_idx.get(r["d"])
         if i is not None:
             vals[i] += r["qty"]
+            notes[i][_note_key(r["source"], r["defect_name"])] += r["qty"]
 
     series = {name: vals} if total else {}
-    tm_rows = sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]
-    return {"labels": labels, "series": series, "qty_total": total, "tm_rows": tm_rows}
+    return {"labels": labels, "series": series, "qty_total": total,
+            "notes": {name: _fmt_notes(notes)} if total else {},
+            "tm_rows": sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]}
+
+
+def _note_key(source, defect_name):
+    """툴팁에 쓸 세부 이름. 폐기불량은 비고(=저장된 불량명)를 그대로 보여준다."""
+    return defect_name
+
+
+def _fmt_notes(notes, top=4):
+    """구간별 {세부이름: 수량} → '이름 수량 / 이름 수량' 문자열 목록(툴팁 표시용)."""
+    out = []
+    for d in notes:
+        if not d:
+            out.append("")
+            continue
+        items = sorted(d.items(), key=lambda kv: -kv[1])
+        txt = " / ".join("%s %s" % (n, format(q, ",")) for n, q in items[:top])
+        if len(items) > top:
+            txt += " 외 %d종" % (len(items) - top)
+        out.append(txt)
+    return out
 
 
 def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_to=None):
@@ -485,12 +535,19 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
     cy, cm = cutoff
     d0, d1, labels, day_idx = _period_setup(cy, cm, unit, date_from, date_to)
 
-    where = ["status='confirmed'", "d BETWEEN ? AND ?",
-            "defect_name IN (%s)" % ",".join("?" * len(names))]
-    args = [d0, d1] + names
+    # '폐기불량'은 소스로, 나머지는 불량명으로 필터한다(폐기 행은 이름으로 잡지 않는다).
+    picked = [n for n in names if n != DISCARD_LABEL]
+    conds, args = [], [d0, d1]
+    if picked:
+        conds.append("(defect_name IN (%s) AND source!='discard')" % ",".join("?" * len(picked)))
+        args += picked
+    if DISCARD_LABEL in names:
+        conds.append("source='discard'")
+    where = ["status='confirmed'", "d BETWEEN ? AND ?", "(%s)" % " OR ".join(conds)]
     series = {n: [0] * len(labels) for n in names}
+    notes = {n: [defaultdict(int) for _ in labels] for n in names}
     for r in conn.execute(
-            f"SELECT d,tm_no,defect_name,qty,part,kind FROM defect_entry "
+            f"SELECT d,tm_no,defect_name,qty,part,kind,source FROM defect_entry "
             f"WHERE {' AND '.join(where)}", args):
         prod = m.product.get(r["tm_no"])
         rpart = prod[1] if prod else (r["part"] or "")
@@ -498,10 +555,15 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
             continue
         if m.kind_from(rpart, r["defect_name"], r["kind"]) != "공정":
             continue                       # 셋팅불량 제외
+        key = _disp_name(r["source"], r["defect_name"])
+        if key not in series:
+            continue
         i = day_idx.get(r["d"])
         if i is not None:
-            series[r["defect_name"]][i] += r["qty"]
-    return {"labels": labels, "series": series}
+            series[key][i] += r["qty"]
+            notes[key][i][_note_key(r["source"], r["defect_name"])] += r["qty"]
+    return {"labels": labels, "series": series,
+            "notes": {n: _fmt_notes(notes[n]) for n in names}}
 
 
 def ban_top_items(conn, m, y, mth, part, proc, top=3):
