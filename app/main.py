@@ -389,13 +389,20 @@ def build_dashboard(conn, m, daily, part):
     cur_week = weekly[-1]["week"] if weekly else 1
     ws = weekly[-1]["start"] if weekly else mstart
     we = weekly[-1]["end"] if weekly else mend
+    # 지난주 = 해당주와 같은 요일 범위를 7일 앞으로 옮긴 것. 월 경계를 넘나들 수 있어(예: 이번 달
+    # 1주차의 지난주는 지난달 말) 'N월 M주차'로 표기하지 않고 날짜 범위로 보여준다.
+    pw_s = (_dt.date.fromisoformat(ws) - _dt.timedelta(days=7)).isoformat()
+    pw_e = (_dt.date.fromisoformat(we) - _dt.timedelta(days=7)).isoformat()
+    prev_week_label = f"{int(pw_s[5:7])}/{int(pw_s[8:10])}~{int(pw_e[5:7])}/{int(pw_e[8:10])}"
     top5 = {}
     for tp in ("VMS PART", "TM PART"):
         top5[tp] = {"month": calc.top5_defect(conn, m, mstart, mend, tp),
-                    "week": calc.top5_defect(conn, m, ws, we, tp)}
+                    "week": calc.top5_defect(conn, m, ws, we, tp),
+                    "prev_week": calc.top5_defect(conn, m, pw_s, pw_e, tp)}
     top_part_default = "TM PART" if part == "TM PART" else "VMS PART"
     return {"cy": cy, "cm": cm, "cur_fy": calc.fy_label(cur_fy), "cards": cards,
             "charts": charts, "top5": top5, "top_part_default": top_part_default,
+            "prev_week_label": prev_week_label,
             "cur_week": cur_week}
 
 

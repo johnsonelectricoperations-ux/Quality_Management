@@ -181,12 +181,22 @@
   </div>
 
   {% if trend.tm_rows %}
-  <div class="panel"><div class="phead"><h2>TM-NO별 수량 (상위 20)</h2></div>
-    <table>
-      <thead><tr><th>TM-NO</th><th class="num">수량(EA)</th></tr></thead>
-      <tbody>{% for tm, q in trend.tm_rows %}<tr><td class="mono">{{ tm }}</td><td class="num">{{ q|cf }}</td></tr>{% endfor %}</tbody>
+  <div class="panel"><div class="pbody">
+    <div class="blocklbl">TM-NO별 수량 (상위 20) — {{ d_unit }}별</div>
+    <div style="overflow-x:auto;">
+    <table class="dtbl">
+      <thead><tr><th class="l">TM-NO</th><th class="l">품명</th>
+        {% for lb in trend.labels %}<th>{{ lb }}</th>{% endfor %}<th class="cumcol">합계</th></tr></thead>
+      <tbody>
+      {% for row in trend.tm_rows %}
+        <tr><td class="l mono">{{ row.tm }}</td><td class="l">{{ row.name or '-' }}</td>
+          {% for v in row.vals %}<td>{{ v|cf if v else '' }}</td>{% endfor %}
+          <td class="cumcol">{{ row.total|cf }}</td></tr>
+      {% endfor %}
+      </tbody>
     </table>
-  </div>
+    </div>
+  </div></div>
   {% endif %}
   <script>
   (function(){

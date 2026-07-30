@@ -488,7 +488,9 @@ def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to
     name = defect_name or ALL_SERIES_LABEL
     vals = [0] * len(labels)
     notes = [defaultdict(int) for _ in labels]      # 구간별 세부 불량명(툴팁용)
-    by_tm = defaultdict(int)
+    # TM-NO별 수량도 전체 합산 한 덩어리가 아니라 차트와 같은 구간(일/주/월)별로 나눠 쌓는다
+    # (2026-07-30 확정 — 전에는 선택한 기간 전체를 하나로 합쳐서, 주별·월별 흐름을 알 수 없었다).
+    by_tm = defaultdict(lambda: [0] * len(labels))
     total = 0
     for r in conn.execute(q, args):
         prod = m.product.get(r["tm_no"])
@@ -497,17 +499,22 @@ def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to
             continue
         if m.kind_from(rpart, r["defect_name"], r["kind"]) != "공정":
             continue                       # 셋팅불량 제외
-        by_tm[r["tm_no"] or "(미지정)"] += r["qty"]
         total += r["qty"]
         i = day_idx.get(r["d"])
         if i is not None:
+            by_tm[r["tm_no"] or "(미지정)"][i] += r["qty"]
             vals[i] += r["qty"]
             notes[i][_note_key(r["source"], r["defect_name"])] += r["qty"]
 
     series = {name: vals} if total else {}
+    top_tms = sorted(by_tm.items(), key=lambda kv: -sum(kv[1]))[:20]
+    tm_rows = []
+    for tm, per in top_tms:
+        prod = m.product.get(tm)
+        tm_rows.append({"tm": tm, "name": prod[0] if prod else "", "vals": per, "total": sum(per)})
     return {"labels": labels, "series": series, "qty_total": total,
             "notes": {name: _fmt_notes(notes)} if total else {},
-            "tm_rows": sorted(by_tm.items(), key=lambda kv: -kv[1])[:20]}
+            "tm_rows": tm_rows}
 
 
 def _note_key(source, defect_name):
