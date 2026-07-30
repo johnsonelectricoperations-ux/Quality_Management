@@ -513,7 +513,9 @@ def ban_top_items(conn, m, y, mth, part, proc, top=3):
         q = sum(qq for b, qq in allocs if (b if b in BUCKETS else "기타") == proc)
         if q <= 0:
             continue
-        tm = r["tm_no"] or "(미지정)"
+        # TM-NO 없는 건(소결로 정기청소 폐기 등 공정단위 불량)도 중요한 수량이라 포함시키되,
+        # 품목을 특정할 수 없으므로 TM-NO/품명은 공란으로 둔다(2026-07-30 확정).
+        tm = (r["tm_no"] or "").strip()
         cur = agg.setdefault(tm, {"qty": 0, "dates": set(), "by": defaultdict(int)})
         cur["qty"] += q
         cur["dates"].add(r["d"])
@@ -521,11 +523,12 @@ def ban_top_items(conn, m, y, mth, part, proc, top=3):
 
     rows = []
     for tm, v in sorted(agg.items(), key=lambda kv: -kv[1]["qty"])[:top]:
-        prod = m.product.get(tm)
+        prod = m.product.get(tm) if tm else None
         days = sorted(v["dates"])
         shown = days[:6]
         rows.append({
-            "tm_no": tm,
+            "tm_no": tm,                       # 공란 = 품목 미지정(공정단위 불량)
+            "no_tm": not tm,
             "name": prod[0] if prod else "",
             "qty": v["qty"],
             "dates": ", ".join("%d/%d" % (int(d[5:7]), int(d[8:10])) for d in shown)
