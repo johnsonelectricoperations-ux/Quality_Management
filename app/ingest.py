@@ -427,8 +427,11 @@ _MONTHLY_DEFECT_RE = re.compile(r"^(\d{4})_(.+?)_(공정|셋팅)불량_생산([1
 _MONTHLY_PART_TOKEN = {"1": "VMS PART", "2": "TM PART"}
 # 불량유형 열 중 집계 제외(폐기·소재불량은 폐기불량/외주소재불량 소스와 중복이라 별도 소스로만 집계, 소계는 합계열)
 # "오기유/무"는 수량이 아니라 "OK" 텍스트만 들어가는 확인용 체크 열이라 불량명이 아니다.
-# "합계"는 "소계"와 같은 자리(폐기·소재불량 뒤)에 오는 총계 열이다.
-_MONTHLY_SKIP_COLS = {"폐기", "소재불량", "소계", "합계", "오기유/무"}
+# "합계"·"종합"은 "소계"와 같은 자리(개별 불량열 뒤)에 오는 총계 열이다 — 실제 데이터로 확인:
+# 이 열의 값이 그 행의 개별 불량 수량 합계와 정확히 일치한다(2026-07-30, 정형_셋팅불량 파일로 검증).
+# "종합"은 4행 관리용 구간제목으로도 쓰이지만(그건 5행 헤더 체크로 이미 걸러짐), 개별 불량열 뒤에
+# 독립된 열로 또 나올 수 있어 이름으로도 별도 제외해야 한다.
+_MONTHLY_SKIP_COLS = {"폐기", "소재불량", "소계", "합계", "종합", "오기유/무"}
 
 
 def parse_monthly_defect_filename(fname):
@@ -463,7 +466,12 @@ def ingest_monthly_defect_file(conn, path, user=""):
         return 0, []                                # 성형 작성 공정불량은 D/B 전량 미반영
     exclude_cost = 1 if (proc == "성형" and kind == "셋팅") else 0
 
-    names = {r["name"] for r in conn.execute(
+    # 엑셀 헤더는 공백/줄바꿈을 지운 값과 비교하므로, 마스터 이름도 같은 방식으로 정규화해서
+    # 매칭한다("CRACK 수정" 마스터 ↔ 헤더 "CRACK\n수정" 같은 표기 흔들림 대응). 매칭되면
+    # **마스터의 원래 이름**을 저장한다 — 정규화된 이름을 저장하면 나중에 calc.Masters.resolve()가
+    # (part, defect_name)으로 마스터를 찾을 때 공백 차이로 못 찾아 배분규칙이 무시되기 때문이다
+    # (2026-07-30 확정 — 'CRACK 수정'이 마스터에 있는데도 미등록으로 잘못 뜨던 문제에서 발견).
+    names_norm = {"".join(r["name"].split()): r["name"] for r in conn.execute(
         "SELECT name FROM defect_type WHERE part=? AND kind=?", (part, kind))}
 
     wb = load_workbook(path, data_only=True)
@@ -504,12 +512,12 @@ def ingest_monthly_defect_file(conn, path, user=""):
             name = "".join(raw.split())
             if not name or name in _MONTHLY_SKIP_COLS:
                 continue
-            if name not in names:
+            if name not in names_norm:
                 # 마스터에 없는 불량명 → 적재하지 않고(배분규칙이 없어 귀책 판정 불가) 별도로
                 # 기록해 화면에 알람을 띄운다. 수량이 조용히 사라지는 것을 막기 위함.
                 ucols.append((c, name))
                 continue
-            dcols.append((c, name))
+            dcols.append((c, names_norm[name]))     # 마스터 원래 이름으로 저장(공백 보존)
 
         for r in range(6, ws.max_row + 1):
             tmv = ws.cell(row=r, column=tm_col).value
