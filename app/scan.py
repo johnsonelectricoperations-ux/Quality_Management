@@ -75,7 +75,12 @@ def scan_defect(conn, root):
     folder = os.path.join(root, SUB_DEFECT)
     if not os.path.isdir(folder):
         return {"ok": False, "note": "폴더 없음", "files": 0, "rows": 0, "errors": []}
-    files, rows, detail = ingest.ingest_monthly_defect_folder(conn, folder)
+    # 다른 소스(생산량·외주·폐기·단가)는 이미 이 try/except가 있는데 사내불량만 빠져 있었다.
+    # 그래서 사내불량 파일 하나의 오류가 전체(scan_all) 반영을 통째로 실패시켰다(2026-07-30 수정).
+    try:
+        files, rows, detail = ingest.ingest_monthly_defect_folder(conn, folder)
+    except Exception as e:
+        return {"ok": False, "note": str(e), "files": 0, "rows": 0, "errors": [str(e)]}
     errors = [f"{rel}: {'; '.join(errs)}" for rel, _n, errs in detail if errs]
     return {"ok": not errors, "files": files, "rows": rows, "errors": errors,
             "note": f"{files}개 파일 / {rows}건 적재"}

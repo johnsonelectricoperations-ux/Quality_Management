@@ -494,13 +494,25 @@ def ingest_monthly_defect_file(conn, path, user=""):
             if not tmno:
                 continue
             for c, name in dcols:
-                qty = _int(ws.cell(row=r, column=c).value)
+                raw_v = ws.cell(row=r, column=c).value
+                try:
+                    qty = _int(raw_v)
+                except (TypeError, ValueError):
+                    # 수량 칸에 숫자가 아닌 값(TM-NO가 잘못 들어간 경우 등)이 있으면 그 셀만
+                    # 건너뛰고 위치를 기록한다 — 파일 전체·폴더 전체를 막지 않기 위함(2026-07-30).
+                    errors.append(f"[{sheet_name}] {r}행 '{name}'열: 숫자가 아닌 값 '{raw_v}' — 건너뜀")
+                    continue
                 if qty <= 0:
                     continue
                 rows.append((d, tmno, name, qty, part, proc, kind, "direct",
                              "confirmed", user, batch_key, exclude_cost))
             for c, name in ucols:                  # 마스터 미등록 열의 수량(영향도) 집계
-                qty = _int(ws.cell(row=r, column=c).value)
+                raw_v = ws.cell(row=r, column=c).value
+                try:
+                    qty = _int(raw_v)
+                except (TypeError, ValueError):
+                    errors.append(f"[{sheet_name}] {r}행 '{name}'열: 숫자가 아닌 값 '{raw_v}' — 건너뜀")
+                    continue
                 if qty > 0:
                     unknown[name] = unknown.get(name, 0) + qty
                     unknown_days.setdefault(name, []).append(d)
@@ -552,7 +564,12 @@ def ingest_monthly_defect_folder(conn, folder, user=""):
             if not _MONTHLY_DEFECT_RE.match(os.path.splitext(fn)[0]):
                 continue
             path = os.path.join(root, fn)
-            n, errs = ingest_monthly_defect_file(conn, path, user)
+            try:
+                n, errs = ingest_monthly_defect_file(conn, path, user)
+            except Exception as e:
+                # 셀 단위 방어(_int try/except)로 못 잡는 예상 밖 오류(파일 손상 등)까지 대비.
+                # 파일 하나가 깨져도 폴더의 나머지 파일은 계속 반영되게 한다.
+                n, errs = 0, [f"파일 처리 실패: {e}"]
             files += 1
             total += n
             detail.append((os.path.relpath(path, folder), n, errs))
