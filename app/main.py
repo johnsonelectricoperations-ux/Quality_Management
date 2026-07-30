@@ -62,12 +62,27 @@ def require(role="viewer"):
     return dep
 
 
+def menu_perms(role):
+    """사이드바용 메뉴별 보기 권한 {menu_key: bool}. 권한 없는 메뉴는 흐리게 + 클릭 불가로 그린다.
+    한 번의 조회로 만든다(메뉴마다 has_perm을 부르면 페이지당 십여 번 DB를 여는 셈이 된다)."""
+    keys = tuple(db.PERM_MENU_KEYS) + ("users",)
+    if role == "admin":
+        return {k: True for k in keys}
+    conn = db.connect()
+    saved = {r["menu_key"]: bool(r["can_view"]) for r in conn.execute(
+        "SELECT menu_key, can_view FROM permission WHERE role=?", (role,))}
+    conn.close()
+    out = {k: saved.get(k, True) for k in db.PERM_MENU_KEYS}
+    out["dash"] = True        # 로그인 후 갈 곳이 없어지지 않게 항상 허용
+    out["users"] = False      # 사용자 관리는 관리자 전용(권한 매트릭스 대상 밖)
+    return out
+
+
 def render(request, template, user, **ctx):
     ctx.setdefault("crumb", "")
-    if has_perm(user["role"], "data_check", "view"):
-        ctx.setdefault("unreg_alert", unreg_alert_count())
-    else:
-        ctx.setdefault("unreg_alert", 0)
+    can = menu_perms(user["role"])
+    ctx.setdefault("can_menu", can)
+    ctx.setdefault("unreg_alert", unreg_alert_count() if can.get("data_check") else 0)
     return tpl.TemplateResponse(request, template, {
         "user": user, "role_ko": ROLE_KO.get(user["role"], ""), **ctx})
 

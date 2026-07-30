@@ -9,27 +9,38 @@
 <body>
 <div class="app">
 <aside class="sidebar">
+  <a class="logo" href="/" title="Johnson Electric"><img src="/static/logo_JE.svg" alt="Johnson Electric"></a>
   <div class="brand"><span class="mark"></span><div>통합품질관리<small>Quality Management</small></div></div>
+  {#- 권한 없는 메뉴는 링크가 아닌 span으로 그려 흐리게 + 클릭 불가로 만든다(2026-07-30 확정) -#}
+  {% macro nav(key, href) %}
+    {%- if can_menu is not defined or can_menu.get(key, True) -%}
+    <a class="nav {{ 'on' if active==key }}" href="{{ href }}">{{ caller() }}</a>
+    {%- else -%}
+    <span class="nav off" title="권한이 없습니다. 품질관리팀에 문의하세요.">{{ caller() }}</span>
+    {%- endif -%}
+  {% endmacro %}
   <div class="cap">개요</div>
-  <a class="nav {{ 'on' if active=='dash' }}" href="/">▣ 대시보드</a>
-  <a class="nav {{ 'on' if active=='rdetail' }}" href="/report/detail">📈 세부지표현황</a>
+  {% call nav('dash', '/') %}▣ 대시보드{% endcall %}
+  {% call nav('rdetail', '/report/detail') %}📈 세부지표현황{% endcall %}
   <div class="cap">데이터 입력</div>
-  <a class="nav {{ 'on' if active=='svp' }}" href="/input/svp">₩ SVP 입력</a>
-  <a class="nav {{ 'on' if active=='claim' }}" href="/input/claim">▤ Claim 입력</a>
-  <a class="nav {{ 'on' if active=='incident' }}" href="/input/incident">◎ Customer Incident 관리</a>
-  {% if pending %}<a class="nav {{ 'on' if active=='oreview' }}" href="/input/outsource-review">✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span></a>{% endif %}
+  {% call nav('svp', '/input/svp') %}₩ SVP 입력{% endcall %}
+  {% call nav('claim', '/input/claim') %}▤ Claim 입력{% endcall %}
+  {% call nav('incident', '/input/incident') %}◎ Customer Incident 관리{% endcall %}
+  {% if pending %}
+  {% call nav('oreview', '/input/outsource-review') %}✔ 불량 검토(100EA↑)<span class="cnt">{{ pending }}</span>{% endcall %}
+  {% endif %}
   <div class="cap">리포트</div>
-  <a class="nav {{ 'on' if active=='monthly' }}" href="/report/monthly">📋 월마감</a>
+  {% call nav('monthly', '/report/monthly') %}📋 월마감{% endcall %}
   <div class="cap">관리</div>
-  <a class="nav {{ 'on' if active=='data_check' }}" href="/admin/data-check">🩺 데이터 점검{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}</a>
-  <a class="nav {{ 'on' if active=='products' }}" href="/admin/products">📦 제품 마스터 (단가 포함)</a>
-  <a class="nav {{ 'on' if active=='processes' }}" href="/admin/processes">🏭 공정 관리</a>
-  <a class="nav {{ 'on' if active=='defect_types' }}" href="/admin/defect-types">⚠ 불량유형 마스터</a>
-  <a class="nav {{ 'on' if active=='customers' }}" href="/admin/customers">🏢 고객사 마스터</a>
-  <a class="nav {{ 'on' if active=='scan' }}" href="/admin/scan">🔄 폴더 반영</a>
-  <a class="nav {{ 'on' if active=='masters' }}" href="/masters">🗂 마스터 조회</a>
-  <a class="nav {{ 'on' if active=='target' }}" href="/admin/target">🎯 목표 관리</a>
-  <a class="nav {{ 'on' if active=='users' }}" href="/admin/users">🔐 사용자 관리</a>
+  {% call nav('data_check', '/admin/data-check') %}🩺 데이터 점검{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}{% endcall %}
+  {% call nav('products', '/admin/products') %}📦 제품 마스터 (단가 포함){% endcall %}
+  {% call nav('processes', '/admin/processes') %}🏭 공정 관리{% endcall %}
+  {% call nav('defect_types', '/admin/defect-types') %}⚠ 불량유형 마스터{% endcall %}
+  {% call nav('customers', '/admin/customers') %}🏢 고객사 마스터{% endcall %}
+  {% call nav('scan', '/admin/scan') %}🔄 폴더 반영{% endcall %}
+  {% call nav('masters', '/masters') %}🗂 마스터 조회{% endcall %}
+  {% call nav('target', '/admin/target') %}🎯 목표 관리{% endcall %}
+  {% call nav('users', '/admin/users') %}🔐 사용자 관리{% endcall %}
 </aside>
 <div class="main">
   <header class="topbar">
@@ -49,13 +60,13 @@
 <style>a.nav{text-decoration:none;}</style>
 <script src="/static/theme.js"></script>
 <script>
+// 권한 없는 메뉴는 사이드바에서 클릭 자체가 막히므로 팝업 안내는 두지 않는다(2026-07-30 확정).
+// URL을 직접 입력한 경우에만 서버가 대시보드로 돌려보내며, 흔적으로 남은 쿼리만 정리한다.
 (function(){
   var params = new URLSearchParams(location.search);
   if (params.get('perm_denied') === '1') {
     params.delete('perm_denied');
-    var newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
-    history.replaceState(null, '', newUrl);
-    alert('권한이 없습니다. 품질관리팀에 문의하세요.');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params.toString() : ''));
   }
 })();
 </script>

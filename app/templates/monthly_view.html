@@ -24,6 +24,8 @@ html,body{height:100%;overflow:hidden;background:#111;font-family:"Malgun Gothic
 .cover p{margin-top:16px;font-size:20px;opacity:.9;}
 .cover .badge2{margin-top:34px;border:2px solid rgba(255,255,255,.6);border-radius:999px;
   padding:8px 22px;font-size:14px;letter-spacing:3px;}
+/* 표지 로고 — 짙은 남색 배경이라 흰 칩에 올린다(로고 원색 유지) */
+.cover .clogo{width:230px;background:#fff;padding:14px 18px;border-radius:10px;margin-bottom:34px;}
 
 /* 목차 */
 .toc{display:flex;flex-direction:column;gap:12px;justify-content:center;height:100%;padding-left:60px;}
@@ -122,6 +124,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 {# ───────── 1. 표지 ───────── #}
 <section class="slide on cover">
+  <img class="clogo" src="/static/logo_JE.svg" alt="Johnson Electric">
   <h1>{{ d.fy_label }} 월간 품질실적 보고</h1>
   <p>{{ d.m }}월 마감 · {{ d.ym }}</p>
   <div class="badge2">CONFIDENTIAL</div>
