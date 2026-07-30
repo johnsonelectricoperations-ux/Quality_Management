@@ -155,20 +155,14 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     {% for mt in k.metrics %}
     <div class="card">
       <h3>{{ mt.name }} ({{ mt.unit }})</h3>
-      {# 좌→우 순서: FY26 종합 · FY27 누적 · 월별. 목표선은 FY27(누적/월별)에만 긋는다
-         (FY26은 이미 끝난 해의 실적이라 목표 비교 대상이 아님 — 2026-07-30 확정). #}
-      {# FY26 종합·FY27 누적은 각각 '현재까지의 총계' 단일 막대다(같은 모양의 4개월 막대가
-         월별 패널과 나란히 있으면 중복처럼 보인다는 피드백으로 2026-07-30 변경). 월별만 4개월
-         막대로 추이를 보여준다. FY26·FY27누적 두 단일 막대는 같은 축(cum_vmax)을 써서 크기를
-         바로 비교할 수 있게 한다. #}
+      {# 좌→우: FY27 누적(단일 막대) · 월별(4개월 추이). FY26은 화면에서 뺐다(2026-07-30 확정,
+         필요없다는 사용자 판단) — 데이터 자체도 더는 이 화면에서 계산하지 않는다. #}
       <div class="twoch">
-        <div style="flex:.5;">
-          <div class="ct">{{ d.prev_fy_label }} 종합</div>
-          <div class="chartbox">{{ chart([mt.prev], none, mt.cum_vmax, [d.prev_fy_label], mt.dec, none, none, '') }}</div>
-        </div>
-        <div style="flex:.5;">
+        <div style="flex:.6;">
           <div class="ct">{{ d.fy_label }} 누적 <b>{{ pc(mt.cum_ach) }}</b></div>
-          <div class="chartbox">{{ chart([mt.cum[-1] if mt.cum else none], [mt.fy_target], mt.cum_vmax, [d.fy_label], mt.dec, none, none, '') }}</div>
+          {# 막대 1개짜리 차트는 목표선 라벨이 막대 값과 같은 위치(중앙 상단)에 겹치기 쉬워
+             라벨은 숨긴다(정확한 목표값은 바로 아래 표의 '목표' 행에 그대로 있다, 2026-07-30). #}
+          <div class="chartbox">{{ chart([mt.cum[-1] if mt.cum else none], [mt.fy_target], mt.cum_vmax, [d.fy_label], mt.dec, none, none, '', False) }}</div>
         </div>
         <div>
           <div class="ct">월별</div>
@@ -176,16 +170,16 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         </div>
       </div>
       <table style="margin-top:5px;">
-        <tr><th class="l" style="width:40px;"></th><th>{{ d.prev_fy_label }}</th>
+        <tr><th class="l" style="width:40px;"></th>
           <th>{{ d.fy_label }}<br>누적</th>
           {% for mo in k.months %}<th>{{ mo }}월</th>{% endfor %}</tr>
-        <tr><td class="l">실적</td><td class="r">{{ num(mt.prev, mt.dec) }}</td>
+        <tr><td class="l">실적</td>
           <td class="r">{{ num(mt.cum[-1] if mt.cum else none, mt.dec) }}</td>
           {% for a in mt.actual %}<td class="r">{{ num(a, mt.dec) }}</td>{% endfor %}</tr>
-        <tr class="tgt"><td class="l">목표</td><td>-</td>
+        <tr class="tgt"><td class="l">목표</td>
           <td class="r">{{ num(mt.fy_target, mt.dec) }}</td>
           {% for t in mt.target %}<td class="r">{{ num(t, mt.tdec) }}</td>{% endfor %}</tr>
-        <tr class="ach"><td class="l">달성</td><td>-</td>
+        <tr class="ach"><td class="l">달성</td>
           <td class="r">{{ pc(mt.cum_ach) }}</td>
           {% for a in mt.achieve %}<td class="r">{{ pc(a) }}</td>{% endfor %}</tr>
       </table>
@@ -241,7 +235,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 {% for pair in [['성형','소결'], ['정형','가공']] %}
 <section class="slide">
-  <div class="stitle">(2) {{ lbl }} 반별목표제 현황 <small>— 단위 PPM · 서술은 해당월 상위 품목 자동 집계</small></div>
+  <div class="stitle">(2) {{ lbl }} 반별목표제 현황 <small>— 단위 PPM</small></div>
   <div class="body"><div class="grid2r">
     {% for proc in pair %}
     {% set b = d.ban[lbl][proc] %}
@@ -251,15 +245,31 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         <div style="flex:1.15;min-width:0;display:flex;flex-direction:column;">
           <div class="chartbox">{{ chart(b.ppm, b.target, b.vmax, b.months, 0, b.upto_i) }}</div>
         </div>
-        <table style="width:150px;height:min-content;">
-          <tr><th class="l">{{ d.prev_fy_label }}</th><td class="r">{{ num(b.prev_actual) }}</td></tr>
-          <tr><th class="l">{{ d.fy_label }} 누계</th><td class="r">{{ num(b.fy_cum) }}</td></tr>
-          <tr><th class="l">목표</th><td class="r">{{ num(b.fy_target) }}</td></tr>
-          <tr class="ach"><th class="l">달성율</th><td class="r">{{ pc(b.fy_cum_ach) }}</td></tr>
-        </table>
+        {# '누계' 요약표 대신 KOI와 같은 단일 막대 그래프 + 월별 EA/PPM 데이터표(2026-07-30). #}
+        <div style="width:176px;min-width:0;flex:none;display:flex;flex-direction:column;overflow:hidden;">
+          <div class="ct">{{ d.fy_label }} 누계 <b>{{ pc(b.fy_cum_ach) }}</b></div>
+          {# 막대 1개짜리라 목표선 라벨은 숨긴다(정확한 목표값은 아래 표 '목표' 행에 있다). #}
+          <div class="chartbox" style="flex:1;min-height:0;">
+            {{ chart([b.fy_cum], [b.fy_target], b.cum_vmax, [d.fy_label], 0, none, none, '', False) }}
+          </div>
+          {# table-layout:fixed로 폭을 176px 안에 고정 — 안 그러면 숫자가 길 때(13,771 등)
+             열이 넓어지면서 오른쪽 서술란을 침범했다(2026-07-30 수정). #}
+          <table style="font-size:8px;margin-top:4px;table-layout:fixed;width:100%;">
+            <tr><th class="l" style="width:20px;padding:1px 2px;"></th>
+              {% for mo in b.months %}{% if loop.index0 <= b.upto_i %}<th style="padding:1px 2px;">{{ mo }}월</th>{% endif %}{% endfor %}</tr>
+            <tr><td class="l" style="padding:1px 2px;">EA</td>
+              {% for v in b.qty %}{% if loop.index0 <= b.upto_i %}<td class="r" style="padding:1px 2px;">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+            <tr><td class="l" style="padding:1px 2px;">PPM</td>
+              {% for v in b.ppm %}{% if loop.index0 <= b.upto_i %}<td class="r" style="padding:1px 2px;">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+            <tr class="tgt"><td class="l" style="padding:1px 2px;">목표</td>
+              {% for v in b.target %}{% if loop.index0 <= b.upto_i %}<td class="r" style="padding:1px 2px;">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+          </table>
+        </div>
         <div class="narr" style="flex:1.25;min-width:0;">
           {% for it in b.top_items %}
-          <div style="margin-bottom:5px;">
+          {# 아이템이 최대 2개라 구분이 잘 안 된다는 피드백으로, 두 번째 아이템부터 위에
+             다른 선(점선 1px)보다 굵은 실선을 넣어 항목 경계를 분명히 한다(2026-07-30). #}
+          <div style="margin-bottom:5px;{{ 'padding-top:7px;border-top:2px solid #9aa5b1;' if not loop.first }}">
             <div class="row"><span class="k">발생일자</span><b>{{ it.dates }}</b></div>
             <div class="row"><span class="k">품명(품번)</span>
               <b>{% if it.no_tm %}(품목 미지정){% else %}{{ it.name }}({{ it.tm_no }}){% endif %}</b></div>
@@ -288,16 +298,28 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
       <div class="card">
         <h3>발생 현황</h3>
-        <table>
-          <thead><tr><th class="l">구분</th><th>{{ d.prev_fy_label }}</th><th>{{ d.fy_label }}</th>
-            {% for mo in s.months %}{% if loop.index0 <= s.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
-          <tbody>
-            <tr class="act"><td class="l">Official</td><td>{{ num(s.prev_official) }}</td><td>{{ num(s.fy_official) }}</td>
-              {% for v in s.official %}{% if loop.index0 <= s.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
-            <tr class="tgt"><td class="l">(Unofficial)</td><td>({{ num(s.prev_unofficial) }})</td><td>({{ num(s.fy_unofficial) }})</td>
-              {% for v in s.unofficial %}{% if loop.index0 <= s.upto_i %}<td>({{ num(v) }})</td>{% endif %}{% endfor %}</tr>
-          </tbody>
-        </table>
+        {# FY26은 화면에서 뺐다(2026-07-30). 대신 FY27 누계를 표뿐 아니라 KOI 방식의
+           단일 막대 그래프로도 보여준다 — 이 페이지에 그래프가 아예 없던 걸 보완. #}
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="width:92px;flex:none;">
+            <div class="ct">{{ d.fy_label }} 누계 <b>{{ pc(s.fy_ach) }}</b></div>
+            {# 막대 1개짜리라 목표선 라벨은 숨기고, 정확한 목표값은 캡션에 바로 적어 둔다. #}
+            <div class="chartbox" style="height:58px;">
+              {{ chart([s.fy_official], [s.fy_target], s.cum_vmax, [d.fy_label], 0, none, none, '', False) }}
+            </div>
+            <div style="font-size:9px;color:#7f7f7f;text-align:center;">목표 {{ num(s.fy_target) }}</div>
+          </div>
+          <table style="flex:1;">
+            <thead><tr><th class="l">구분</th>
+              {% for mo in s.months %}{% if loop.index0 <= s.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
+            <tbody>
+              <tr class="act"><td class="l">Official</td>
+                {% for v in s.official %}{% if loop.index0 <= s.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+              <tr class="tgt"><td class="l">(Unofficial)</td>
+                {% for v in s.unofficial %}{% if loop.index0 <= s.upto_i %}<td>({{ num(v) }})</td>{% endif %}{% endfor %}</tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div class="card" style="flex:1;min-height:0;">
         <h3>업체별 ({{ d.fy_label }} 누계)</h3>
@@ -342,33 +364,38 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 <section class="slide">
   <div class="stitle">(4) 고객 Claim 현황 <small>— 단위 만원 (전표금액 − 협력사 Re-claim)</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
-    <div class="card" style="height:44%;min-height:0;">
+    {# FY26 열은 뺐고, 첫 데이터 열은 FY27 누계다(2026-07-30). 표가 카드 테두리 밖으로
+       삐져나가던 문제 — table-layout:fixed로 폭을 카드 안에 고정하고, 업체명이 길어도
+       줄바꿈되게(white-space:normal) 해서 더는 옆으로 밀려나가지 않는다. #}
+    <div class="card" style="height:44%;min-height:0;overflow:hidden;">
       <h3>업체별 발생 금액</h3>
-      <table>
-        <thead><tr><th class="l">업체</th><th>{{ d.prev_fy_label }}</th>
+      <div style="overflow:hidden;flex:1;min-height:0;">
+      <table style="table-layout:fixed;width:100%;">
+        <thead><tr><th class="l" style="width:110px;">업체</th><th style="width:66px;">{{ d.fy_label }}<br>누계</th>
           {% for mo in c.months %}{% if loop.index0 <= c.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
         <tbody>
         {% for row in c.by_cust[:9] %}
-          <tr><td class="l">{{ row[0] }}</td><td class="r">{{ num(row[1]) if row[1] else '' }}</td>
+          <tr><td class="l" style="white-space:normal;">{{ row[0] }}</td><td class="r">{{ num(row[1]) if row[1] else '' }}</td>
             {% for v in row[2:] %}{% if loop.index0 <= c.upto_i %}<td class="r">{{ num(v) if v else '' }}</td>{% endif %}{% endfor %}</tr>
         {% else %}
           <tr><td colspan="14" class="empty">클레임 데이터가 없습니다.</td></tr>
         {% endfor %}
-          <tr class="sum"><td class="l">합계</td><td class="r">{{ num(c.prev_total) }}</td>
+          <tr class="sum"><td class="l">합계</td><td class="r">{{ num(c.fy_total) }}</td>
             {% for v in c.monthly %}{% if loop.index0 <= c.upto_i %}<td class="r">{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
         </tbody>
       </table>
+      </div>
     </div>
     <div class="card" style="flex:1;min-height:0;">
       <h3>{{ d.fy_label }} 발생 내역</h3>
       <table>
         <thead><tr><th>집계월</th><th>부서</th><th class="l">고객</th><th>품번</th><th class="l">품명</th>
-          <th class="l">구분</th><th>전표금액</th><th>Re-claim</th><th>합계</th></tr></thead>
+          <th class="l">CLAIM 내용</th><th>전표금액</th><th>Re-claim</th><th>합계</th></tr></thead>
         <tbody>
         {% for r in c.details[:9] %}
           <tr><td>{{ r.ym }}</td><td>{{ r.part }}</td><td class="l">{{ r.customer or '-' }}</td>
             <td>{{ r.tm_no or '-' }}</td><td class="l">{{ (r.product_name or '')[:16] }}</td>
-            <td class="l">{{ r.item }}</td><td class="r">{{ num(r.amount) }}</td>
+            <td class="l">{{ r.content or r.item }}</td><td class="r">{{ num(r.amount) }}</td>
             <td class="r">{{ num(r.reclaim) }}</td><td class="r">{{ num(r.net) }}</td></tr>
         {% else %}
           <tr><td colspan="9" class="empty">발생 내역이 없습니다.</td></tr>
@@ -383,7 +410,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 {# ───────── 15. Scrap Cost ───────── #}
 {% set sc = d.scrap %}
 <section class="slide">
-  <div class="stitle">(5) 품질 COST — Scrap Cost <small>— 단위 만원 · {{ sc.prev_ym }} vs {{ sc.cur_ym }}</small></div>
+  <div class="stitle">(5) 품질 COST — Scrap Cost <small>— 단위 만원</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
     <div class="card" style="height:46%;min-height:0;">
       <table>
@@ -480,9 +507,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </table>
       {# 목표는 비율(%)로 관리하므로 금액 막대에는 목표선을 그릴 수 없다. 그래서 COPQ 비율
          그래프로 바꿔 목표선을 긋고, 목표를 넘은 달은 붉게 표시한다(2026-07-30 확정).
-         금액(공정불량·클레임·Q-COST)은 바로 위 표에 그대로 남아 있다. #}
-      <div class="ct" style="margin-top:6px;">COPQ 비율(%) — 목표 초과월은 <b style="color:#c00000;">붉게</b> 표시</div>
-      <div class="chartbox">
+         금액(공정불량·클레임·Q-COST)은 바로 위 표에 그대로 남아 있다. 안내 문구는 삭제(2026-07-30). #}
+      <div class="chartbox" style="margin-top:6px;">
         {{ chart(q.pct, q.target, q.pct_vmax, q.months, 3, q.upto_i) }}
       </div>
     </div>

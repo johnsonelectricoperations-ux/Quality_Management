@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -263,12 +263,13 @@ def _ban_block(conn, m, agg, fy, part, upto, top=2):
     upto_ym = ymlist[upto_i]
     out = {}
     for proc in BAN_PROCS:
-        ppm, tgt, ach = [], [], []
+        qty, ppm, tgt, ach = [], [], [], []
         for i, ym in enumerate(ymlist):
             q = agg["bq"].get((ym, part, "공정", proc), 0)
             p = agg["pq"].get((ym, part), 0)
             t = _target(conn, fy, part, "ban_ppm_" + proc)
             v = _ppm(q, p) if i <= upto_i else None
+            qty.append(q if i <= upto_i else None)
             ppm.append(v)
             tgt.append(t)
             ach.append(achieve(v, t) if i <= upto_i else None)
@@ -296,21 +297,27 @@ def _ban_block(conn, m, agg, fy, part, upto, top=2):
                 "defects": " / ".join("%s %d" % (n, q) for n, q in
                                       sorted(v["by"].items(), key=lambda kv: -kv[1])[:3]),
             })
-        out[proc] = {"months": months, "upto_i": upto_i, "ppm": ppm, "target": tgt,
+        out[proc] = {"months": months, "upto_i": upto_i, "qty": qty, "ppm": ppm, "target": tgt,
                      "achieve": ach, "fy_cum": cum, "fy_cum_ach": achieve(cum, ft),
                      "fy_target": ft,
                      "prev_actual": _fy_actual(conn, fy - 1, part, "ban_ppm_" + proc),
                      "prev_target": _target(conn, fy - 1, part, "ban_ppm_" + proc),
                      "top_items": rows,
-                     "vmax": max([v for v in ppm if v] + [t for t in tgt if t] + [0])}
+                     "vmax": max([v for v in ppm if v] + [t for t in tgt if t] + [0]),
+                     # '누계' 미니 차트(막대 1개)용 축. KOI FY27누적 패널과 같은 방식(2026-07-30).
+                     "cum_vmax": max([v for v in [cum, ft] if v] + [0])}
     return out
 
 
-def _top5(conn, m, y, mth, part):
+def _top5(conn, m, agg, y, mth, part):
+    """공정불량 TOP5. 점유율 = 이 품목 불량수량 / **해당 파트 전체 공정불량수량**(상위5 합계가 아님).
+    분모는 _collect_fy가 이미 계산해 둔 발견기준 총수량(agg['rq'])을 그대로 쓴다(2026-07-30 확정 —
+    전에는 상위5 합계로 나눠 점유율이 실제보다 훨씬 크게 표시되던 버그가 있었다)."""
     d0 = "%04d-%02d-01" % (y, mth)
     d1 = "%04d-%02d-%02d" % (y, mth, calendar.monthrange(y, mth)[1])
     rows = calc.top5_defect(conn, m, d0, d1, part)
-    tot = sum(r["defect"] for r in rows) or 1
+    ym = "%04d-%02d" % (y, mth)
+    tot = agg["rq"].get((ym, part, "공정"), 0) or 1
     for r in rows:
         r["share"] = round(r["defect"] / tot * 100, 1)
         r["by_txt"] = " / ".join("%s %d" % (n, q) for n, q in r["by"][:3])
@@ -348,18 +355,23 @@ def _issue_block(conn, fy, part, upto):
             "SELECT id FROM incident_file WHERE incident_id=? AND kind='photo' ORDER BY id",
             (r["id"],))]
         details.append(row)
+    fy_official = sum(v for v in off if v)
+    ft = _target(conn, fy, part, "incident")
     return {"months": months, "upto_i": upto_i, "official": off, "unofficial": unoff,
-            "prev_official": _fy_actual(conn, fy - 1, part, "incident_official"),
-            "prev_unofficial": _fy_actual(conn, fy - 1, part, "incident_unofficial"),
-            "fy_official": sum(v for v in off if v), "fy_unofficial": sum(v for v in unoff if v),
+            "fy_official": fy_official, "fy_unofficial": sum(v for v in unoff if v),
+            "fy_target": ft, "fy_ach": achieve(fy_official, ft),
             "by_cust": sorted(([k] + v for k, v in by_cust.items()), key=lambda x: -(x[1] + x[2])),
             "details": details,
+            # FY27 누계 단일 막대 그래프(KOI 방식)용 축 — 2026-07-30, FY26 표시 제거하며 추가.
+            "cum_vmax": max([v for v in [fy_official, ft] if v] + [0]),
             "vmax": max([v for v in off if v] + [1])}
 
 
 # ── (4) 고객 Claim 현황 ─────────────────────────────────
 def _claim_block(conn, fy, upto):
-    """업체별 클레임 금액(만원) — FY26 시드 + FY 월별 실적. claim.amount는 천원이라 /10."""
+    """업체별 클레임 금액(만원) — FY 월별 실적 + FY 누계. claim.amount는 천원이라 /10.
+    업체별표의 첫 열은 FY26 시드가 아니라 **FY27 누계**(그 업체의 월별 합)를 보여준다
+    (2026-07-30 확정 — FY26은 화면에서 뺐다)."""
     months = [mo for (_y, mo) in calc.fy_months(fy)]
     ymlist = _fy_ym(fy)
     upto_i = months.index(upto)
@@ -370,7 +382,7 @@ def _claim_block(conn, fy, upto):
         s = conn.execute("SELECT COALESCE(SUM(amount-reclaim),0) s FROM claim "
                          "WHERE use_agg=1 AND d LIKE ?", (ym + "%",)).fetchone()["s"]
         monthly.append(round(s / 10))
-    by_cust = defaultdict(lambda: [0] * (len(months) + 1))   # [FY이전, 월별...]
+    by_cust = defaultdict(lambda: [0] * (len(months) + 1))   # [FY27누계(나중에 채움), 월별...]
     for r in conn.execute(
             "SELECT customer, d, SUM(amount-reclaim) s FROM claim WHERE use_agg=1 "
             "AND d BETWEEN ? AND ? GROUP BY customer, d",
@@ -378,8 +390,8 @@ def _claim_block(conn, fy, upto):
         i = ymlist.index(r["d"][:7]) if r["d"][:7] in ymlist else None
         if i is not None:
             by_cust[r["customer"] or "(미지정)"][i + 1] += round(r["s"] / 10)
-    for r in conn.execute("SELECT customer, amount FROM fy_claim WHERE fy=?", ((fy - 1) % 100,)):
-        by_cust[r["customer"]][0] += round(r["amount"])
+    for row in by_cust.values():
+        row[0] = sum(v for v in row[1:] if v)
     details = []
     for r in conn.execute(
             "SELECT d,part,customer,tm_no,product_name,item,amount,reclaim,content FROM claim "
@@ -391,13 +403,11 @@ def _claim_block(conn, fy, upto):
                         "amount": round(r["amount"] / 10), "reclaim": round(r["reclaim"] / 10),
                         "net": round((r["amount"] - r["reclaim"]) / 10),
                         "content": r["content"]})
-    prev_total = conn.execute("SELECT COALESCE(SUM(amount),0) s FROM fy_claim WHERE fy=?",
-                              ((fy - 1) % 100,)).fetchone()["s"]
     return {"months": months, "upto_i": upto_i, "monthly": monthly,
-            "fy_total": sum(v for v in monthly if v), "prev_total": round(prev_total),
+            "fy_total": sum(v for v in monthly if v),
             "by_cust": sorted(([k] + v for k, v in by_cust.items()), key=lambda x: -sum(x[1:])),
             "details": details,
-            "vmax": max([v for v in monthly if v] + [round(prev_total), 1])}
+            "vmax": max([v for v in monthly if v] + [1])}
 
 
 # ── (5) 품질 COST ───────────────────────────────────────
@@ -539,7 +549,7 @@ def build(conn, m, y, mth):
                 for p in ("통합", "VMS PART", "TM PART")},
         "proc": {PART_LABEL[p]: _proc_block(conn, m, agg, fy, p, mth)
                  for p in ("VMS PART", "TM PART")},
-        "top5": {PART_LABEL[p]: _top5(conn, m, y, mth, p) for p in ("VMS PART", "TM PART")},
+        "top5": {PART_LABEL[p]: _top5(conn, m, agg, y, mth, p) for p in ("VMS PART", "TM PART")},
         "ban": {PART_LABEL[p]: _ban_block(conn, m, agg, fy, p, mth)
                 for p in ("VMS PART", "TM PART")},
         "issue": {PART_LABEL[p]: _issue_block(conn, fy, p, mth) for p in ("VMS PART", "TM PART")},
