@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 8
+CACHE_VERSION = 9
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -46,10 +46,11 @@ KOI_METRICS = [
 CONTENTS = [
     "(1) KOI 현황",
     "(2) 공정불량 현황",
-    "(3) 고객 품질 ISSUE",
-    "(4) 고객 Claim 현황",
-    "(5) 품질 COST : Scrap Cost, COPQ",
-    "(6) 주요 업무 진행 현황",
+    "(3) 내부품질 Issue",
+    "(4) 고객 품질 ISSUE",
+    "(5) 고객 Claim 현황",
+    "(6) 품질 COST : Scrap Cost, COPQ",
+    "(7) 주요 업무 진행 현황",
 ]
 
 
@@ -364,6 +365,10 @@ def _issue_block(conn, fy, part, upto):
         row["photos"] = [f["id"] for f in conn.execute(
             "SELECT id FROM incident_file WHERE incident_id=? AND kind='photo' ORDER BY id",
             (r["id"],))]
+        # 첨부 문서(PDF 등, 2026-07-30) — 보고서에는 바로 띄우지 않고 아이콘 클릭 시 새 창으로만 연다.
+        row["docs"] = [{"id": f["id"], "name": f["orig_name"]} for f in conn.execute(
+            "SELECT id, orig_name FROM incident_file WHERE incident_id=? AND kind='doc' ORDER BY id",
+            (r["id"],))]
         details.append(row)
     fy_official = sum(v for v in off if v)
     ft = _target(conn, fy, part, "incident")
@@ -374,6 +379,49 @@ def _issue_block(conn, fy, part, upto):
             "details": details,
             # FY27 누계 단일 막대 그래프(KOI 방식)용 축 — 2026-07-30, FY26 표시 제거하며 추가.
             "cum_vmax": max([v for v in [fy_official, ft] if v] + [0]),
+            "vmax": max([v for v in off if v] + [1])}
+
+
+# ── (3) 내부품질 Issue ─────────────────────────────────
+def _internal_issue_block(conn, fy, part, upto):
+    """Customer Incident(_issue_block)와 동일 구조. 고객사 대신 공정명으로 집계하고,
+    이 지표는 KPI 목표가 없어(내부 등록·관리용 로그) 목표/달성율 계산은 하지 않는다."""
+    months = [mo for (_y, mo) in calc.fy_months(fy)]
+    ymlist = _fy_ym(fy)
+    upto_i = months.index(upto)
+    off, unoff = [], []
+    for i, ym in enumerate(ymlist):
+        if i > upto_i:
+            off.append(None); unoff.append(None); continue
+        o = conn.execute("SELECT COUNT(*) c FROM internal_issue WHERE is_official=1 AND d LIKE ? AND part=?",
+                         (ym + "%", part)).fetchone()["c"]
+        u = conn.execute("SELECT COUNT(*) c FROM internal_issue WHERE is_official=0 AND d LIKE ? AND part=?",
+                         (ym + "%", part)).fetchone()["c"]
+        off.append(o); unoff.append(u)
+    by_proc = defaultdict(lambda: [0, 0])
+    for r in conn.execute(
+            "SELECT process, is_official, COUNT(*) c FROM internal_issue "
+            "WHERE part=? AND d BETWEEN ? AND ? GROUP BY process, is_official",
+            (part, ymlist[0] + "-01", ymlist[upto_i] + "-31")):
+        by_proc[r["process"] or "(미지정)"][0 if r["is_official"] else 1] += r["c"]
+    upto_ym = ymlist[upto_i]
+    details = []
+    for r in conn.execute(
+            "SELECT id,d,process,location,tm_no,product_name,content,defect_qty,cause,action,is_official "
+            "FROM internal_issue WHERE part=? AND d LIKE ? ORDER BY d", (part, upto_ym + "%")):
+        row = dict(r)
+        row["photos"] = [f["id"] for f in conn.execute(
+            "SELECT id FROM internal_issue_file WHERE internal_issue_id=? AND kind='photo' ORDER BY id",
+            (r["id"],))]
+        row["docs"] = [{"id": f["id"], "name": f["orig_name"]} for f in conn.execute(
+            "SELECT id, orig_name FROM internal_issue_file WHERE internal_issue_id=? AND kind='doc' ORDER BY id",
+            (r["id"],))]
+        details.append(row)
+    fy_official = sum(v for v in off if v)
+    return {"months": months, "upto_i": upto_i, "official": off, "unofficial": unoff,
+            "fy_official": fy_official, "fy_unofficial": sum(v for v in unoff if v),
+            "by_proc": sorted(([k] + v for k, v in by_proc.items()), key=lambda x: -(x[1] + x[2])),
+            "details": details,
             "vmax": max([v for v in off if v] + [1])}
 
 
@@ -573,6 +621,7 @@ def build(conn, m, y, mth):
         "ban": {PART_LABEL[p]: _ban_block(conn, m, agg, fy, p, mth)
                 for p in ("VMS PART", "TM PART")},
         "issue": {PART_LABEL[p]: _issue_block(conn, fy, p, mth) for p in ("VMS PART", "TM PART")},
+        "internal_issue": {PART_LABEL[p]: _internal_issue_block(conn, fy, p, mth) for p in ("VMS PART", "TM PART")},
         "claim": _claim_block(conn, fy, mth),
         "scrap": _scrap_block(conn, m, agg, fy, y, mth),
         "copq": copq,

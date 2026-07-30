@@ -74,6 +74,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .narr .k{width:62px;color:#7f7f7f;flex:none;}
 .photos{display:flex;gap:6px;margin-top:5px;}
 .photos img{height:96px;border:1px solid #ccc;border-radius:3px;object-fit:cover;}
+.docs{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.docs a{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#3a5a8a;
+  border:1px solid #ccd6e4;border-radius:4px;padding:2px 6px;text-decoration:none;background:#f4f7fb;}
 .tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
 .empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
 
@@ -307,11 +310,78 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 {% endfor %}
 {% endfor %}
 
-{# ───────── 12~13. 고객 품질 ISSUE ───────── #}
+{# ───────── 12~13. 내부품질 Issue ─────────
+   Customer Incident(고객 품질 ISSUE)와 같은 구성이되 고객사 대신 공정명으로 집계한다.
+   이 지표는 KPI 목표가 없는(관리 로그 성격) 항목이라 목표선·달성율은 넣지 않는다(2026-07-30). #}
+{% for lbl in ['생산1P','생산2P'] %}
+{% set ii = d.internal_issue[lbl] %}
+<section class="slide">
+  <div class="stitle">(3) 내부품질 Issue <small>— {{ lbl }} · 단위 건</small></div>
+  <div class="body" style="display:flex;gap:12px;">
+    <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
+      <div class="card">
+        <h3>발생 현황</h3>
+        <div class="chartbox" style="height:70px;">
+          {{ chart(ii.official, none, ii.vmax, ii.months, 0, ii.upto_i, none, '월', False) }}
+        </div>
+        <table style="margin-top:6px;">
+          <thead><tr><th class="l" style="width:74px;"></th><th>{{ d.fy_label }}<br>누계</th>
+            {% for mo in ii.months %}{% if loop.index0 <= ii.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr></thead>
+          <tbody>
+            <tr class="act"><td class="l">Official</td><td class="r">{{ num(ii.fy_official) }}</td>
+              {% for v in ii.official %}{% if loop.index0 <= ii.upto_i %}<td>{{ num(v) }}</td>{% endif %}{% endfor %}</tr>
+            <tr class="tgt"><td class="l">(Unofficial)</td><td class="r">({{ num(ii.fy_unofficial) }})</td>
+              {% for v in ii.unofficial %}{% if loop.index0 <= ii.upto_i %}<td>({{ num(v) }})</td>{% endif %}{% endfor %}</tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1;min-height:0;">
+        <h3>공정별 ({{ d.fy_label }} 누계)</h3>
+        <table>
+          <thead><tr><th class="l">공정명</th><th>Official</th><th>(Unofficial)</th></tr></thead>
+          <tbody>
+          {% for row in ii.by_proc %}
+            <tr><td class="l">{{ row[0] }}</td><td>{{ row[1] or '' }}</td><td>{{ '(%d)'|format(row[2]) if row[2] else '' }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="empty">{{ d.fy_label }} 발생 건이 없습니다.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:0;">
+      <h3>{{ d.ym }} 발생 상세</h3>
+      <div style="overflow:hidden;flex:1;min-height:0;">
+      {% for it in ii.details %}
+        <div class="narr" style="border-bottom:1px solid #e6e6e6;padding-bottom:6px;margin-bottom:6px;">
+          <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b></div>
+          <div class="row"><span class="k">발생일자/공정</span>{{ it.d }} / {{ it.process or '-' }}</div>
+          <div class="row"><span class="k">발생위치</span>{{ it.location or '-' }}</div>
+          <div class="row"><span class="k">품번/수량</span>{{ it.tm_no or '-' }} / {{ num(it.defect_qty) }} EA</div>
+          <div class="row"><span class="k">발생원인</span>{{ it.cause or '-' }}</div>
+          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action or '-' }}</div>
+          {% if it.photos %}
+          <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/internal-issue/file/{{ fid }}" alt="">{% endfor %}</div>
+          {% endif %}
+          {% if it.docs %}
+          <div class="docs">{% for f in it.docs %}<a href="/input/internal-issue/file/{{ f.id }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty">{{ d.ym }} 발생한 내부품질 Issue가 없습니다.</div>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Page {{ 11 + loop.index }}</span><span>Confidential</span></div>
+</section>
+{% endfor %}
+
+{# ───────── 14~15. 고객 품질 ISSUE ───────── #}
 {% for lbl in ['생산1P','생산2P'] %}
 {% set s = d.issue[lbl] %}
 <section class="slide">
-  <div class="stitle">(3) 고객 품질 ISSUE <small>— {{ lbl }} · 단위 건</small></div>
+  <div class="stitle">(4) 고객 품질 ISSUE <small>— {{ lbl }} · 단위 건</small></div>
   <div class="body" style="display:flex;gap:12px;">
     <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
       <div class="card">
@@ -366,6 +436,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           {% if it.photos %}
           <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="">{% endfor %}</div>
           {% endif %}
+          {% if it.docs %}
+          <div class="docs">{% for f in it.docs %}<a href="/input/incident/file/{{ f.id }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
+          {% endif %}
         </div>
       {% else %}
         <div class="empty">{{ d.ym }} 발생한 고객 품질 ISSUE가 없습니다.</div>
@@ -373,14 +446,14 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page {{ 11 + loop.index }}</span><span>Confidential</span></div>
+  <div class="foot"><span>Page {{ 13 + loop.index }}</span><span>Confidential</span></div>
 </section>
 {% endfor %}
 
-{# ───────── 14. 고객 Claim ───────── #}
+{# ───────── 16. 고객 Claim ───────── #}
 {% set c = d.claim %}
 <section class="slide">
-  <div class="stitle">(4) 고객 Claim 현황 <small>— 단위 만원 (전표금액 − 협력사 Re-claim)</small></div>
+  <div class="stitle">(5) 고객 Claim 현황 <small>— 단위 만원 (전표금액 − 협력사 Re-claim)</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
     {# FY26 열은 뺐고, 첫 데이터 열은 FY27 누계다(2026-07-30). 표가 카드 테두리 밖으로
        삐져나가던 문제 — table-layout:fixed로 폭을 카드 안에 고정하고, 업체명이 길어도
@@ -422,13 +495,13 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </table>
     </div>
   </div>
-  <div class="foot"><span>Page 14</span><span>Confidential</span></div>
+  <div class="foot"><span>Page 16</span><span>Confidential</span></div>
 </section>
 
-{# ───────── 15. Scrap Cost ───────── #}
+{# ───────── 17. Scrap Cost ───────── #}
 {% set sc = d.scrap %}
 <section class="slide">
-  <div class="stitle">(5) 품질 COST — Scrap Cost <small>— 단위 만원</small></div>
+  <div class="stitle">(6) 품질 COST — Scrap Cost <small>— 단위 만원</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
     <div class="card" style="height:46%;min-height:0;">
       <table>
@@ -494,12 +567,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       {% endfor %}
     </div>
   </div>
-  <div class="foot"><span>Page 15</span><span>Confidential</span></div>
+  <div class="foot"><span>Page 17</span><span>Confidential</span></div>
 </section>
 
-{# ───────── 16. COPQ ───────── #}
+{# ───────── 18. COPQ ───────── #}
 <section class="slide">
-  <div class="stitle">(5) 품질 COST — COPQ <small>— 금액 만원 / 비율 %</small></div>
+  <div class="stitle">(6) 품질 COST — COPQ <small>— 금액 만원 / 비율 %</small></div>
   <div class="body"><div class="grid2">
     {% for lbl in ['생산1P','생산2P'] %}
     {% set q = d.copq[lbl] %}
@@ -534,12 +607,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     </div>
     {% endfor %}
   </div></div>
-  <div class="foot"><span>Page 16</span><span>Confidential</span></div>
+  <div class="foot"><span>Page 18</span><span>Confidential</span></div>
 </section>
 
-{# ───────── 17. 주요 업무 진행 현황 ───────── #}
+{# ───────── 19. 주요 업무 진행 현황 ───────── #}
 <section class="slide">
-  <div class="stitle">(6) 주요 업무 진행 현황 <small>— {{ d.ym }}</small></div>
+  <div class="stitle">(7) 주요 업무 진행 현황 <small>— {{ d.ym }}</small></div>
   <div class="body">
     {% if d.main_tasks %}
     <div class="tasks">{{ d.main_tasks }}</div>
@@ -547,7 +620,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     <div class="empty">입력된 내용이 없습니다. [리포트 → 월마감] 화면에서 작성하세요.</div>
     {% endif %}
   </div>
-  <div class="foot"><span>Page 17</span><span>Confidential</span></div>
+  <div class="foot"><span>Page 19</span><span>Confidential</span></div>
 </section>
 
 </div>
