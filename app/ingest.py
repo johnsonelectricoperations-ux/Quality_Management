@@ -426,7 +426,9 @@ def ingest_daily_defect_folder(conn, folder, user=""):
 _MONTHLY_DEFECT_RE = re.compile(r"^(\d{4})_(.+?)_(공정|셋팅)불량_생산([12])파트$")
 _MONTHLY_PART_TOKEN = {"1": "VMS PART", "2": "TM PART"}
 # 불량유형 열 중 집계 제외(폐기·소재불량은 폐기불량/외주소재불량 소스와 중복이라 별도 소스로만 집계, 소계는 합계열)
-_MONTHLY_SKIP_COLS = {"폐기", "소재불량", "소계"}
+# "오기유/무"는 수량이 아니라 "OK" 텍스트만 들어가는 확인용 체크 열이라 불량명이 아니다.
+# "합계"는 "소계"와 같은 자리(폐기·소재불량 뒤)에 오는 총계 열이다.
+_MONTHLY_SKIP_COLS = {"폐기", "소재불량", "소계", "합계", "오기유/무"}
 
 
 def parse_monthly_defect_filename(fname):
@@ -492,6 +494,12 @@ def ingest_monthly_defect_file(conn, path, user=""):
         # (예: xlsm의 "영점 및\n동심도수정" → "영점및동심도수정").
         dcols, ucols = [], []
         for c in range(1, ws.max_column + 1):
+            # 1~10열(TM NO./코드/품명/차종/거래선/단가/불량금액/생산수량/불량수량/불량율)은
+            # 관리용 열이고, 4행에는 그 위에 얹힌 구간 제목("OK"/"거래선 및 불량금액"/"종합")이
+            # 있을 뿐 진짜 불량명이 아니다. 5행에 헤더가 있는 열은 전부 건너뛴다(2026-07-30 확정).
+            # 이걸 안 걸러서 관리용 열의 TM-NO·생산수량 값이 불량 수량으로 잘못 합산되던 버그가 있었다.
+            if str(ws.cell(row=5, column=c).value or "").strip():
+                continue
             raw = str(ws.cell(row=4, column=c).value or "")
             name = "".join(raw.split())
             if not name or name in _MONTHLY_SKIP_COLS:
