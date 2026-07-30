@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS internal_issue (
   -- 내부품질 issue 건별 등록(원장). Customer Incident와 동일 구조이되 고객명 대신
   -- 문제가 발생한 내부 공정명(process, 5대 집계공정 중 하나)을 관리한다(2026-07-30 신설).
   id INTEGER PRIMARY KEY, d TEXT NOT NULL, part TEXT NOT NULL,
-  process TEXT DEFAULT '', location TEXT DEFAULT '', tm_no TEXT DEFAULT '',
+  process TEXT DEFAULT '', process_etc TEXT DEFAULT '', location TEXT DEFAULT '', tm_no TEXT DEFAULT '',
   product_name TEXT DEFAULT '', content TEXT DEFAULT '', defect_qty INTEGER NOT NULL DEFAULT 0,
   cause TEXT DEFAULT '', action TEXT DEFAULT '', is_official INTEGER NOT NULL DEFAULT 1,
   reg_user TEXT DEFAULT ''
@@ -338,6 +338,8 @@ def init_db():
     _add_col(conn, "incident", "defect_qty", "INTEGER NOT NULL DEFAULT 0")   # 불량수량
     _add_col(conn, "incident", "cause", "TEXT DEFAULT ''")          # 발생원인
     _add_col(conn, "incident", "action", "TEXT DEFAULT ''")         # 개선대책
+    # 공정명이 '기타'일 때 실제 공정을 적어두는 상세 항목 (2026-07-30 추가)
+    _add_col(conn, "internal_issue", "process_etc", "TEXT DEFAULT ''")
     _migrate_defect_type(conn)
     _migrate_product_price(conn)
     _migrate_claim(conn)

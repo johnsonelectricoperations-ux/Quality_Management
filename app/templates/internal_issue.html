@@ -19,7 +19,8 @@
         <div class="f"><label>발생일자</label><input class="in" type="date" name="d" value="{{ edit_row.d if edit_row }}" required></div>
         <div class="f"><label>파트</label><select class="in" name="part">
           {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}</select></div>
-        <div class="f"><label>공정명</label><select class="in" name="process">
+        <div class="f"><label>공정명</label><select class="in" name="process" id="processSel"
+              onchange="document.getElementById('processEtcRow').style.display = (this.value==='기타') ? '' : 'none';">
           <option value="">(선택)</option>
           {% for p in processes %}
           <option value="{{ p }}" {{ 'selected' if edit_row and edit_row.process==p }}>{{ p }}</option>
@@ -33,6 +34,11 @@
           <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" name="is_official" {{ 'checked' if (not edit_row) or edit_row.is_official }}> 공식</label>
         </div>
+      </div>
+
+      <div class="frow" id="processEtcRow" style="grid-template-columns:1fr;margin-top:10px;{{ 'display:none;' if not (edit_row and edit_row.process=='기타') }}">
+        <div class="f"><label>기타 공정명</label>
+          <input class="in" name="process_etc" value="{{ edit_row.process_etc if edit_row }}" placeholder="공정명을 직접 입력"></div>
       </div>
 
       <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
@@ -97,7 +103,8 @@
     <tbody>
     {% for r in rows %}
       <tr {% if not r.is_official %}style="color:var(--tx3);"{% endif %}>
-        <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td><td>{{ r.process or '-' }}</td>
+        <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td>
+        <td>{{ r.process or '-' }}{% if r.process=='기타' and r.process_etc %} ({{ r.process_etc }}){% endif %}</td>
         <td>{{ r.location or '-' }}</td>
         <td class="mono">{{ r.tm_no or '-' }}</td><td>{{ r.product_name or '-' }}</td>
         <td class="num">{{ r.defect_qty|cf if r.defect_qty else '-' }}</td>

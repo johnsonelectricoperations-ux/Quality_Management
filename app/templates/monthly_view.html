@@ -355,7 +355,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       {% for it in ii.details %}
         <div class="narr" style="border-bottom:1px solid #e6e6e6;padding-bottom:6px;margin-bottom:6px;">
           <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b></div>
-          <div class="row"><span class="k">발생일자/공정</span>{{ it.d }} / {{ it.process or '-' }}</div>
+          <div class="row"><span class="k">발생일자/공정</span>{{ it.d }} / {{ it.process or '-' }}{% if it.process=='기타' and it.process_etc %} ({{ it.process_etc }}){% endif %}</div>
           <div class="row"><span class="k">발생위치</span>{{ it.location or '-' }}</div>
           <div class="row"><span class="k">품번/수량</span>{{ it.tm_no or '-' }} / {{ num(it.defect_qty) }} EA</div>
           <div class="row"><span class="k">발생원인</span>{{ it.cause or '-' }}</div>

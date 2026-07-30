@@ -2114,7 +2114,7 @@ def internal_issue_page(request: Request, edit: int = 0, msg: str = "", err: str
     if g:
         return g
     conn = db.connect()
-    cols = ("id,d,part,process,location,tm_no,product_name,content,defect_qty,cause,action,is_official")
+    cols = ("id,d,part,process,process_etc,location,tm_no,product_name,content,defect_qty,cause,action,is_official")
     rows = [dict(r) for r in conn.execute(
         f"SELECT {cols} FROM internal_issue ORDER BY d DESC,id DESC LIMIT 200")]
     files = defaultdict(list)
@@ -2145,6 +2145,7 @@ async def internal_issue_save(request: Request):
     d = (form.get("d") or "").strip()
     part = form.get("part") or "VMS PART"
     process = (form.get("process") or "").strip()
+    process_etc = (form.get("process_etc") or "").strip() if process == "기타" else ""
     location = (form.get("location") or "").strip()
     tm_no = calc.base_tmno((form.get("tm_no") or "").strip())
     product_name = (form.get("product_name") or "").strip()
@@ -2162,17 +2163,17 @@ async def internal_issue_save(request: Request):
     conn = db.connect()
     if orig_id:
         conn.execute(
-            "UPDATE internal_issue SET d=?,part=?,process=?,location=?,tm_no=?,product_name=?,content=?,"
+            "UPDATE internal_issue SET d=?,part=?,process=?,process_etc=?,location=?,tm_no=?,product_name=?,content=?,"
             "defect_qty=?,cause=?,action=?,is_official=? WHERE id=?",
-            (d, part, process, location, tm_no, product_name, content,
+            (d, part, process, process_etc, location, tm_no, product_name, content,
              defect_qty, cause, action, is_official, orig_id))
         iid = int(orig_id)
         msg = "수정됨"
     else:
         cur = conn.execute(
-            "INSERT INTO internal_issue(d,part,process,location,tm_no,product_name,content,"
-            "defect_qty,cause,action,is_official,reg_user) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            (d, part, process, location, tm_no, product_name, content,
+            "INSERT INTO internal_issue(d,part,process,process_etc,location,tm_no,product_name,content,"
+            "defect_qty,cause,action,is_official,reg_user) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (d, part, process, process_etc, location, tm_no, product_name, content,
              defect_qty, cause, action, is_official, u["name"]))
         iid = cur.lastrowid
         msg = "등록됨"

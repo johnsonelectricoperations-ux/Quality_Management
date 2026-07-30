@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 9
+CACHE_VERSION = 10
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -407,7 +407,7 @@ def _internal_issue_block(conn, fy, part, upto):
     upto_ym = ymlist[upto_i]
     details = []
     for r in conn.execute(
-            "SELECT id,d,process,location,tm_no,product_name,content,defect_qty,cause,action,is_official "
+            "SELECT id,d,process,process_etc,location,tm_no,product_name,content,defect_qty,cause,action,is_official "
             "FROM internal_issue WHERE part=? AND d LIKE ? ORDER BY d", (part, upto_ym + "%")):
         row = dict(r)
         row["photos"] = [f["id"] for f in conn.execute(
