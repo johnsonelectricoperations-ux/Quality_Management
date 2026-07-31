@@ -29,7 +29,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 5003
 
 | | ① 초기 구축 | ② 운영(신규 수집) |
 |---|---|---|
-| 입력 위치 | 리포지토리 `templates/` | 서버 공유 폴더 `\\carp130001\...\Quality_Data` |
+| 입력 위치 | 리포지토리 `templates/` | 서버 공유 폴더 `\\10.80.12.103\...\Quality_Data` (사내불량·생산량·외주소재) + `C:\PJT\Scrap_management`의 `scrap_data.db` (폐기불량) |
 | 실행 | `python -m app.init_data` 또는 `/admin/scan` 의 **초기 구축** | `/admin/scan` 의 **폴더 반영** (향후 자동 주기) |
 | 횟수 | 최초 1회 | 반복 (멱등) |
 

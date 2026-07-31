@@ -61,19 +61,22 @@ python -m app.init_data --force  REM 강제 재실행
 웹에서 **관리 → 🔄 폴더 반영 → [▶ 전체 폴더 반영]** 을 누르면 DB에 들어갑니다.
 
 ```
-\\carp130001\TheEyesHaveIt\QC_Data\Quality_Data\
+\\10.80.12.103\TheEyesHaveIt\QC_Data\Quality_Data\
   01_사내불량\{YYYY-MM}\{1PART|2PART}\{공정}\   ← 일일 불량 양식
   02_생산량\{YYYY-MM}\                          ← ERP 생산수량 xlsx
   03_외주소재\00_sintering_defect.xlsm          ← 덮어쓰기
-  04_폐기불량\scrap_data.db                     ← 덮어쓰기
-  05_단가마스터\제품별 단가 Master_*.xlsx
+
+C:\PJT\Scrap_management\
+  scrap_data.db                                 ← 이 파일만 참조(폴더 안 다른 파일은 무시)
 ```
 
 - 폴더의 파일은 **읽기만** 합니다(수정·이동·삭제 없음).
-- 여러 번 반영해도 **중복되지 않습니다**(사내불량=일자·공정 단위 교체, 외주·폐기=전체 교체).
+- 여러 번 반영해도 **중복되지 않습니다**(사내불량=일자·공정 단위 교체, 외주/폐기=전체 교체).
 - 초기 구축과 기간이 겹치면 **폴더 쪽이 최신으로 덮어씁니다**.
-- 루트 경로는 폴더 반영 화면에서 변경할 수 있습니다(환경변수 `QMS_DATA_ROOT` 도 가능).
-- 서비스 계정에 공유 폴더 **읽기 권한**이 필요합니다.
+- 공유 폴더 루트 경로는 폴더 반영 화면에서 변경할 수 있습니다(환경변수 `QMS_DATA_ROOT` 도 가능).
+- 폐기불량 전용 경로도 폴더 반영 화면에서 따로 변경할 수 있습니다(환경변수 `QMS_SCRAP_ROOT` 도 가능).
+- 서비스 계정에 두 경로 모두 **읽기 권한**이 필요합니다.
+- 단가마스터는 폴더 반영 대상이 아닙니다 — `/admin/products` 화면에서 직접 관리합니다.
 
 > 수기 입력 소스(SVP·Claim·Customer Incident)만 웹 화면에서 직접 입력/업로드합니다.
 > 데모 데이터로 먼저 보고 싶으면: `python scripts\gen_sample.py` → `python -m app.seed`

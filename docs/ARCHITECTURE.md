@@ -69,22 +69,29 @@ flowchart LR
 | | ① 초기 구축 | ② 운영(신규 수집) |
 |---|---|---|
 | 모듈 | `app/init_data.py` | `app/scan.py` |
-| 입력 위치 | 리포지토리 `templates/` 폴더 | 서버 공유 폴더 `\\carp130001\TheEyesHaveIt\QC_Data\Quality_Data` |
+| 입력 위치 | 리포지토리 `templates/` 폴더 | 서버 공유 폴더 `\\10.80.12.103\TheEyesHaveIt\QC_Data\Quality_Data` (사내불량·생산량·외주소재) + `C:\PJT\Scrap_management`의 `scrap_data.db` (폐기불량, 별도 로컬 경로) |
 | 실행 방법 | `python -m app.init_data` 또는 `/admin/scan` 화면의 **초기 구축** 버튼 | `/admin/scan` 화면의 **폴더 반영** 버튼 (향후 자동 주기) |
 | 횟수 | 최초 1회 | 반복 (멱등) |
 
 > `templates/` 는 초기 구축에만 쓰고, 이후에는 보지 않는다.
+> 단가마스터는 폴더 반영 대상이 아니다(2026-07-31 제외) — `/admin/products` 화면에서 직접 관리.
 
 ### 공유 폴더 구조
 
 ```
-\\carp130001\TheEyesHaveIt\QC_Data\Quality_Data\
+\\10.80.12.103\TheEyesHaveIt\QC_Data\Quality_Data\
   01_사내불량\{연도}\{1파트|2파트}\{월}\        ← 재귀 스캔, 파일명으로 파트/공정/구분/월 판단
   02_생산량\{YYYY-MM}\
   03_외주소재\00_sintering_defect.xlsm          ← 고정 파일, 전체 교체
-  04_폐기불량\scrap_data.db                      ← 고정 파일, 전체 교체
-  05_단가마스터\제품별 단가 Master_*.xlsx        ← 최신 파일 1개 upsert
+
+C:\PJT\Scrap_management\
+  scrap_data.db                                 ← 이 이름의 파일만 참조, 폴더 내 다른 파일은 무시
 ```
+
+두 경로는 `/admin/scan` 화면에서 각각 따로 설정한다(`data_root`/`scrap_root` 설정값,
+환경변수 `QMS_DATA_ROOT`/`QMS_SCRAP_ROOT`로도 지정 가능). 서버PC 이전(2026-07-31)으로
+공유 폴더 주소가 `carp130001`→`10.80.12.103`으로, 폐기불량은 공유 폴더 하위가 아니라
+별도 로컬 경로로 바뀌었다.
 
 사내불량 월별시트 파일명 규칙(2026-07~): `{YYMM}_{공정}_{공정불량|셋팅불량}_생산{1|2}파트.xlsx`
 (예: `2607_성형_공정불량_생산1파트.xlsx`). 파일 1개 = 월 1개, 시트 `1`~`31`(해당월 일자)에

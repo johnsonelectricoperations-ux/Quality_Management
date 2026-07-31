@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
 """서버 공유 폴더 스캔 → DB 적재.
 
-폴더 구조 (루트 = setting 'data_root', 기본 \\carp130001\\...\\Quality_Data):
+폴더 구조 (루트 = setting 'data_root', 기본 \\10.80.12.103\\...\\Quality_Data):
     01_사내불량\\{연도}\\{1파트|2파트}\\{월}\\{YYMM}_{공정}_{공정불량|셋팅불량}_생산{1|2}파트.xlsx
         (하위폴더는 사람이 찾기용, 시스템은 재귀 탐색 + 파일명으로 판단. 월별 1파일, 시트=일자 1~31)
     02_생산량\\{YYYY-MM}\\
     03_외주소재\\00_sintering_defect.xlsm            (고정 파일 덮어쓰기)
-    04_폐기불량\\scrap_data.db                        (고정 파일 덮어쓰기)
-    05_단가마스터\\제품별 단가 Master_*.xlsx
+
+폐기불량은 위 공유 루트와 별개의 로컬 경로(설정 'scrap_root', 기본 C:\\PJT\\Scrap_management)를
+쓴다 — 그 폴더 안에 여러 파일이 섞여 있어도 **scrap_data.db 라는 이름의 파일만** 읽는다
+(2026-07-31 확정, 서버PC 이전하며 소스 위치 변경).
+
+단가마스터는 폴더 반영 대상에서 제외한다(2026-07-31, 필요 없어져 삭제 — 단가는
+/admin/products 화면에서 직접 관리).
 
 원칙
 - 폴더의 파일은 **읽기만** 한다(수정·이동·삭제 없음).
-- 재적재는 멱등: 사내불량=batch_key, 외주/폐기=source 전체 교체, 생산/단가=upsert.
+- 재적재는 멱등: 사내불량=batch_key, 외주/폐기=source 전체 교체, 생산=upsert.
 - 화면(수동 버튼)과 향후 스케줄러가 **같은 scan_all()** 을 호출한다.
 """
 import os
@@ -19,26 +24,36 @@ import datetime
 
 from . import db, ingest
 
-DEFAULT_ROOT = r"\\carp130001\TheEyesHaveIt\QC_Data\Quality_Data"
+DEFAULT_ROOT = r"\\10.80.12.103\TheEyesHaveIt\QC_Data\Quality_Data"
 SETTING_ROOT = "data_root"
+
+DEFAULT_SCRAP_ROOT = r"C:\PJT\Scrap_management"
+SETTING_SCRAP_ROOT = "scrap_root"
+SCRAP_FILENAME = "scrap_data.db"
 
 SUB_DEFECT = "01_사내불량"
 SUB_PRODUCTION = "02_생산량"
 SUB_OUTSOURCE = "03_외주소재"
-SUB_SCRAP = "04_폐기불량"
-SUB_PRICE = "05_단가마스터"
 
 SOURCES = [
     ("defect", "사내불량", SUB_DEFECT),
     ("production", "생산량", SUB_PRODUCTION),
     ("outsource", "외주소재", SUB_OUTSOURCE),
-    ("scrap", "폐기불량", SUB_SCRAP),
-    ("price", "단가마스터", SUB_PRICE),
+    ("scrap", "폐기불량", ""),
 ]
 
 
 def data_root(conn):
     return db.get_setting(conn, SETTING_ROOT, "") or os.environ.get("QMS_DATA_ROOT", DEFAULT_ROOT)
+
+
+def scrap_root(conn):
+    return db.get_setting(conn, SETTING_SCRAP_ROOT, "") or os.environ.get("QMS_SCRAP_ROOT", DEFAULT_SCRAP_ROOT)
+
+
+def root_for(conn, key):
+    """소스별 루트 — 폐기불량만 공유 루트와 별개 경로를 쓴다."""
+    return scrap_root(conn) if key == "scrap" else data_root(conn)
 
 
 def _log(conn, kind, filename, ok, note):
@@ -121,10 +136,12 @@ def scan_outsource(conn, root):
 
 
 def scan_scrap(conn, root):
-    paths = _find_files(os.path.join(root, SUB_SCRAP), (".db",), recursive=False)
-    p = _newest(paths)
-    if not p:
-        return {"ok": False, "note": "대상 파일 없음", "files": 0, "rows": 0, "errors": []}
+    """폐기불량은 root(=scrap_root) 폴더 안에 다른 파일이 섞여 있어도 scrap_data.db 라는
+    이름의 파일만 골라서 읽는다(2026-07-31 확정 — 예전엔 폴더 내 가장 최근 .db를 아무거나
+    썼는데, 이제 그 폴더에 관련 없는 다른 .db 파일도 있을 수 있어 이름으로 특정한다)."""
+    p = os.path.join(root, SCRAP_FILENAME)
+    if not os.path.isfile(p):
+        return {"ok": False, "note": f"{SCRAP_FILENAME} 파일을 찾을 수 없음", "files": 0, "rows": 0, "errors": []}
     try:
         n, note = ingest.ingest_scrap_db(conn, p)
     except Exception as e:
@@ -136,31 +153,16 @@ def scan_scrap(conn, root):
         extra += f" (수량없음 {skip}건 제외)"
     if pend:
         extra += f" (검토대기 {pend})"
-    return {"ok": True, "files": 1, "rows": n, "errors": [], "note": f"{os.path.basename(p)} / {n}건 적재{extra}"}
-
-
-def scan_price(conn, root):
-    paths = _find_files(os.path.join(root, SUB_PRICE), (".xlsx", ".xlsm"), recursive=False)
-    p = _newest(paths)
-    if not p:
-        return {"ok": False, "note": "대상 파일 없음", "files": 0, "rows": 0, "errors": []}
-    try:
-        n, note = ingest.ingest_price_master(conn, p)
-    except Exception as e:
-        return {"ok": False, "note": str(e), "files": 1, "rows": 0, "errors": [str(e)]}
-    if note.get("error"):
-        return {"ok": False, "files": 1, "rows": 0, "errors": [note["error"]], "note": note["error"]}
-    return {"ok": True, "files": 1, "rows": n, "errors": [],
-            "note": f"{os.path.basename(p)} / {n}품목 적재"}
+    return {"ok": True, "files": 1, "rows": n, "errors": [], "note": f"{SCRAP_FILENAME} / {n}건 적재{extra}"}
 
 
 SCANNERS = {"defect": scan_defect, "production": scan_production, "outsource": scan_outsource,
-            "scrap": scan_scrap, "price": scan_price}
+            "scrap": scan_scrap}
 
 
 def scan_one(conn, key, root=None):
     """소스 1개 스캔. 반환: result dict(+ key/label)."""
-    root = root or data_root(conn)
+    root = root or root_for(conn, key)
     label = dict((k, lb) for k, lb, _s in SOURCES).get(key, key)
     fn = SCANNERS.get(key)
     if fn is None:
@@ -172,9 +174,9 @@ def scan_one(conn, key, root=None):
     return res
 
 
-def scan_all(conn, root=None):
-    """전체 소스 스캔. 화면 버튼·스케줄러 공용 진입점."""
-    root = root or data_root(conn)
-    results = [scan_one(conn, key, root) for key, _lb, _s in SOURCES]
+def scan_all(conn):
+    """전체 소스 스캔. 화면 버튼·스케줄러 공용 진입점. 소스별로 root_for()가 알맞은
+    루트(공유 루트 또는 폐기불량 전용 로컬 경로)를 골라 쓴다."""
+    results = [scan_one(conn, key) for key, _lb, _s in SOURCES]
     db.set_setting(conn, "last_scan_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return results

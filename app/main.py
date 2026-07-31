@@ -1183,15 +1183,26 @@ def prices_redirect(request: Request):
 def _scan_page(request, u, results=None, msg="", err=""):
     conn = db.connect()
     root = scan.data_root(conn)
+    scrap_root = scan.scrap_root(conn)
     sources = []
     for key, label, sub in scan.SOURCES:
-        folder = os.path.join(root, sub)
-        exists = os.path.isdir(folder)
-        cnt = 0
-        if exists:
-            for _r, _d, names in os.walk(folder):
-                cnt += sum(1 for n in names if not n.startswith("~$"))
-        sources.append({"key": key, "label": label, "sub": sub, "exists": exists, "count": cnt})
+        if key == "scrap":
+            # 폐기불량은 공유 루트가 아니라 별도 로컬 경로를 쓰고, 그 폴더 안 다른 파일과
+            # 섞여 있어도 scrap_data.db 라는 이름의 파일 존재 여부만 본다(2026-07-31).
+            folder = scrap_root
+            target = os.path.join(scrap_root, scan.SCRAP_FILENAME)
+            exists = os.path.isfile(target)
+            cnt = 1 if exists else 0
+            sub_display = scan.SCRAP_FILENAME
+        else:
+            folder = os.path.join(root, sub)
+            exists = os.path.isdir(folder)
+            cnt = 0
+            if exists:
+                for _r, _d, names in os.walk(folder):
+                    cnt += sum(1 for n in names if not n.startswith("~$"))
+            sub_display = sub
+        sources.append({"key": key, "label": label, "sub": sub_display, "exists": exists, "count": cnt})
     logs = [dict(r) for r in conn.execute(
         "SELECT ts,kind,ok,note FROM upload_log WHERE kind LIKE 'scan:%' ORDER BY id DESC LIMIT 20")]
     last_scan = db.get_setting(conn, "last_scan_at", "")
@@ -1199,7 +1210,9 @@ def _scan_page(request, u, results=None, msg="", err=""):
     conn.close()
     return render(request, "scan.html", u, active="scan", heading="폴더 반영",
                   crumb="관리", pending=pending_count(), root=root,
-                  root_ok=os.path.isdir(root), sources=sources, results=results,
+                  root_ok=os.path.isdir(root), scrap_root=scrap_root,
+                  scrap_root_ok=os.path.isfile(os.path.join(scrap_root, scan.SCRAP_FILENAME)),
+                  sources=sources, results=results,
                   logs=logs, last_scan=last_scan, init_done=init_done,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "scan", "edit")), msg=msg, err=err)
 
@@ -1221,6 +1234,17 @@ async def scan_set_root(request: Request, root: str = Form("")):
     db.set_setting(conn, scan.SETTING_ROOT, root.strip())
     conn.close()
     return RedirectResponse("/admin/scan?msg=경로 저장됨", status_code=303)
+
+
+@app.post("/admin/scan/scrap-root")
+async def scan_set_scrap_root(request: Request, scrap_root: str = Form("")):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "scan", "edit")):
+        return RedirectResponse("/admin/scan", status_code=303)
+    conn = db.connect()
+    db.set_setting(conn, scan.SETTING_SCRAP_ROOT, scrap_root.strip())
+    conn.close()
+    return RedirectResponse("/admin/scan?msg=폐기불량 경로 저장됨", status_code=303)
 
 
 @app.post("/admin/scan/init", response_class=HTMLResponse)
