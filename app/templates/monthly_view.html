@@ -367,7 +367,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/internal-issue/file/{{ fid }}" alt="">{% endfor %}</div>
           {% endif %}
           {% if it.docs %}
-          <div class="docs">{% for f in it.docs %}<a href="/input/internal-issue/file/{{ f.id }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
+          <div class="docs">{% for f in it.docs %}
+            {% set fhref = ('/view/pdf?src=/input/internal-issue/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/internal-issue/file/' ~ f.id) %}
+            <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
           {% endif %}
         </div>
       {% else %}
@@ -441,7 +443,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="">{% endfor %}</div>
           {% endif %}
           {% if it.docs %}
-          <div class="docs">{% for f in it.docs %}<a href="/input/incident/file/{{ f.id }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
+          <div class="docs">{% for f in it.docs %}
+            {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
+            <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
           {% endif %}
         </div>
       {% else %}

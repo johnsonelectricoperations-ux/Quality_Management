@@ -27,6 +27,7 @@ tpl.env.filters["cf2"] = lambda v: f"{v:,.2f}" if isinstance(v, (int, float)) el
 # 화면 표기 통일: DB는 'VMS PART'/'TM PART'로 저장하고, 화면에는 1PART/2PART로 보여준다.
 PART_LABEL = {"VMS PART": "1PART", "TM PART": "2PART"}
 tpl.env.filters["pl"] = lambda v: PART_LABEL.get(str(v).strip(), v)
+tpl.env.filters["is_pdf"] = lambda name: str(name or "").lower().endswith(".pdf")
 tpl.env.globals["PARTS"] = [("VMS PART", "1PART"), ("TM PART", "2PART")]
 
 # 발생원인·개선대책처럼 여러 줄로 입력받는 textarea 값을 보고서 한 줄에 이어붙일 때,
@@ -2264,6 +2265,23 @@ def internal_issue_file_get(request: Request, fid: int):
         return RedirectResponse("/input/internal-issue?err=파일이 서버에 없습니다", status_code=303)
     # inline: incident.html과 동일하게 다운로드 없이 새 탭에서 바로 보여준다(2026-07-31).
     return FileResponse(path, filename=r["orig_name"], content_disposition_type="inline")
+
+
+# ── PDF 뷰어 (여러 장짜리 첨부를 한 장씩 화면 꽉 차게 넘겨보기) ──────────
+# 브라우저 기본 PDF 뷰어는 계속 스크롤하는 방식이라, 월마감 보고서 슬라이드 뷰어와 같은
+# "한 장씩 전체화면 전환" 느낌을 내려고 PDF.js를 내장했다(2026-07-31, 인터넷 안 되는
+# 서버에서도 동작하도록 static/pdfjs/에 라이브러리 파일을 직접 받아 넣어둠).
+_PDF_VIEW_SRC_PREFIXES = ("/input/incident/file/", "/input/internal-issue/file/")
+
+
+@app.get("/view/pdf", response_class=HTMLResponse)
+def pdf_view(request: Request, src: str = "", name: str = "문서"):
+    u = current_user(request)
+    if u is None:
+        return RedirectResponse("/login", status_code=303)
+    if not src.startswith(_PDF_VIEW_SRC_PREFIXES) or not src.rsplit("/", 1)[-1].isdigit():
+        return RedirectResponse("/", status_code=303)
+    return tpl.TemplateResponse(request, "pdf_view.html", {"src": src, "name": name})
 
 
 @app.post("/input/internal-issue/file/{fid}/delete")

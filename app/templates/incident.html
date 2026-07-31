@@ -81,9 +81,10 @@
       <label style="font:600 11px/1 inherit;color:var(--tx3);">등록된 첨부</label>
       <div class="attach">
         {% for f in edit_row.files %}
+        {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
         <span class="fchip">
           {% if f.kind == 'photo' %}<img class="thumb" src="/input/incident/file/{{ f.id }}" alt="">{% endif %}
-          <a href="/input/incident/file/{{ f.id }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+          <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
           <span style="color:var(--tx3);">{% if f.size >= 1048576 %}{{ '%.1f'|format(f.size / 1048576) }}MB{% elif f.size >= 1024 %}{{ (f.size / 1024)|round|int }}KB{% else %}{{ f.size }}B{% endif %}</span>
           <form method="post" action="/input/incident/file/{{ f.id }}/delete"
                 onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
@@ -111,7 +112,9 @@
         <td>{{ r.content or '-' }}</td>
         <td style="white-space:nowrap;">
           {% if r.files %}
-            {% for f in r.files %}<a href="/input/incident/file/{{ f.id }}" target="_blank"
+            {% for f in r.files %}
+            {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
+            <a href="{{ fhref }}" target="_blank"
                title="{{ f.orig_name }}" style="text-decoration:none;">{{ '🖼' if f.kind=='photo' else '📄' }}</a>{% endfor %}
           {% else %}<span style="color:var(--tx3);">-</span>{% endif %}
         </td>
