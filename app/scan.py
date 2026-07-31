@@ -17,7 +17,8 @@
 원칙
 - 폴더의 파일은 **읽기만** 한다(수정·이동·삭제 없음).
 - 재적재는 멱등: 사내불량=batch_key, 외주/폐기=source 전체 교체, 생산=upsert.
-- 화면(수동 버튼)과 향후 스케줄러가 **같은 scan_all()** 을 호출한다.
+- 화면(수동 버튼)과 Windows 작업 스케줄러(`QMS_DataScan`, 매일 02:10, `deploy/scan_data.bat`
+  → `python -m app.scan`)가 **같은 scan_all()** 을 호출한다(2026-07-31 스케줄러 연결).
 """
 import os
 import datetime
@@ -180,3 +181,26 @@ def scan_all(conn):
     results = [scan_one(conn, key) for key, _lb, _s in SOURCES]
     db.set_setting(conn, "last_scan_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     return results
+
+
+def main():
+    """CLI 진입점(`python -m app.scan`) — Windows 작업 스케줄러에서 새벽 시간에 호출해
+    공유 폴더·폐기불량 폴더의 최신 데이터를 DB에 반영한다(2026-07-31 신설)."""
+    conn = db.connect()
+    try:
+        results = scan_all(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    ok = True
+    for r in results:
+        status = "OK" if r["ok"] else "확인필요"
+        print(f"[{status}] {r['label']}: {r['note']}")
+        if not r["ok"]:
+            ok = False
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
