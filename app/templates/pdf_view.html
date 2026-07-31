@@ -38,9 +38,9 @@ html,body{height:100%;overflow:hidden;background:#111;}
 </div>
 <div id="stage"><canvas id="pageCanvas"></canvas></div>
 <div id="nav">
-  <button id="prev" title="이전 (←)">‹</button>
+  <button id="prev" title="이전 (←)" disabled>‹</button>
   <span class="pg" id="pg">- / -</span>
-  <button id="next" title="다음 (→)">›</button>
+  <button id="next" title="다음 (→)" disabled>›</button>
   <a href="{{ src }}" target="_blank" rel="noopener">⤓ 원본</a>
 </div>
 
@@ -78,6 +78,7 @@ async function renderPage(n) {
   cur = n;
   pgEl.textContent = cur + " / " + pdf.numPages;
   prevBtn.disabled = cur <= 1;
+  nextBtn.disabled = false;
   // 마지막 장에서도 '다음' 버튼은 눌러야 하므로(누르면 닫힘) 여기선 비활성화하지 않는다.
   const isLast = cur >= pdf.numPages;
   nextBtn.title = isLast ? "닫기" : "다음 (→)";
