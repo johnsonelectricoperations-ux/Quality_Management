@@ -360,8 +360,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <div class="row"><span class="k">발생일자/공정</span>{{ it.d }} / {{ it.process or '-' }}{% if it.process=='기타' and it.process_etc %} ({{ it.process_etc }}){% endif %}</div>
           <div class="row"><span class="k">발생위치</span>{{ it.location or '-' }}</div>
           <div class="row"><span class="k">품번/수량</span>{{ it.tm_no or '-' }} / {{ num(it.defect_qty) }} EA</div>
-          <div class="row"><span class="k">발생원인</span>{{ it.cause or '-' }}</div>
-          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action or '-' }}</div>
+          <div class="row"><span class="k">발생원인</span>{{ it.cause|oneline }}</div>
+          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action|oneline }}</div>
           {% if it.photos %}
           <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/internal-issue/file/{{ fid }}" alt="">{% endfor %}</div>
           {% endif %}
@@ -433,8 +433,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b></div>
           <div class="row"><span class="k">발생일자/위치</span>{{ it.d }} / {{ it.location or '-' }}</div>
           <div class="row"><span class="k">품번/수량</span>{{ it.tm_no or '-' }} / {{ num(it.defect_qty) }} EA</div>
-          <div class="row"><span class="k">발생원인</span>{{ it.cause or '-' }}</div>
-          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action or '-' }}</div>
+          <div class="row"><span class="k">발생원인</span>{{ it.cause|oneline }}</div>
+          <div class="row" style="border:0;"><span class="k">개선대책</span>{{ it.action|oneline }}</div>
           {% if it.photos %}
           <div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="">{% endfor %}</div>
           {% endif %}

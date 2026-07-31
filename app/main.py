@@ -29,6 +29,12 @@ PART_LABEL = {"VMS PART": "1PART", "TM PART": "2PART"}
 tpl.env.filters["pl"] = lambda v: PART_LABEL.get(str(v).strip(), v)
 tpl.env.globals["PARTS"] = [("VMS PART", "1PART"), ("TM PART", "2PART")]
 
+# 발생원인·개선대책처럼 여러 줄로 입력받는 textarea 값을 보고서 한 줄에 이어붙일 때,
+# 줄바꿈을 그냥 없애면 문장이 다 붙어버려 읽기 어렵다. 일반 공백은 HTML에서 겹치면
+# 하나로 줄어드니, 시각적으로 확실히 벌어지도록 줄바꿈마다 줄임없는 공백(nbsp) 2개로
+# 바꿔 한 줄 안에서도 항목 사이 간격이 보이게 한다(2026-07-31).
+tpl.env.filters["oneline"] = lambda v: str(v).replace("\r\n", "\n").replace("\n", "  ") if v else "-"
+
 # 집계공정 '기타' 표시명(압입·밴딩·선별 등 후공정 묶음이라는 의미를 화면에 드러냄)
 PROC_LABEL = {"기타": "기타후공정", "?": "(공정미상)"}
 
