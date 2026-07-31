@@ -2087,7 +2087,9 @@ def incident_file_get(request: Request, fid: int):
     path = os.path.join(UPLOAD_ROOT, r["stored_name"])
     if not os.path.isfile(path):
         return RedirectResponse("/input/incident?err=파일이 서버에 없습니다", status_code=303)
-    return FileResponse(path, filename=r["orig_name"])
+    # inline: 브라우저가 PDF·이미지 등을 다운로드 없이 새 탭에서 바로 열어 보여준다
+    # (2026-07-31 — 발표 중 다운로드 기다리지 않고 바로 보이도록).
+    return FileResponse(path, filename=r["orig_name"], content_disposition_type="inline")
 
 
 @app.post("/input/incident/file/{fid}/delete")
@@ -2260,7 +2262,8 @@ def internal_issue_file_get(request: Request, fid: int):
     path = os.path.join(INTERNAL_ISSUE_UPLOAD_ROOT, r["stored_name"])
     if not os.path.isfile(path):
         return RedirectResponse("/input/internal-issue?err=파일이 서버에 없습니다", status_code=303)
-    return FileResponse(path, filename=r["orig_name"])
+    # inline: incident.html과 동일하게 다운로드 없이 새 탭에서 바로 보여준다(2026-07-31).
+    return FileResponse(path, filename=r["orig_name"], content_disposition_type="inline")
 
 
 @app.post("/input/internal-issue/file/{fid}/delete")
