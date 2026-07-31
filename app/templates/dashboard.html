@@ -53,7 +53,7 @@
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
         <td class="num" style="font-weight:700;{{ 'color:var(--err);' if loop.index<=3 }}">{{ r.defect|cf }}</td>
         <td class="num">{{ r.ppm|cf if r.ppm is not none else '-' }}</td>
-        <td><div class="dtags">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
+        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
     {% else %}
       <tr><td colspan="7" style="color:var(--tx3);">데이터 없음</td></tr>
     {% endfor %}
@@ -81,7 +81,7 @@
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
         <td class="num" style="font-weight:700;{{ 'color:var(--err);' if loop.index<=3 }}">{{ r.defect|cf }}</td>
         <td class="num">{{ r.ppm|cf if r.ppm is not none else '-' }}</td>
-        <td><div class="dtags">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
+        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
     {% else %}
       <tr><td colspan="7" style="color:var(--tx3);">데이터 없음</td></tr>
     {% endfor %}
@@ -128,8 +128,7 @@
 <div class="charts2">
   <div class="mcard">
     <div class="mh"><div><div class="mt"><span class="dot" id="mDot" style="background:var(--p-500)"></span><span id="mTitle">COPQ</span> 월별 추이</div>
-      <div class="mv" id="mVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div></div>
-      <span class="mdelta {{ 'chip-up' if d.cards.copq.delta<=0 else 'chip-dn' }}">{{ '▼' if d.cards.copq.delta<=0 else '▲' }} {{ d.cards.copq.delta|abs }}%p</span></div>
+      <div class="mv" id="mVal">{{ d.cards.copq.pct|cf2 }}<small>%</small></div></div></div>
     <div class="jchart" id="mChart" data-type="bar" data-color="--p-500" data-unit="%" data-dec="2" data-cur="{{ c.cur }}"
       {% if c.fydiv != '' %}data-fydiv="{{ c.fydiv }}" data-fylabels="{{ c.fylabels }}"{% endif %}
       data-targets="{{ c.copq_targets }}" data-labels="{{ c.labels }}" data-values="{{ c.copq_values }}"></div>
@@ -234,6 +233,7 @@
       document.querySelectorAll("[data-topgrid]").forEach(function (g) {
         g.style.display = g.dataset.topgrid === tp ? "" : "none";
       });
+      fitDtags();
     });
   });
 
@@ -247,6 +247,7 @@
       });
       var sub = panel.querySelector(".tot");
       sub.textContent = sub.dataset["wksub" + (wk === "cur" ? "Cur" : "Prev")] + " · " + sub.textContent.split(" · ").pop();
+      fitDtags();
     });
   });
 
@@ -260,8 +261,29 @@
       });
       var sub = panel.querySelector(".tot");
       sub.textContent = sub.dataset["mosub" + (mo === "cur" ? "Cur" : "Prev")] + " · " + sub.textContent.split(" · ").pop();
+      fitDtags();
     });
   });
+
+  // 불량유형별 수량 태그(.dtag)가 셀 폭보다 길면 잘리지 않고 상자를 벗어나 보였다.
+  // 넘치는 태그만 글자크기를 줄여서 칸 안에 들어가게 한다(2026-07-31).
+  // display:none인 동안엔 폭을 잴 수 없어, 토글로 다시 보이는 시점마다 재호출한다.
+  function fitDtags() {
+    document.querySelectorAll(".dtags").forEach(function (box) {
+      var maxW = box.clientWidth;
+      if (!maxW) return;
+      box.querySelectorAll(".dtag").forEach(function (tag) {
+        tag.style.fontSize = "";
+        var size = 10.5;
+        while (tag.scrollWidth > maxW && size > 7) {
+          size -= 0.5;
+          tag.style.fontSize = size + "px";
+        }
+      });
+    });
+  }
+  fitDtags();
+  window.addEventListener("resize", fitDtags);
 })();
 </script>
 {% endblock %}
