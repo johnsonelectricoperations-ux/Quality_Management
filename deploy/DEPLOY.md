@@ -97,8 +97,9 @@ python -m app.setpw viewer <새비밀번호>
 `deploy\run_server.bat` 실행 → 창을 열어둔 동안 구동. 닫으면 중지.
 
 ### 방법 B. 상시 구동 — 작업 스케줄러 (권장·간단)
-`deploy\register_tasks.bat`를 **관리자 권한으로 실행**:
-- `QMS_Server` : 부팅 시 자동 시작 (로그온 없이 SYSTEM 계정으로 실행)
+`deploy\register_tasks.bat`를 **관리자 권한으로 실행**(아이콘 우클릭 → "관리자 권한으로
+실행", 또는 관리자 권한 명령 프롬프트에서 실행 — 그냥 더블클릭하면 "액세스가 거부되었습니다"
+오류가 난다):
 - `QMS_Backup` : 매일 02:00 DB 백업
 - `QMS_DataScan` : 매일 02:10, 소스 폴더(사내불량·생산량·외주소재·폐기불량) 최신 데이터를
   DB에 자동 반영(웹 화면의 "전체 폴더 반영" 버튼과 동일한 동작을 CLI로 실행,
@@ -108,10 +109,24 @@ python -m app.setpw viewer <새비밀번호>
   최근 3개월 입고실적 기준으로 다시 산출하고 **그 해 4월 1일부터만 적용**한다(과거 원가는 불변).
   자세한 계산 규칙은 `app/price_calc.py` 상단 주석 참고.
 
-지금 바로 시작:  `schtasks /Run /TN "QMS_Server"`
-상태 확인:      `schtasks /Query /TN "QMS_Server"`
-중지:           `schtasks /End /TN "QMS_Server"`
-제거:           `schtasks /Delete /TN "QMS_Server" /F`
+상태 확인:  `schtasks /Query /TN "QMS_Backup"` (다른 작업명도 동일)
+제거:      `schtasks /Delete /TN "QMS_Backup" /F` (다른 작업명도 동일)
+
+**서버 자동시작은 여기 포함되어 있지 않다** — 사내 서버 PC가 매일 정오에 자동 재부팅되면서
+다른 프로그램들의 서버를 띄우는 별도 통합 bat 파일을 이미 쓰고 있다면, 거기에 아래 한 줄만
+추가하는 방식을 권한다(운영 환경에 맞춰 2026-07-31 변경 — `register_tasks.bat`가 예전엔
+`QMS_Server`도 같이 등록했지만 지금은 안 한다):
+```bat
+start "QMS" "C:\apps\qms\deploy\_service.bat"
+```
+`_service.bat`는 uvicorn을 포그라운드로 계속 실행하므로 **반드시 `start`로 띄워야** 통합
+bat 파일의 나머지 줄(다른 서버 실행 등)이 막히지 않는다. 경로(`C:\apps\qms`)는 실제 설치
+위치에 맞게 바꾼다.
+
+통합 bat 파일 없이 이 시스템만 부팅 시 자동 시작하고 싶다면 직접 등록:
+```bat
+schtasks /Create /TN "QMS_Server" /TR "\"C:\apps\qms\deploy\_service.bat\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F
+```
 
 ### 방법 C. 상시 구동 — NSSM 서비스 (더 견고, 자동 재시작)
 [NSSM](https://nssm.cc) 다운로드 후:
