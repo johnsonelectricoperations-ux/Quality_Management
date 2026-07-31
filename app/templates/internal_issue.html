@@ -72,26 +72,30 @@
         · 파일 1개당 최대 {{ 20 }}MB. 첨부는 TM-NO별 품질이슈 통계·분석에 쓰기 위해 이슈 단위로 보관됩니다.
       </div>
 
-      {% if edit_row and edit_row.files %}
-      <div style="margin-top:12px;">
-        <label style="font:600 11px/1 inherit;color:var(--tx3);">등록된 첨부</label>
-        <div class="attach">
-          {% for f in edit_row.files %}
-          <span class="fchip">
-            {% if f.kind == 'photo' %}<img class="thumb" src="/input/internal-issue/file/{{ f.id }}" alt="">{% endif %}
-            <a href="/input/internal-issue/file/{{ f.id }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
-            <span style="color:var(--tx3);">{% if f.size >= 1048576 %}{{ '%.1f'|format(f.size / 1048576) }}MB{% elif f.size >= 1024 %}{{ (f.size / 1024)|round|int }}KB{% else %}{{ f.size }}B{% endif %}</span>
-            <form method="post" action="/input/internal-issue/file/{{ f.id }}/delete"
-                  onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
-              <button type="submit" title="삭제">✕</button></form>
-          </span>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
       <div class="pbody" style="padding-left:0;padding-bottom:0;"><button class="btn btn-p">{{ '수정 저장' if edit_row else '등록' }}</button></div>
     </form>
+
+    {# 첨부 삭제 버튼은 자체 폼(form)이라, 위 등록/수정 폼 안에 두면 폼이 중첩돼(HTML에서 금지)
+       브라우저가 파싱할 때 바깥 폼이 여기서 조기 종료돼 버린다 — 그러면 그 아래 있던 '수정
+       저장' 버튼이 어떤 폼에도 속하지 않게 되어 눌러도 아무 반응이 없었다(2026-07-31 확인된
+       버그, incident.html과 동일). 그래서 폼 바깥으로 뺐다. #}
+    {% if edit_row and edit_row.files %}
+    <div style="margin-top:12px;">
+      <label style="font:600 11px/1 inherit;color:var(--tx3);">등록된 첨부</label>
+      <div class="attach">
+        {% for f in edit_row.files %}
+        <span class="fchip">
+          {% if f.kind == 'photo' %}<img class="thumb" src="/input/internal-issue/file/{{ f.id }}" alt="">{% endif %}
+          <a href="/input/internal-issue/file/{{ f.id }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+          <span style="color:var(--tx3);">{% if f.size >= 1048576 %}{{ '%.1f'|format(f.size / 1048576) }}MB{% elif f.size >= 1024 %}{{ (f.size / 1024)|round|int }}KB{% else %}{{ f.size }}B{% endif %}</span>
+          <form method="post" action="/input/internal-issue/file/{{ f.id }}/delete"
+                onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
+            <button type="submit" title="삭제">✕</button></form>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}
