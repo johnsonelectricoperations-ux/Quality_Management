@@ -118,18 +118,24 @@ table.grid input.in,table.grid select.in{width:100%;}
         <datalist id="equipList">{% for e in equips %}<option value="{{ e }}">{% endfor %}</datalist></div>
     </div>
     <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
-      <div class="f"><label>원인공정 (어디서 만들어졌나)</label>
-        <select class="in" name="cause_process">
-          <option value="">(선택)</option>
-          {% for p in processes %}<option value="{{ p }}" {{ 'selected' if edit_row and edit_row.cause_process==p }}>{{ p }}</option>{% endfor %}
-        </select></div>
+      {# 원인공정은 실제 대책서에 '성형, 소결'처럼 복수로 적히므로 체크박스로 받는다.
+         발견공정은 '협력업체(가유)'·'고객 (GM 보령)'처럼 사내 공정이 아닌 값이 들어와서
+         목록으로 못 받고 자유 입력 + 자동완성으로 둔다(2026-08-10 실제 파일 확인). #}
+      <div class="f"><label>원인공정 (어디서 만들어졌나) — 복수 선택 가능</label>
+        {% set cps = (edit_row.cause_process or '').split(',') | map('trim') | list if edit_row else [] %}
+        <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:6px;">
+          {% for p in processes %}
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;">
+            <input type="checkbox" name="cause_process" value="{{ p }}" {{ 'checked' if p in cps }}> {{ p }}</label>
+          {% endfor %}
+        </div></div>
       <div class="f"><label>발견공정 (어디서 걸러졌나)</label>
-        <select class="in" name="found_process">
-          <option value="">(선택)</option>
-          {% for p in processes %}<option value="{{ p }}" {{ 'selected' if edit_row and edit_row.found_process==p }}>{{ p }}</option>{% endfor %}
-        </select></div>
+        <input class="in" name="found_process" list="foundList" value="{{ edit_row.found_process if edit_row }}"
+               placeholder="예: 정형 / 협력업체(가유) / 고객 (GM 보령)">
+        <datalist id="foundList">{% for p in found_opts %}<option value="{{ p }}">{% endfor %}</datalist></div>
     </div>
-    <div class="hint">· 원인공정과 발견공정을 나눠 적어야 "왜 우리 검사가 못 걸렀나"(유출) 분석이 가능합니다.</div>
+    <div class="hint">· 원인공정과 발견공정을 나눠 적어야 "왜 우리 검사가 못 걸렀나"(유출) 분석이 가능합니다.
+      발견공정은 사내 공정이 아니어도(협력업체·고객) 그대로 적으시면 됩니다.</div>
 
     <div id="prodRow" style="margin-top:10px;">
       <div class="f" style="max-width:220px;"><label>불량유형</label>
@@ -187,14 +193,23 @@ table.grid input.in,table.grid select.in{width:100%;}
         <label style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" name="occur_ongoing" {{ 'checked' if edit_row and edit_row.occur_ongoing }}> 지속 발생</label></div>
     </div>
-    <div class="frow" style="grid-template-columns:180px 180px 130px;margin-top:10px;">
+    <div class="frow" style="grid-template-columns:150px 150px 110px 130px 1fr;margin-top:10px;">
       <div class="f"><label>해당 Lot 수량 (ea)</label>
         <input class="in" type="number" min="0" name="lot_qty" id="lotQty" style="text-align:right;"
                oninput="calcRate()" value="{{ edit_row.lot_qty if edit_row and edit_row.lot_qty else '' }}"></div>
       <div class="f"><label>불량 수량 (ea)</label>
         <input class="in" type="number" min="0" name="defect_qty" id="defQty" style="text-align:right;"
                oninput="calcRate()" value="{{ edit_row.defect_qty if edit_row and edit_row.defect_qty else '' }}"></div>
+      <div class="f"><label>단위</label>
+        <select class="in" name="rate_unit" id="rateUnit" onchange="calcRate()">
+          {% for un in ['%','PPM'] %}<option value="{{ un }}" {{ 'selected' if edit_row and edit_row.rate_unit==un }}>{{ un }}</option>{% endfor %}
+        </select></div>
       <div class="f"><label>불량률</label><div class="rate" id="rateOut" style="padding-top:7px;">-</div></div>
+      {# 실제 대책서엔 '가유 3ea, 사내1ea'처럼 숫자로만 안 적히는 경우가 많다.
+         집계는 위 숫자칸으로 하고, 보고서에는 이 원문 표기를 그대로 보여준다. #}
+      <div class="f"><label>불량수량 표기 (보고서에 그대로 표시)</label>
+        <input class="in" name="defect_qty_note" value="{{ edit_row.defect_qty_note if edit_row }}"
+               placeholder="예: 가유 3ea, 사내1ea"></div>
     </div>
     <div class="f" style="margin-top:10px;"><label>문제부위 사진 (여러 장 가능)</label>
       <input class="in" type="file" name="f_photo" accept="image/*" multiple></div>
@@ -378,11 +393,17 @@ function kindToggle(){
   document.getElementById('prodRow').style.display = (k === 'product') ? '' : 'none';
 }
 // 불량률은 저장하지 않고 그때그때 계산해서 보여준다(수기 계산 오류 방지).
+// 양식마다 %와 PPM을 섞어 쓰고 있어 단위에 맞춰 환산한다.
 function calcRate(){
   var lot = parseFloat(document.getElementById('lotQty').value || 0);
   var def = parseFloat(document.getElementById('defQty').value || 0);
-  document.getElementById('rateOut').textContent =
-    (lot > 0) ? (def / lot * 100).toFixed(1) + ' %' : '-';
+  var un = document.getElementById('rateUnit').value;
+  var out = '-';
+  if (lot > 0) {
+    out = (un === 'PPM') ? Math.round(def / lot * 1000000) + ' PPM'
+                         : (def / lot * 100).toFixed(1) + ' %';
+  }
+  document.getElementById('rateOut').textContent = out;
 }
 function delRow(btn){
   var tb = btn.closest('tbody');

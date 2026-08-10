@@ -209,8 +209,12 @@ CREATE TABLE IF NOT EXISTS capa (
   title TEXT DEFAULT '',                    -- 제목 (예: Pulley 동심도 불량 개선 대책)
   kind TEXT NOT NULL DEFAULT 'product',     -- product(제품불량)|equip(설비)|process(공정·작업)|etc
   part TEXT NOT NULL DEFAULT '',
-  cause_process TEXT DEFAULT '',            -- 원인공정
-  found_process TEXT DEFAULT '',            -- 발견공정
+  -- 원인공정은 **여러 개**가 될 수 있다(실제 대책서에 '성형, 소결' / '성형, 후처리'로 적혀 있음).
+  -- 쉼표로 이어 저장하고, 공정별 집계는 쪼개서 센다.
+  cause_process TEXT DEFAULT '',            -- 원인공정(집계공정 5종 중 복수, 쉼표 구분)
+  -- 발견공정은 집계공정 목록으로 못 받는다 — 실제로 '협력업체(가유)', '고객 (GM 보령)',
+  -- '소결 취출부'처럼 사내 공정이 아닌 값이 들어온다. 그래서 자유 입력 + 자동완성으로 둔다.
+  found_process TEXT DEFAULT '',            -- 발견공정(자유 입력)
   tm_no TEXT DEFAULT '', product_name TEXT DEFAULT '',   -- 제품불량일 때만
   defect_type TEXT DEFAULT '',              -- 불량유형(defect_type 마스터 name)
   equipment TEXT DEFAULT '',                -- 작업설비 (예: JHC100/6) — 마스터 없이 자동완성으로 표기 통일
@@ -224,6 +228,10 @@ CREATE TABLE IF NOT EXISTS capa (
   occur_ongoing INTEGER NOT NULL DEFAULT 0, -- '지속 발생'이면 1 (양식에 날짜 대신 이렇게 적는 경우가 많다)
   lot_qty INTEGER NOT NULL DEFAULT 0,       -- 해당 Lot 수량
   defect_qty INTEGER NOT NULL DEFAULT 0,    -- 불량 수량 (불량률은 저장하지 않고 화면에서 계산)
+  -- 실제 대책서의 불량수량은 숫자로만 안 적힌다('가유 3ea, 사내1ea', '7월 19일 62ea 폐기',
+  -- '1 (고객)'). 집계용 숫자는 defect_qty에 넣고, 원문 표기는 여기 남겨 보고서에 그대로 쓴다.
+  defect_qty_note TEXT DEFAULT '',
+  rate_unit TEXT NOT NULL DEFAULT '%',      -- 불량률 단위: % | PPM (양식마다 다르게 쓰고 있음)
   -- D3 임시 조치
   lot_action TEXT DEFAULT '',               -- 선별|재작업|특채|기타
   lot_action_etc TEXT DEFAULT '',
@@ -427,6 +435,10 @@ def init_db():
     _add_col(conn, "defect_entry", "reviewed", "INTEGER NOT NULL DEFAULT 0")
     # 성형 공정 작성 셋팅불량: 셋팅불량율에는 포함하되 Scrap Cost·COPQ 계산에서는 제외.
     _add_col(conn, "defect_entry", "exclude_cost", "INTEGER NOT NULL DEFAULT 0")
+    # 개선대책서 — 실제 과거 대책서(templates/co)를 보고 추가한 항목(2026-08-10).
+    # 불량수량이 숫자로만 안 적히고('가유 3ea, 사내1ea'), 불량률 단위도 %/PPM 둘 다 쓰인다.
+    _add_col(conn, "capa", "defect_qty_note", "TEXT DEFAULT ''")
+    _add_col(conn, "capa", "rate_unit", "TEXT NOT NULL DEFAULT '%'")
     _add_col(conn, "production", "part", "TEXT NOT NULL DEFAULT ''")
     _add_col(conn, "claim", "reclaim", "REAL NOT NULL DEFAULT 0")
     _add_col(conn, "claim", "use_agg", "INTEGER NOT NULL DEFAULT 1")

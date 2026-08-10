@@ -2406,12 +2406,18 @@ def capa_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
         "SELECT DISTINCT equipment FROM capa WHERE equipment<>'' ORDER BY equipment")]
     dtypes = [r["name"] for r in conn.execute(
         "SELECT DISTINCT name FROM defect_type ORDER BY name")]
+    # 발견공정은 자유 입력이라(협력업체·고객 등) 기존 입력값을 자동완성으로 제안해 표기를 통일한다.
+    found_opts = [r["found_process"] for r in conn.execute(
+        "SELECT DISTINCT found_process FROM capa WHERE found_process<>'' ORDER BY found_process")]
+    for p in db.AGG_PROCESSES:
+        if p not in found_opts:
+            found_opts.append(p)
     conn.close()
     return render(request, "capa.html", u, active="capa", heading="개선대책서 (현장품질회의)",
                   crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
                   processes=db.AGG_PROCESSES, kinds=db.CAPA_KINDS, lot_actions=db.CAPA_LOT_ACTIONS,
                   std_names=db.CAPA_STD_NAMES, m4=db.CAPA_4M, applied_opts=db.CAPA_APPLIED,
-                  equips=equips, dtypes=dtypes, today=today,
+                  equips=equips, dtypes=dtypes, found_opts=found_opts, today=today,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "capa", "edit")), msg=msg, err=err)
 
 
@@ -2444,7 +2450,8 @@ async def capa_save(request: Request):
     vals = dict(
         d=d, title=(form.get("title") or "").strip(), kind=kind,
         part=form.get("part") or "VMS PART",
-        cause_process=(form.get("cause_process") or "").strip(),
+        # 원인공정은 체크박스 복수 선택 → '성형, 소결' 형태로 이어 저장한다.
+        cause_process=", ".join(x for x in form.getlist("cause_process") if x.strip()),
         found_process=(form.get("found_process") or "").strip(),
         tm_no=tm_no,
         product_name=(tm_list[0][1] if tm_list else ""),
@@ -2458,6 +2465,8 @@ async def capa_save(request: Request):
         occur_date=(form.get("occur_date") or "").strip(),
         occur_ongoing=1 if form.get("occur_ongoing") else 0,
         lot_qty=_capa_num(form.get("lot_qty")), defect_qty=_capa_num(form.get("defect_qty")),
+        defect_qty_note=(form.get("defect_qty_note") or "").strip(),
+        rate_unit=(form.get("rate_unit") or "%").strip(),
         lot_action=(form.get("lot_action") or "").strip(),
         lot_action_etc=(form.get("lot_action_etc") or "").strip(),
         interim=(form.get("interim") or "").strip(),
@@ -2600,7 +2609,12 @@ def capa_view(request: Request, cid: int):
     conn.close()
     if not row:
         return RedirectResponse("/input/capa?err=대책서를 찾을 수 없습니다", status_code=303)
-    row["rate"] = (row["defect_qty"] / row["lot_qty"] * 100) if row["lot_qty"] else None
+    if row["lot_qty"]:
+        f = row["defect_qty"] / row["lot_qty"]
+        row["rate_txt"] = (f"{round(f * 1000000):,} PPM" if row["rate_unit"] == "PPM"
+                           else f"{f * 100:.1f}%")
+    else:
+        row["rate_txt"] = "-"
     return tpl.TemplateResponse(request, "capa_view.html", {
         "r": row, "today": _dt.date.today().isoformat(),
         "kind_ko": dict(db.CAPA_KINDS).get(row["kind"], row["kind"]),

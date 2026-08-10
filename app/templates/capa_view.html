@@ -125,7 +125,7 @@ table.t td.c{text-align:center;}
           <tr><td class="k">불량유형</td><td class="c">{{ r.defect_type or '-' }}</td></tr>
           {% endif %}
           <tr><td class="k">해당Lot.수량</td><td class="c">{{ '{:,}'.format(r.lot_qty) if r.lot_qty else '-' }}</td></tr>
-          <tr><td class="k">불량 수량</td><td class="c">{{ '{:,}ea'.format(r.defect_qty) if r.defect_qty else '-' }}</td></tr>
+          <tr><td class="k">불량 수량</td><td class="c">{{ r.defect_qty_note or ('{:,}ea'.format(r.defect_qty) if r.defect_qty else '-') }}</td></tr>
           {% if r.cause_4m %}<tr><td class="k">원인 분류</td><td class="c">{{ r.cause_4m }}</td></tr>{% endif %}
         </tbody>
       </table>
@@ -142,11 +142,11 @@ table.t td.c{text-align:center;}
         {% if r.lot_action_etc %}<span>({{ r.lot_action_etc }})</span>{% endif %}
       </div>
       <table class="t">
-        <thead><tr><th>Lot 수량(ea)</th><th>불량 수량(ea)</th><th>불량률 (%)</th></tr></thead>
+        <thead><tr><th>Lot 수량(ea)</th><th>불량 수량(ea)</th><th>불량률 ({{ r.rate_unit }})</th></tr></thead>
         <tbody><tr>
           <td class="c">{{ '{:,}'.format(r.lot_qty) if r.lot_qty else '-' }}</td>
-          <td class="c">{{ '{:,}'.format(r.defect_qty) if r.defect_qty else '-' }}</td>
-          <td class="c">{{ '%.1f%%'|format(r.rate) if r.rate is not none else '-' }}</td>
+          <td class="c">{{ r.defect_qty_note or ('{:,}'.format(r.defect_qty) if r.defect_qty else '-') }}</td>
+          <td class="c">{{ r.rate_txt }}</td>
         </tr></tbody>
       </table>
 
