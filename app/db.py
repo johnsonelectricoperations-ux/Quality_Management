@@ -193,9 +193,98 @@ CREATE TABLE IF NOT EXISTS permission (
   can_view INTEGER NOT NULL DEFAULT 1, can_edit INTEGER NOT NULL DEFAULT 0,
   UNIQUE(role, menu_key)
 );
+CREATE TABLE IF NOT EXISTS capa (
+  -- 개선대책서(현장품질회의 발표자료) 원장 — 2026-08-10 신설.
+  -- 사내에서 쓰던 1장짜리 대책서 양식(주황 제목바 + 4분할)을 그대로 담는다. 항목 이름은
+  -- 8D(D2 문제정의 / D3 임시조치 / D4 원인분석 / D5·D6 근본대책 / D7 표준화·수평전개)에
+  -- 대응시켜 두었다 — 고객이 8D를 요구하면 이 데이터로 8D 서식을 뽑기 위함(2026-08-10 확정).
+  --
+  -- kind(이슈구분)로 입력칸이 갈린다: 설비 이슈("소결로 벨트 파손")처럼 특정 품번을 지정할 수
+  -- 없는 건이 실제로 많아서 **tm_no는 필수가 아니다**. 대신 모든 이슈가 반드시 갖는
+  -- cause_process(원인공정)를 공통 축으로 쓴다.
+  -- cause_process(원인공정)와 found_process(발견공정)는 반드시 따로 둔다 — 성형에서 만들어져
+  -- 정형에서 발견되는 식이라, 합치면 '왜 우리 검사가 못 걸렀나'(유출) 분석이 불가능해진다.
+  id INTEGER PRIMARY KEY,
+  d TEXT NOT NULL,                          -- 작성일(회의 발표일)
+  title TEXT DEFAULT '',                    -- 제목 (예: Pulley 동심도 불량 개선 대책)
+  kind TEXT NOT NULL DEFAULT 'product',     -- product(제품불량)|equip(설비)|process(공정·작업)|etc
+  part TEXT NOT NULL DEFAULT '',
+  cause_process TEXT DEFAULT '',            -- 원인공정
+  found_process TEXT DEFAULT '',            -- 발견공정
+  tm_no TEXT DEFAULT '', product_name TEXT DEFAULT '',   -- 제품불량일 때만
+  defect_type TEXT DEFAULT '',              -- 불량유형(defect_type 마스터 name)
+  equipment TEXT DEFAULT '',                -- 작업설비 (예: JHC100/6) — 마스터 없이 자동완성으로 표기 통일
+  dept TEXT DEFAULT '',                     -- 작성부서
+  writer TEXT DEFAULT '',                   -- 담당관리직
+  presenter TEXT DEFAULT '',                -- 발표자
+  approver TEXT DEFAULT '', approved_at TEXT DEFAULT '',  -- 결재(서명 대신 이름+일자로 기록)
+  -- D2 문제 정의
+  symptom TEXT DEFAULT '',                  -- 현상 (예: 동심도 불량)
+  occur_date TEXT DEFAULT '',               -- 발생일
+  occur_ongoing INTEGER NOT NULL DEFAULT 0, -- '지속 발생'이면 1 (양식에 날짜 대신 이렇게 적는 경우가 많다)
+  lot_qty INTEGER NOT NULL DEFAULT 0,       -- 해당 Lot 수량
+  defect_qty INTEGER NOT NULL DEFAULT 0,    -- 불량 수량 (불량률은 저장하지 않고 화면에서 계산)
+  -- D3 임시 조치
+  lot_action TEXT DEFAULT '',               -- 선별|재작업|특채|기타
+  lot_action_etc TEXT DEFAULT '',
+  interim TEXT DEFAULT '',                  -- 근본개선 완료 전 차기생산 임시조치 방법
+  -- D4 원인 분석 (발생/유출을 나눠 적는 것이 이 양식의 핵심)
+  cause_occur TEXT DEFAULT '',              -- 발생측면
+  cause_flow TEXT DEFAULT '',               -- 유출측면
+  cause_4m TEXT DEFAULT '',                 -- 사람|설비|자재|방법|설계 — 원인 유형별 집계용(양식엔 없던 항목)
+  status TEXT NOT NULL DEFAULT 'open',      -- open(진행)|done(완료)|hold(보류)
+  reg_user TEXT DEFAULT '', updated_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_d ON capa(d);
+CREATE INDEX IF NOT EXISTS ix_capa_tm ON capa(tm_no);
+CREATE TABLE IF NOT EXISTS capa_action (
+  -- 근본대책 항목. 종이 양식에선 대책마다 오른쪽에 일정(8/30)을 형광펜으로 칠해뒀는데,
+  -- 회의가 끝나면 아무도 다시 안 본다. 그래서 대책을 **한 덩어리 글이 아니라 항목별로** 쪼개
+  -- 각각 기한·완료여부를 갖게 했다 — 기한이 지난 미완료 대책을 시스템이 찾아낼 수 있다.
+  id INTEGER PRIMARY KEY, capa_id INTEGER NOT NULL,
+  side TEXT NOT NULL DEFAULT 'occur',       -- occur(발생 방지)|flow(유출 방지)
+  seq INTEGER NOT NULL DEFAULT 0,
+  content TEXT DEFAULT '', due TEXT DEFAULT '',
+  done INTEGER NOT NULL DEFAULT 0, done_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_action ON capa_action(capa_id);
+CREATE TABLE IF NOT EXISTS capa_std (
+  -- 표준 반영 체크(양식의 5종 고정: PFMEA·관리계획서·작업표준·C/Sheet·작업요령서).
+  -- '개정'을 골랐으면 일자를 받는다 — 종이로는 '불필요'인지 '안 채운 것'인지 구분이 안 됐다.
+  id INTEGER PRIMARY KEY, capa_id INTEGER NOT NULL,
+  name TEXT NOT NULL, revised INTEGER NOT NULL DEFAULT 0,   -- 1=개정, 0=불필요
+  rev_date TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_std ON capa_std(capa_id);
+CREATE TABLE IF NOT EXISTS capa_spread (
+  -- 수평전개(횡전개). 양식엔 '대상부품: Pulley 4종'처럼 자유 텍스트로 적혀 있었는데,
+  -- tm_no를 같이 받아두면 "이 품번에 전개된 대책이 뭐가 있나"를 역으로 조회할 수 있다.
+  id INTEGER PRIMARY KEY, capa_id INTEGER NOT NULL,
+  tm_no TEXT DEFAULT '', target TEXT DEFAULT '',            -- 대상부품(표기용)
+  applied TEXT DEFAULT '',                                  -- 완료|예정|해당없음
+  plan_date TEXT DEFAULT '', memo TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_spread ON capa_spread(capa_id);
+CREATE TABLE IF NOT EXISTS capa_file (
+  -- 항목별 첨부. 양식의 '유첨'(원인분석·근본개선 상세를 뒷장으로 빼는 것)에 해당한다.
+  -- section으로 어느 항목의 첨부인지 구분해야 보고서에서 설명 옆에 그림이 붙는다.
+  id INTEGER PRIMARY KEY, capa_id INTEGER NOT NULL,
+  section TEXT NOT NULL DEFAULT 'etc',      -- photo(문제부위)|cause(원인분석)|action(근본개선)|etc
+  kind TEXT NOT NULL DEFAULT 'doc',         -- photo|doc
+  orig_name TEXT NOT NULL, stored_name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0,
+  uploaded_at TEXT DEFAULT '', uploaded_by TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_file ON capa_file(capa_id);
 CREATE INDEX IF NOT EXISTS ix_defect_d ON defect_entry(d);
 CREATE INDEX IF NOT EXISTS ix_prod_d ON production(d);
 """
+
+# 개선대책서 선택지 — 화면과 검증에서 같이 쓰려고 한 곳에 모아둔다(2026-08-10).
+CAPA_KINDS = [("product", "제품불량"), ("equip", "설비"), ("process", "공정·작업"), ("etc", "기타")]
+CAPA_LOT_ACTIONS = ["선별", "재작업", "특채", "기타"]
+CAPA_STD_NAMES = ["PFMEA", "관리계획서", "작업표준", "C/Sheet", "작업요령서"]
+CAPA_4M = ["사람", "설비", "자재", "방법", "설계"]
+CAPA_APPLIED = ["완료", "예정", "해당없음"]
 
 
 def connect():
