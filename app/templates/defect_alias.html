@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel"><div class="pbody" style="font-size:12px;line-height:1.7;color:var(--tx2);">
+  같은 불량을 시트마다 다르게 적으면(<code>녹</code>/<code>녹불량</code>,
+  <code>산화</code>/<code>산화불량</code>) <b>불량유형 파레토가 쪼개져</b> 순위가 왜곡됩니다.
+  그래서 유사 유형을 <b>대표 불량유형</b> 하나로 묶어 집계합니다.
+  <br>
+  · <b>원본 데이터는 바뀌지 않습니다.</b> 집계·화면에 보여줄 때만 묶으므로 언제든 되돌릴 수 있습니다.
+  <br>
+  · 품명과 달리 <b>자동 규칙은 없습니다</b> — 이름이 비슷해도 다른 불량인 경우가 많아
+    (<code>편가공</code> vs <code>편가공(척파손)</code>, <code>CRACK</code> vs <code>CRACK수정</code>)
+    여기에 적은 것만 묶습니다.
+  <br>
+  · 대표 이름 칸을 비우거나 자기 이름을 그대로 두면 <b>통합이 해제</b>됩니다.
+  <br>
+  · 이름 끝에 <code>*</code>를 쓰면 <b>접두어 규칙</b>이 되어 새 불량명이 생겨도 함께 묶입니다.
+  <br>
+  · 통합은 <b>대시보드 TOP5 · 월마감 파레토 · 세부지표현황 불량유형 목록</b>에 함께 반영됩니다.
+</div></div>
+
+<div class="fyrow" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+  <form method="get" action="/admin/defect-types/alias" style="display:flex;gap:6px;">
+    <input class="in" name="q" value="{{ q }}" placeholder="불량유형 검색" style="width:200px;">
+    <button class="btn btn-s btn-sm">검색</button>
+  </form>
+  <a class="btn btn-s btn-sm" style="text-decoration:none;margin-left:auto;"
+     href="/admin/defect-types">← 불량유형 마스터</a>
+</div>
+
+{% if prules %}
+<div class="panel"><div class="phead"><h2>적용 중인 접두어 규칙</h2>
+  <span class="tot">{{ prules|length }}건</span></div>
+  <table>
+    <thead><tr><th class="l">불량유형 패턴</th><th class="l">대표 불량유형</th></tr></thead>
+    <tbody>
+    {% for r in prules %}
+      <tr><td class="l"><code>{{ r.name }}</code></td><td class="l"><b>{{ r.group }}</b></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if groups %}
+<div class="panel"><div class="phead"><h2>통합된 결과</h2>
+  <span class="tot">{{ groups|length }}개 그룹</span></div>
+  <table>
+    <thead><tr><th class="l" style="width:180px;">대표 불량유형</th><th class="l">묶인 불량유형 (수량)</th>
+      <th class="num" style="width:120px;">합계</th></tr></thead>
+    <tbody>
+    {% for g, names in groups %}
+      <tr><td class="l"><b>{{ g }}</b> <span style="color:var(--tx3);">({{ names|length }})</span></td>
+        <td class="l" style="font-size:11.5px;color:var(--tx2);">
+          {% for n, qv in names %}{{ n }}{% if qv %} <span style="color:var(--tx3);">{{ qv|cf }}</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</td>
+        <td class="num"><b>{{ names|sum(attribute=1)|cf }}</b></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/defect-types/alias">
+<input type="hidden" name="q" value="{{ q }}">
+<div class="panel"><div class="phead"><h2>불량유형 목록</h2>
+  <span class="tot">{{ rows|length }}종</span>
+  {% if can_edit %}<button class="btn btn-p btn-sm" style="margin-left:auto;">저장</button>{% endif %}</div>
+  <table>
+    <thead><tr><th class="l">불량유형</th><th class="num" style="width:110px;">수량</th>
+      <th style="width:70px;">마스터</th><th class="l" style="width:220px;">대표 불량유형 (직접 지정)</th>
+      <th class="l" style="width:160px;">집계 결과</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="l">{{ r.name }}</td>
+        <td class="num">{{ r.qty|cf if r.qty else '-' }}</td>
+        <td style="text-align:center;color:{{ 'var(--tx3)' if r.master else 'var(--err)' }};">
+          {{ '○' if r.master else '미등재' }}</td>
+        <td class="l">
+          {% if can_edit %}
+          <input class="in" name="g_{{ r.name }}" value="{{ r.saved }}" placeholder="(통합 안 함)"
+                 list="grpList" style="width:100%;">
+          {% else %}{{ r.saved or '-' }}{% endif %}
+        </td>
+        <td class="l">{% if r.group != r.name %}<b style="color:var(--p-600);">→ {{ r.group }}</b>
+          {% else %}<span style="color:var(--tx3);">{{ r.group }}</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="color:var(--tx3);">해당하는 불량유형이 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if can_edit %}<div class="pbody"><button class="btn btn-p">저장</button>
+    <span style="color:var(--tx3);font-size:11.5px;margin-left:8px;">
+      저장하면 월마감 보고서는 다음 조회 때 다시 계산됩니다.</span></div>{% endif %}
+</div>
+{# 이미 쓰이고 있는 대표 이름을 자동완성으로 제안해 오타로 새 그룹이 생기는 걸 막는다. #}
+<datalist id="grpList">{% for g, _ns in groups %}<option value="{{ g }}">{% endfor %}
+  {% for r in rows %}<option value="{{ r.name }}">{% endfor %}</datalist>
+</form>
+{% endblock %}

@@ -71,7 +71,9 @@
 </div>
 {% endif %}
 
-<div class="panel"><div class="phead"><h2>불량유형 목록</h2><span class="tot">{{ rows|length }}건</span></div>
+<div class="panel"><div class="phead"><h2>불량유형 목록</h2><span class="tot">{{ rows|length }}건</span>
+  <a class="btn btn-s btn-sm" style="margin-left:auto;text-decoration:none;"
+     href="/admin/defect-types/alias">🔗 불량유형 통합 관리</a></div>
   <table>
     <thead><tr><th>파트</th><th>구분</th><th>불량명</th><th>배분기준</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>

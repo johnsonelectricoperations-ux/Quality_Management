@@ -996,6 +996,81 @@ async def product_alias_save(request: Request):
     return RedirectResponse("/admin/products/alias" + qs, status_code=303)
 
 
+@app.get("/admin/defect-types/alias", response_class=HTMLResponse)
+def defect_alias_list(request: Request, q: str = "", msg: str = "", err: str = ""):
+    """불량유형 통합(대표 불량유형) 관리 — 대표품명 화면과 같은 방식.
+    같은 불량을 시트마다 다르게 적어(녹/녹불량) 파레토가 쪼개지는 것을 막는다(2026-08-10)."""
+    u, g = _perm_guard(request, "defect_types", "view")
+    if g:
+        return g
+    conn = db.connect()
+    alias = calc.load_defect_alias(conn)
+    # 마스터에 있는 이름 + 실제 데이터에 있는 이름을 합쳐 보여준다(마스터 미등재 이름도 통합 대상).
+    names = {}
+    for r in conn.execute("SELECT name, COUNT(*) n FROM defect_type GROUP BY name"):
+        names[r["name"]] = {"name": r["name"], "master": True, "qty": 0}
+    for r in conn.execute(
+            "SELECT defect_name nm, SUM(qty) s FROM defect_entry "
+            "WHERE status='confirmed' AND defect_name<>'' GROUP BY defect_name"):
+        row = names.setdefault(r["nm"], {"name": r["nm"], "master": False, "qty": 0})
+        row["qty"] = r["s"] or 0
+    rows = sorted(names.values(), key=lambda x: (-x["qty"], x["name"]))
+    if q:
+        qq = q.upper()
+        rows = [r for r in rows if qq in r["name"].upper()]
+    for r in rows:
+        r["group"] = calc.defect_group_of(alias, r["name"])
+        r["saved"] = alias["exact"].get(r["name"], "")
+    # 통합 결과(2개 이상 묶인 것) — 눈으로 확인하는 용도
+    merged = defaultdict(list)
+    for r in sorted(names.values(), key=lambda x: x["name"]):
+        merged[calc.defect_group_of(alias, r["name"])].append((r["name"], r["qty"]))
+    groups = sorted(((gp, ns) for gp, ns in merged.items() if len(ns) > 1),
+                    key=lambda kv: -sum(q2 for _n, q2 in kv[1]))
+    prules = [{"name": n + "*", "group": gp} for n, gp in alias["prefix"]]
+    conn.close()
+    return render(request, "defect_alias.html", u, active="defect_types",
+                  heading="불량유형 통합 (대표 불량유형) 관리", crumb="관리 · 불량유형 마스터",
+                  pending=pending_count(), q=q, rows=rows, groups=groups, prules=prules,
+                  msg=msg, err=err,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")))
+
+
+@app.post("/admin/defect-types/alias")
+async def defect_alias_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "defect_types", "edit")):
+        return RedirectResponse("/admin/defect-types/alias", status_code=303)
+    form = await request.form()
+    q = (form.get("q") or "").strip()
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = db.connect()
+    n = 0
+    for key in form.keys():
+        if not key.startswith("g_"):
+            continue
+        name = key[2:]
+        val = (form.get(key) or "").strip()
+        if val and val != name:
+            conn.execute(
+                "INSERT INTO defect_alias(name,group_name,updated_at,updated_by) VALUES(?,?,?,?) "
+                "ON CONFLICT(name) DO UPDATE SET group_name=excluded.group_name, "
+                "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+                (name, val, now, u["name"]))
+        else:
+            # 빈칸이거나 자기 이름 그대로 = 통합 해제
+            conn.execute("DELETE FROM defect_alias WHERE name=?", (name,))
+        n += 1
+    conn.commit()
+    conn.close()
+    # 통합이 바뀌면 파레토·추이가 달라지므로 월마감 캐시를 버린다.
+    _drop_report_cache()
+    qs = f"?msg={n}건 반영 (보고서는 다시 계산됩니다)"
+    if q:
+        qs += f"&q={q}"
+    return RedirectResponse("/admin/defect-types/alias" + qs, status_code=303)
+
+
 def _drop_report_cache():
     conn = db.connect()
     conn.execute("DELETE FROM report_cache")

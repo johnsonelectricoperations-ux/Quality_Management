@@ -193,6 +193,16 @@ CREATE TABLE IF NOT EXISTS permission (
   can_view INTEGER NOT NULL DEFAULT 1, can_edit INTEGER NOT NULL DEFAULT 0,
   UNIQUE(role, menu_key)
 );
+CREATE TABLE IF NOT EXISTS defect_alias (
+  -- 불량유형 통합표(대표 불량유형) — 2026-08-10 신설.
+  -- 같은 불량을 시트마다 다르게 적어(녹/녹불량, 산화/산화불량, 이물소착/이물질소착, CRACK/크랙)
+  -- 파레토가 쪼개져 순위가 왜곡됐다. 예: 녹불량 7,284 + 녹 203이 따로 세어져 상위에서 밀림.
+  -- **원본 defect_entry는 절대 바꾸지 않고 집계할 때만 묶는다**(되돌릴 수 있어야 하므로).
+  -- product_alias(대표품명)와 같은 구조·같은 규칙(끝의 `*`는 접두어 규칙).
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+  group_name TEXT NOT NULL,
+  updated_at TEXT DEFAULT '', updated_by TEXT DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS capa (
   -- 개선대책서(현장품질회의 발표자료) 원장 — 2026-08-10 신설.
   -- 사내에서 쓰던 1장짜리 대책서 양식(주황 제목바 + 4분할)을 그대로 담는다. 항목 이름은
@@ -464,6 +474,7 @@ def init_db():
     _ensure_default_admin(conn)
     _ensure_default_permissions(conn)
     _ensure_default_aliases(conn)
+    _ensure_default_defect_aliases(conn)
     conn.close()
 
 
@@ -474,6 +485,22 @@ _DEFAULT_ALIASES = [
     ("VMS PART", "ROD GUIDE*", "ROD GUIDE"),  # ROD GUIDE, ROD GUIDE ASS'Y
     ("VMS PART", "R/GUIDE*", "ROD GUIDE"),    # R/GUIDE ASSY 도 같은 품목
 ]
+
+
+# 사용자가 지정한 불량유형 통합 규칙(2026-08-10). 없는 것만 넣고, 사람이 고친 값은 안 건드린다.
+_DEFAULT_DEFECT_ALIASES = [
+    ("녹불량", "녹"),
+    ("산화불량", "산화"),
+    ("이물소착", "이물질소착"),
+    ("크랙", "CRACK"),
+]
+
+
+def _ensure_default_defect_aliases(conn):
+    for name, group in _DEFAULT_DEFECT_ALIASES:
+        conn.execute("INSERT OR IGNORE INTO defect_alias(name,group_name,updated_by) "
+                     "VALUES(?,?,'기본규칙')", (name, group))
+    conn.commit()
 
 
 def _ensure_default_aliases(conn):

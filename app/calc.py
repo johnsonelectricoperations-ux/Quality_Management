@@ -101,6 +101,41 @@ def group_of(alias, part, name):
             return g
     return auto_group_name(name)
 
+
+# ── 불량유형 통합(대표 불량유형) ─────────────────────────
+# 같은 불량을 시트마다 다르게 적어(녹/녹불량, 산화/산화불량) 파레토가 쪼개지는 문제를 푼다.
+# 품명 쪽과 달리 **자동 규칙은 두지 않는다** — 불량유형은 이름이 비슷해도 다른 불량인 경우가
+# 많아서(편가공 vs 편가공(척파손), CRACK vs CRACK수정) 사람이 등록한 것만 묶는다(2026-08-10).
+def load_defect_alias(conn):
+    """{원래이름: 대표이름}. 이름 끝에 `*`를 붙이면 그 접두어로 시작하는 유형 전체에 적용."""
+    exact, prefix = {}, []
+    for r in conn.execute("SELECT name, group_name FROM defect_alias"):
+        nm = (r["name"] or "").strip()
+        if nm.endswith("*"):
+            prefix.append((nm[:-1].upper(), r["group_name"]))
+        else:
+            exact[nm] = r["group_name"]
+    prefix.sort(key=lambda kv: -len(kv[0]))     # 더 구체적인(긴) 접두어가 이긴다
+    return {"exact": exact, "prefix": prefix}
+
+
+def defect_group_of(alias, name):
+    """대표 불량유형. 등록이 없으면 원래 이름 그대로(자동 규칙 없음)."""
+    nm = (name or "").strip()
+    g = alias["exact"].get(nm)
+    if g:
+        return g
+    up = nm.upper()
+    for pre, g in alias["prefix"]:
+        if up.startswith(pre):
+            return g
+    return nm
+
+
+def defect_group_members(alias, group, all_names):
+    """대표 불량유형 → 거기에 묶인 원래 이름들. 조회 필터(IN 절)에 쓴다."""
+    return [n for n in all_names if defect_group_of(alias, n) == group]
+
 # 외주소재불량 Scrap Cost 단가 = 완제품(기타)단가 × 이 배수 (2026-07-29 확정).
 # 외주에서 받은 소재 상태의 불량이라 공정단가(성형 0.5배 등)가 아니라 별도 배수를 쓴다.
 # 기존 엑셀 실적과 대조한 결과 파트별로 실제 배수가 달라 파트별로 둔다(1PART 0.794 → 0.8).
@@ -219,6 +254,12 @@ class Masters:
                 self.price[key] = applicable[-1]
         for r in conn.execute("SELECT * FROM defect_type"):
             self.defect[(r["part"], r["name"])] = (r["kind"], r["process"], parse_alloc_rule(r["alloc_rule"]))
+        # 불량유형 통합표 — 집계·표시할 때만 쓰고 배분·원본 적재에는 쓰지 않는다.
+        self.defect_alias = load_defect_alias(conn)
+
+    def dgroup(self, defect_name):
+        """대표 불량유형(집계·화면 표시용). 등록이 없으면 원래 이름 그대로."""
+        return defect_group_of(self.defect_alias, defect_name)
 
     def price_on(self, tm_no, proc, d):
         """해당 날짜(d) 시점에 유효한 단가. 효력시작일이 d 이전인 것 중 가장 최근 값을 쓴다
@@ -700,7 +741,8 @@ def top5_defect(conn, m, date_from, date_to, part, limit=5):
         if m.kind_of(prod[1], r["defect_name"]) != "공정":
             continue
         agg[r["tm_no"]]["defect"] += r["s"]
-        agg[r["tm_no"]]["by"][r["defect_name"]] += r["s"]
+        # 유사 불량유형(녹/녹불량 등)은 대표 이름으로 묶어 센다 — 안 그러면 파레토가 쪼개진다.
+        agg[r["tm_no"]]["by"][m.dgroup(r["defect_name"])] += r["s"]
     # 생산량(기간)
     prod_by_tm = defaultdict(int)
     for r in conn.execute("SELECT tm_no,SUM(qty) s FROM production WHERE d BETWEEN ? AND ? GROUP BY tm_no",

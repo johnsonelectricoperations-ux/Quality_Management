@@ -128,7 +128,8 @@ def _collect_fy(conn, m, fy):
                     cur = tmd[key] = {"qty": 0, "dates": set(), "by": defaultdict(int)}
                 cur["qty"] += q
                 cur["dates"].add(r["d"])
-                cur["by"][r["defect_name"]] += q
+                # 유사 불량유형은 대표 이름으로 묶는다(녹/녹불량 등, 2026-08-10).
+                cur["by"][m.dgroup(r["defect_name"])] += q
     return {"pq": pq, "pa": pa, "bq": bq, "bc": bc, "rq": rq, "tmc": tmc, "tmd": tmd}
 
 

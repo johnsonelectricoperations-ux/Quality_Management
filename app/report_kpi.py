@@ -376,7 +376,7 @@ def defect_names_for_tm(conn, m, tm):
         prod = m.product.get(tm)
         part = prod[1] if prod else (r["part"] or "")
         if m.kind_from(part, r["defect_name"], r["kind"]) == "공정":
-            out.add(_disp_name(r["source"], r["defect_name"]))
+            out.add(_disp_name(m, r["source"], r["defect_name"]))
     return sorted(out)
 
 
@@ -437,16 +437,18 @@ ALL_SERIES_LABEL = "전체 공정불량"
 DISCARD_LABEL = "폐기불량"
 
 
-def _disp_name(source, defect_name):
-    """조회 화면에 보여줄 불량유형명. 폐기불량은 전부 '폐기불량' 하나로 묶는다."""
-    return DISCARD_LABEL if source == "discard" else defect_name
+def _disp_name(m, source, defect_name):
+    """조회 화면에 보여줄 불량유형명. 폐기불량은 전부 '폐기불량' 하나로 묶고,
+    나머지는 통합표(녹/녹불량 → 녹)를 적용한 **대표 불량유형**으로 보여준다(2026-08-10)."""
+    return DISCARD_LABEL if source == "discard" else m.dgroup(defect_name)
 
 
 def defect_type_options(conn, m):
     """불량유형 드롭다운 목록 — **실제 발생한 공정불량** 기준(마스터가 아니라 데이터 기준).
 
     이렇게 하면 ① 셋팅불량 유형이 자동 제외되고, ② 마스터에 미등재된 이름도 빠지지 않으며,
-    ③ 폐기불량은 '폐기불량' 하나로만 나온다. 새 불량명이 들어와도 손댈 곳이 없다."""
+    ③ 폐기불량은 '폐기불량' 하나로만 나온다. 새 불량명이 들어와도 손댈 곳이 없다.
+    ④ 유사 유형(녹/녹불량)은 통합표로 묶어 **대표 이름 하나만** 목록에 나온다(2026-08-10)."""
     names = set()
     for r in conn.execute(
             "SELECT DISTINCT defect_name, part, kind, source FROM defect_entry "
@@ -454,8 +456,16 @@ def defect_type_options(conn, m):
         part = r["part"] or ""
         if m.kind_from(part, r["defect_name"], r["kind"]) != "공정":
             continue
-        names.add(_disp_name(r["source"], r["defect_name"]))
+        names.add(_disp_name(m, r["source"], r["defect_name"]))
     return sorted(names)
+
+
+def _group_members(conn, m, group):
+    """대표 불량유형 -> 실제 데이터에 있는 원래 이름들. 통합 등록이 없으면 자기 자신뿐."""
+    names = [r["defect_name"] for r in conn.execute(
+        "SELECT DISTINCT defect_name FROM defect_entry WHERE defect_name<>''")]
+    hit = [n for n in names if m.dgroup(n) == group]
+    return hit or [group]
 
 
 def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to=None):
@@ -477,8 +487,12 @@ def defect_trend(conn, m, part, tm_q, defect_name, unit, date_from=None, date_to
     if defect_name == DISCARD_LABEL:
         where.append("source='discard'")            # '폐기불량'은 소스로 필터
     elif defect_name:
-        where.append("defect_name=? AND source!='discard'")
-        args.append(defect_name)
+        # 통합된 대표 이름을 고른 경우 그 안에 묶인 원래 이름을 전부 조회해야 한다
+        # (녹 -> 녹, 녹불량). 통합이 없으면 자기 자신 하나뿐이라 결과는 같다.
+        members = _group_members(conn, m, defect_name)
+        ph = ",".join("?" * len(members))
+        where.append(f"defect_name IN ({ph}) AND source!='discard'")
+        args += members
     if tm_q:
         where.append("(tm_no LIKE ? OR tm_no=?)")
         args += [f"%{tm_q}%", tm_q]
@@ -551,7 +565,11 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
     d0, d1, labels, day_idx = _period_setup(cy, cm, unit, date_from, date_to)
 
     # '폐기불량'은 소스로, 나머지는 불량명으로 필터한다(폐기 행은 이름으로 잡지 않는다).
-    picked = [n for n in names if n != DISCARD_LABEL]
+    # 고른 이름이 통합된 대표 이름이면 거기 묶인 원래 이름을 전부 펼쳐서 조회한다(2026-08-10).
+    picked = []
+    for n in names:
+        if n != DISCARD_LABEL:
+            picked += _group_members(conn, m, n)
     conds, args = [], [d0, d1]
     if picked:
         conds.append("(defect_name IN (%s) AND source!='discard')" % ",".join("?" * len(picked)))
@@ -570,7 +588,7 @@ def defect_trend_types(conn, m, part, defect_names, unit, date_from=None, date_t
             continue
         if m.kind_from(rpart, r["defect_name"], r["kind"]) != "공정":
             continue                       # 셋팅불량 제외
-        key = _disp_name(r["source"], r["defect_name"])
+        key = _disp_name(m, r["source"], r["defect_name"])
         if key not in series:
             continue
         i = day_idx.get(r["d"])
