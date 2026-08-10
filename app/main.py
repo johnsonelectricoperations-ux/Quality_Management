@@ -2355,6 +2355,17 @@ def _capa_load(conn, cid):
     if not r:
         return None
     row = dict(r)
+    row["tms"] = [dict(x) for x in conn.execute(
+        "SELECT * FROM capa_tm WHERE capa_id=? ORDER BY id", (cid,))]
+    # 품명 그룹(대표품명)도 같이 계산해 둔다 — "Pulley 계열에 무슨 일이 있었나"를 보기 위함.
+    alias = calc.load_alias(conn)
+    groups = []
+    for t in row["tms"]:
+        g = calc.group_of(alias, row["part"], t["product_name"]) if t["product_name"] else ""
+        t["group_name"] = g
+        if g and g not in groups:
+            groups.append(g)
+    row["groups"] = groups
     row["actions"] = [dict(x) for x in conn.execute(
         "SELECT * FROM capa_action WHERE capa_id=? ORDER BY side,seq,id", (cid,))]
     std = {x["name"]: dict(x) for x in conn.execute(
@@ -2416,15 +2427,27 @@ async def capa_save(request: Request):
         eq = f"&edit={orig_id}" if orig_id else ""
         return RedirectResponse(f"/input/capa?err=작성일은 필수입니다{eq}", status_code=303)
     kind = (form.get("kind") or "product").strip()
-    # 제품불량이 아니면 품번 관련 칸은 저장하지 않는다(설비 이슈에 빈 품번이 남지 않도록).
-    tm_no = calc.base_tmno((form.get("tm_no") or "").strip()) if kind == "product" else ""
+    # 대상 품번은 여러 개 받는다(대책서 1건이 여러 품번에 걸리는 일이 실제로 많다).
+    # capa.tm_no에는 첫 줄(대표)만 복사해 목록·색인에 쓴다.
+    tm_list = []
+    if kind == "product":
+        tm_nos, tm_names = form.getlist("tm_no"), form.getlist("tm_name")
+        tm_qtys, tm_memos = form.getlist("tm_qty"), form.getlist("tm_memo")
+        for i, t in enumerate(tm_nos):
+            t = calc.base_tmno((t or "").strip())
+            nm = (tm_names[i].strip() if i < len(tm_names) else "")
+            if not t and not nm:
+                continue
+            tm_list.append((t, nm, _capa_num(tm_qtys[i] if i < len(tm_qtys) else 0),
+                            tm_memos[i].strip() if i < len(tm_memos) else ""))
+    tm_no = tm_list[0][0] if tm_list else ""
     vals = dict(
         d=d, title=(form.get("title") or "").strip(), kind=kind,
         part=form.get("part") or "VMS PART",
         cause_process=(form.get("cause_process") or "").strip(),
         found_process=(form.get("found_process") or "").strip(),
         tm_no=tm_no,
-        product_name=(form.get("product_name") or "").strip() if kind == "product" else "",
+        product_name=(tm_list[0][1] if tm_list else ""),
         defect_type=(form.get("defect_type") or "").strip() if kind == "product" else "",
         equipment=(form.get("equipment") or "").strip(),
         dept=(form.get("dept") or "").strip(), writer=(form.get("writer") or "").strip(),
@@ -2456,6 +2479,11 @@ async def capa_save(request: Request):
         cur = conn.execute(f"INSERT INTO capa({cols}) VALUES({qs})", (*vals.values(), u["name"]))
         cid = cur.lastrowid
         msg = "등록됨"
+
+    conn.execute("DELETE FROM capa_tm WHERE capa_id=?", (cid,))
+    for t, nm, q, mm in tm_list:
+        conn.execute("INSERT INTO capa_tm(capa_id,tm_no,product_name,defect_qty,memo) VALUES(?,?,?,?,?)",
+                     (cid, t, nm, q, mm))
 
     # 하위 3종(대책·표준·수평전개)은 행 수가 매번 달라져 부분 수정이 까다롭다.
     # 전부 지우고 다시 넣는 편이 단순하고, 한 건당 행이 수십 개 수준이라 성능도 문제없다.
@@ -2590,7 +2618,7 @@ def capa_delete(request: Request, cid: int):
             os.remove(os.path.join(CAPA_UPLOAD_ROOT, f["stored_name"]))
         except OSError:
             pass
-    for t in ("capa_file", "capa_action", "capa_std", "capa_spread"):
+    for t in ("capa_file", "capa_action", "capa_std", "capa_spread", "capa_tm"):
         conn.execute(f"DELETE FROM {t} WHERE capa_id=?", (cid,))
     conn.execute("DELETE FROM capa WHERE id=?", (cid,))
     conn.commit()

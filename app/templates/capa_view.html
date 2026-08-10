@@ -117,7 +117,12 @@ table.t td.c{text-align:center;}
           <tr><td class="k">발견공정</td><td class="c">{{ r.found_process or '-' }}</td></tr>
           <tr><td class="k">작업설비</td><td class="c">{{ r.equipment or '-' }}</td></tr>
           {% if r.kind == 'product' %}
-          <tr><td class="k">품번 / 불량유형</td><td class="c">{{ r.tm_no or '-' }} / {{ r.defect_type or '-' }}</td></tr>
+          {# 대책서 1건이 여러 품번에 걸리므로 개요에는 전부 나열한다(2026-08-10 추가). #}
+          <tr><td class="k">TM-NO</td><td class="c">
+            {%- if r.tms %}{% for t in r.tms %}{{ t.tm_no or t.product_name }}{{ '' if loop.last else ', ' }}{% endfor %}
+            {%- else %}-{% endif %}</td></tr>
+          {% if r.groups %}<tr><td class="k">품명</td><td class="c">{{ r.groups|join(', ') }}</td></tr>{% endif %}
+          <tr><td class="k">불량유형</td><td class="c">{{ r.defect_type or '-' }}</td></tr>
           {% endif %}
           <tr><td class="k">해당Lot.수량</td><td class="c">{{ '{:,}'.format(r.lot_qty) if r.lot_qty else '-' }}</td></tr>
           <tr><td class="k">불량 수량</td><td class="c">{{ '{:,}ea'.format(r.defect_qty) if r.defect_qty else '-' }}</td></tr>

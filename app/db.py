@@ -237,6 +237,19 @@ CREATE TABLE IF NOT EXISTS capa (
 );
 CREATE INDEX IF NOT EXISTS ix_capa_d ON capa(d);
 CREATE INDEX IF NOT EXISTS ix_capa_tm ON capa(tm_no);
+CREATE TABLE IF NOT EXISTS capa_tm (
+  -- 대책서 1건이 걸리는 **대상 품번들**(2026-08-10 추가).
+  -- 실제 대책서(sample-01.pdf 유첨#1)를 보니 한 건에 품번이 여러 개 나온다
+  -- (2206·1785·1695·1360… 각각 불량수량이 따로 있음). 대표 품번 하나만 저장하면
+  -- 나머지 품번이 TM-NO별 추적에서 통째로 빠지므로 목록으로 받는다.
+  -- capa.tm_no에는 이 중 첫 줄(대표)을 복사해 둔다 — 목록·색인용이라 조회는 여기를 본다.
+  id INTEGER PRIMARY KEY, capa_id INTEGER NOT NULL,
+  tm_no TEXT NOT NULL DEFAULT '', product_name TEXT DEFAULT '',
+  defect_qty INTEGER NOT NULL DEFAULT 0,
+  memo TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_capa_tm ON capa_tm(capa_id);
+CREATE INDEX IF NOT EXISTS ix_capa_tm_no ON capa_tm(tm_no);
 CREATE TABLE IF NOT EXISTS capa_action (
   -- 근본대책 항목. 종이 양식에선 대책마다 오른쪽에 일정(8/30)을 형광펜으로 칠해뒀는데,
   -- 회의가 끝나면 아무도 다시 안 본다. 그래서 대책을 **한 덩어리 글이 아니라 항목별로** 쪼개

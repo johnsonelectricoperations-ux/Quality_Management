@@ -131,14 +131,34 @@ table.grid input.in,table.grid select.in{width:100%;}
     </div>
     <div class="hint">· 원인공정과 발견공정을 나눠 적어야 "왜 우리 검사가 못 걸렀나"(유출) 분석이 가능합니다.</div>
 
-    <div id="prodRow" class="frow" style="grid-template-columns:170px 1fr 170px;margin-top:10px;">
-      <div class="f"><label>TM-NO</label>
-        <input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1785-00"></div>
-      <div class="f"><label>품명</label>
-        <input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}"></div>
-      <div class="f"><label>불량유형</label>
+    <div id="prodRow" style="margin-top:10px;">
+      <div class="f" style="max-width:220px;"><label>불량유형</label>
         <input class="in" name="defect_type" list="dtypeList" value="{{ edit_row.defect_type if edit_row }}">
         <datalist id="dtypeList">{% for t in dtypes %}<option value="{{ t }}">{% endfor %}</datalist></div>
+
+      <label style="font:600 11px/1 inherit;color:var(--tx3);display:block;margin-top:12px;">대상 품번 (여러 개 가능)</label>
+      <table class="grid" id="tmTable">
+        <thead><tr><th style="width:160px;">TM-NO</th><th>품명</th>
+          <th style="width:130px;">불량수량(ea)</th><th style="width:180px;">비고</th>
+          <th style="width:36px;"></th></tr></thead>
+        <tbody>
+        {% for t in (edit_row.tms if edit_row and edit_row.tms else [none]) %}
+          <tr>
+            <td><input class="in" name="tm_no" value="{{ t.tm_no if t }}" placeholder="예: 1785-00"></td>
+            <td><input class="in" name="tm_name" value="{{ t.product_name if t }}" placeholder="예: PULLEY"></td>
+            <td><input class="in" type="number" min="0" name="tm_qty" style="text-align:right;"
+                       value="{{ t.defect_qty if t and t.defect_qty else '' }}"></td>
+            <td><input class="in" name="tm_memo" value="{{ t.memo if t }}" placeholder="예: 공정불량 등록"></td>
+            <td><button type="button" class="btn btn-ghost btn-sm" onclick="delRow(this)">✕</button></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" class="btn-row" onclick="addTm()">+ 품번 추가</button>
+      <div class="hint">· 대책서 1건이 여러 품번에 걸리면 전부 적어주세요 — 적힌 품번 전부가
+        TM-NO별 추적·재발감지 대상이 됩니다. 첫 줄이 목록에 보이는 대표 품번입니다.
+        {% if edit_row and edit_row.groups %}<br>· 현재 품명 그룹:
+        <b>{{ edit_row.groups|join(', ') }}</b> — 이 계열로도 함께 조회됩니다.{% endif %}</div>
     </div>
 
     <div class="frow" style="grid-template-columns:130px 130px 130px 150px 130px;margin-top:10px;">
@@ -367,6 +387,12 @@ function calcRate(){
 function delRow(btn){
   var tb = btn.closest('tbody');
   if (tb.rows.length > 1) btn.closest('tr').remove();
+}
+function addTm(){
+  var tb = document.querySelector('#tmTable tbody');
+  var tr = tb.rows[0].cloneNode(true);
+  tr.querySelectorAll('input').forEach(function(i){ i.value = ''; });
+  tb.appendChild(tr);
 }
 function addSpread(){
   var tb = document.querySelector('#spTable tbody');
