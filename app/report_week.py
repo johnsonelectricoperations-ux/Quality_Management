@@ -22,7 +22,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 1
+CACHE_VERSION = 3
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -205,11 +205,62 @@ def _kpi_block(conn, m, daily, wk, part):
     return {"rows": rows, "cur": cur_k, "prev": prv_k}
 
 
+TREND_WEEKS = 5       # 주간 KPI 타일에 함께 그리는 최근 주차 수(5주 — 8주는 너무 빽빽하다)
+
+# 지표 → 목표 테이블의 kpi 키. PPM·비율 목표는 월 기준이지만 주간도 같은 '율'이라 그대로 비교한다.
+TARGET_KEY = {"proc_ppm": "proc_ppm", "set_ppm": "set_ppm", "scrap_qty_pct": "scrap_qty",
+              "scrap_cost_pct": "scrap_cost", "copq_pct": "copq"}
+
+
+def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
+    """최근 n주 추이 — 타일마다 작은 막대그래프를 그리기 위한 값.
+
+    주간 보고는 절대값보다 흐름이 중요해서(2026-08-10 요청) 숫자 옆에 최근 몇 주를 같이 보여준다.
+    맨 오른쪽 막대가 이번 주다."""
+    end = _dt.date.fromisoformat(wk)
+    wks = [(end - _dt.timedelta(days=WEEK_DAYS * i)).isoformat() for i in range(n - 1, -1, -1)]
+    ks = [week_kpi(conn, m, daily, w, part) for w in wks]
+    labels = []
+    for w in wks:
+        s, _e = week_bounds(w)
+        sd = _dt.date.fromisoformat(s)
+        labels.append(f"{sd.month}/{sd.day}")
+    # 목표는 FY 단위로 등록돼 있다. 주가 월을 넘나들 수 있으므로 **목요일(마감일)** 기준으로 잡는다.
+    fy = calc.fy_of(int(wk[:4]), int(wk[5:7]))
+    out = {}
+    for key, _name, _unit, dec, _lb, _est in WEEK_METRICS:
+        # 생산 데이터가 아예 없는 주는 **0이 아니라 빈칸**으로 둔다. 0으로 그리면 보고서에서
+        # '그 주는 불량 0'으로 읽혀 정반대로 오해된다(2026-08-10).
+        vals = [(k.get(key) or 0) if k["prod_qty"] else None for k in ks]
+        real = [v for v in vals if v is not None]
+        vmax = max(real) if real else 0
+        tgt = None
+        tk = TARGET_KEY.get(key)
+        if tk and fy:
+            tpart = "VMS PART" if (key in ("proc_ppm", "set_ppm") and part == "통합") else part
+            tgt = _target_val(conn, fy, tpart, tk)
+            if tgt:
+                vmax = max(vmax, tgt)
+        out[key] = {"labels": labels, "values": vals, "vmax": vmax or 1, "target": tgt, "dec": dec}
+    return out
+
+
+def _target_val(conn, fy, part, kpi):
+    fy = fy % 100 if fy >= 100 else fy
+    row = conn.execute("SELECT value FROM target WHERE fy=? AND part=? AND kpi=? AND mon=0",
+                       (fy, part, kpi)).fetchone()
+    return row["value"] if row else None
+
+
 def _process_block(conn, m, daily, wk, part):
-    """공정별(성형·소결·정형·가공·기타) 불량수량 — 금주/전주 비교."""
+    """공정별(성형·소결·정형·가공·기타) **불량율(PPM)** — 금주/전주 비교(2026-08-10 요청).
+
+    불량율 = 그 공정 불량수량 / 그 파트 **생산수량** × 100만. 분모가 공정별 투입량이 아니라
+    파트 생산수량인 것은 KPI(공정불량 PPM)와 같은 기준을 쓰기 위함이다 — 공정별 값을 모두
+    더하면 그 파트의 공정불량 PPM이 된다."""
+    prev_wk = (_dt.date.fromisoformat(wk) - _dt.timedelta(days=WEEK_DAYS)).isoformat()
     d0, d1 = week_bounds(wk)
-    p0, p1 = week_bounds((_dt.date.fromisoformat(wk) - _dt.timedelta(days=WEEK_DAYS)).isoformat())
-    parts = calc._parts_for(part)
+    p0, p1 = week_bounds(prev_wk)
 
     def by_proc(a, b):
         out = defaultdict(int)
@@ -219,12 +270,23 @@ def _process_block(conn, m, daily, wk, part):
         return out
 
     cur, prv = by_proc(d0, d1), by_proc(p0, p1)
+    cur_prod = week_kpi(conn, m, daily, wk, part)["prod_qty"]
+    prv_prod = week_kpi(conn, m, daily, prev_wk, part)["prod_qty"]
+
+    def ppm(a, b):
+        return round(a / b * 1_000_000) if b else 0
+
     rows = []
     for proc in db.AGG_PROCESSES:
         c, p = cur.get(proc, 0), prv.get(proc, 0)
-        rows.append({"name": proc, "cur": c, "prev": p, "delta": c - p})
-    return {"rows": rows, "total": sum(r["cur"] for r in rows),
-            "total_prev": sum(r["prev"] for r in rows)}
+        cr, pr = ppm(c, cur_prod), ppm(p, prv_prod)
+        rows.append({"name": proc, "qty": c, "qty_prev": p,
+                     "cur": cr, "prev": pr, "delta": cr - pr})
+    tot_c, tot_p = sum(r["qty"] for r in rows), sum(r["qty_prev"] for r in rows)
+    return {"rows": rows, "qty": tot_c, "qty_prev": tot_p,
+            "cur": ppm(tot_c, cur_prod), "prev": ppm(tot_p, prv_prod),
+            "delta": ppm(tot_c, cur_prod) - ppm(tot_p, prv_prod),
+            "prod": cur_prod, "prod_prev": prv_prod}
 
 
 def _top_items(conn, m, wk, part, limit=5):
@@ -278,6 +340,8 @@ def build(conn, m, wk):
         "v": CACHE_VERSION, "wk": wk, "start": d0, "end": d1, "label": week_label(wk),
         "contents": CONTENTS,
         "kpi": {lbl: _kpi_block(conn, m, daily, wk, p) for p, lbl in parts},
+        # 추이 그래프는 보고서 (1)장에 쓰는 통합만 계산한다(파트별까지 하면 계산량만 3배).
+        "trend": _trend(conn, m, daily, wk, "통합"),
         "proc": {lbl: _process_block(conn, m, daily, wk, p) for p, lbl in parts[1:]},
         "top": {lbl: _top_items(conn, m, wk, p) for p, lbl in parts[1:]},
         "issues": _issue_block(conn, wk),

@@ -105,8 +105,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 /* ── 주마감 전용 ── */
 .wk{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
-.mtile{border:1px solid #d9d9d9;border-radius:6px;padding:10px 12px;display:flex;
-  flex-direction:column;justify-content:center;}
+.mtile{border:1px solid #d9d9d9;border-radius:6px;padding:9px 11px 6px;display:flex;
+  flex-direction:column;min-height:0;}
 .mtile .nm{font-size:12px;font-weight:700;color:#7f7f7f;display:flex;align-items:center;gap:5px;}
 .mtile .est{font-size:9px;font-weight:700;color:#b06000;background:#fff3e0;
   border:1px solid #f0c48a;border-radius:999px;padding:1px 5px;}
@@ -114,6 +114,18 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .mtile .vv small{font-size:14px;font-weight:700;color:#7f7f7f;margin-left:3px;}
 .mtile .cmp{font-size:11px;margin-top:4px;color:#7f7f7f;}
 .mtile .cmp b{font-size:13px;}
+/* 타일 안 미니 추이 그래프 — 주간 보고는 절대값보다 흐름이 중요해서 최근 8주를 같이 보여준다. */
+.mtile .mini{flex:1;min-height:0;display:flex;align-items:flex-end;gap:3px;
+  padding-top:8px;position:relative;}
+.mtile .mini .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:center;height:100%;}
+.mtile .mini .bar{width:70%;background:linear-gradient(180deg,#8fa9d8,#4472c4);
+  border-radius:2px 2px 0 0;min-height:1px;}
+.mtile .mini .col.cur .bar{background:linear-gradient(180deg,#4472c4,#1f3864);}
+.mtile .mini .col.cur .x{color:#1f3864;font-weight:800;}
+.mtile .mini .x{font-size:8.5px;color:#999;margin-top:2px;white-space:nowrap;}
+.mtile .mini .tl{position:absolute;left:0;right:0;border-top:2px dashed #ed7d31;}
+.mtile .mini .nod{color:#ccc;font-size:11px;font-weight:700;line-height:1;padding-bottom:2px;}
 .wtab{width:100%;border-collapse:collapse;font-size:12px;}
 .wtab th,.wtab td{border:1px solid #d9d9d9;padding:4px 7px;}
 .wtab th{background:#eef2f8;color:#1f3864;font-weight:700;text-align:center;}
@@ -160,51 +172,77 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
               {{ '%.*f'|format(r.dec, r.delta|abs) if r.dec else '{:,}'.format(r.delta|abs) }}</b>
           {% else %}<b style="color:#7f7f7f;">－</b>{% endif %}
         </div>
+        {% set t = d.trend[r.key] %}
+        <div class="mini" title="최근 {{ t['values']|length }}주 추이">
+          {% if t.target %}
+          {# 목표선. 막대 높이와 같은 비율(86%)로 맞춰 눈금이 어긋나지 않게 한다. #}
+          <div class="tl" style="bottom:calc({{ (t.target / t.vmax * 100)|round(1) }}% * 0.86 + 14px)"></div>
+          {% endif %}
+          {% for v in t['values'] %}
+          <div class="col {{ 'cur' if loop.last }}">
+            {% if v is none %}
+            {# 데이터가 없는 주 — 0 막대로 그리면 '불량 0'으로 오해되므로 점선 자리표시만 둔다. #}
+            <div class="nod" title="데이터 없음">–</div>
+            {% else %}
+            <div class="bar" style="height:{{ (v / t.vmax * 86)|round(1) }}%"></div>
+            {% endif %}
+            <div class="x">{{ t.labels[loop.index0] if loop.last or loop.index0 % 2 == 0 else '' }}</div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
       {% endfor %}
     </div>
   </div>
   <div class="foot">
-    <span>Page 2 · Scrap Cost·COPQ는 월 SVP를 생산금액 비중으로 나눈 <b>추정치</b>입니다(확정은 월마감).</span>
+    <span>Page 2 · 그래프는 최근 {{ d.trend.proc_ppm['values']|length }}주 추이(맨 오른쪽이 이번 주, 주황 점선은 목표) · Scrap Cost·COPQ는 월 SVP를 생산금액 비중으로 나눈 <b>추정치</b>입니다.</span>
     <span>Confidential</span></div>
 </section>
 
 <!-- (2) 공정별 불량 현황 -->
 <section class="slide">
-  <div class="stitle">(2) 공정별 불량 현황 <small>공정불량 수량 · 금주 vs 전주</small></div>
+  <div class="stitle">(2) 공정별 불량율 현황 <small>공정불량 PPM · 금주 vs 전주 · TOP5는 불량수량 순</small></div>
   <div class="body">
     <div class="grid2">
       {% for pl in ['1PART','2PART'] %}
       <div class="card">
         <h3>{{ pl }}</h3>
         <table class="wtab">
-          <thead><tr><th style="width:26%;">공정</th><th>금주</th><th>전주</th><th style="width:24%;">증감</th></tr></thead>
+          <thead><tr><th style="width:20%;">공정</th><th style="width:19%;">불량수량</th>
+            <th style="width:21%;">불량율<small style="font-weight:600;color:#7f7f7f;">(PPM)</small></th>
+            <th style="width:20%;">전주</th><th>증감</th></tr></thead>
           <tbody>
           {% for r in d.proc[pl].rows %}
             <tr><td class="c">{{ r.name }}</td>
-              <td class="n">{{ '{:,}'.format(r.cur) }}</td>
+              <td class="n" style="color:#7f7f7f;">{{ '{:,}'.format(r.qty) }}</td>
+              <td class="n"><b>{{ '{:,}'.format(r.cur) }}</b></td>
               <td class="n">{{ '{:,}'.format(r.prev) }}</td>
               <td class="n {{ 'up' if r.delta > 0 else ('dn' if r.delta < 0 else '') }}">
                 {{ '{:+,}'.format(r.delta) if r.delta else '－' }}</td></tr>
           {% endfor %}
             <tr class="sum"><td class="c">합계</td>
-              <td class="n">{{ '{:,}'.format(d.proc[pl].total) }}</td>
-              <td class="n">{{ '{:,}'.format(d.proc[pl].total_prev) }}</td>
-              <td class="n {{ 'up' if d.proc[pl].total > d.proc[pl].total_prev else 'dn' }}">
-                {{ '{:+,}'.format(d.proc[pl].total - d.proc[pl].total_prev) }}</td></tr>
+              <td class="n">{{ '{:,}'.format(d.proc[pl].qty) }}</td>
+              <td class="n">{{ '{:,}'.format(d.proc[pl].cur) }}</td>
+              <td class="n">{{ '{:,}'.format(d.proc[pl].prev) }}</td>
+              <td class="n {{ 'up' if d.proc[pl].delta > 0 else ('dn' if d.proc[pl].delta < 0 else '') }}">
+                {{ '{:+,}'.format(d.proc[pl].delta) if d.proc[pl].delta else '－' }}</td></tr>
           </tbody>
         </table>
-        <h3 style="margin-top:9px;">불량 수량 상위 품목</h3>
+        <div style="font-size:9.5px;color:#7f7f7f;margin-top:2px;">
+          생산수량 {{ '{:,}'.format(d.proc[pl].prod) }}ea (전주 {{ '{:,}'.format(d.proc[pl].prod_prev) }}ea) 기준</div>
+        <h3 style="margin-top:9px;">TOP5 품목 <small style="font-weight:600;color:#7f7f7f;">불량수량 순</small></h3>
         <table class="wtab">
-          <thead><tr><th style="width:22%;">TM-NO</th><th>품명</th><th style="width:18%;">불량</th>
-            <th style="width:30%;">주요 유형</th></tr></thead>
+          <thead><tr><th style="width:19%;">TM-NO</th><th>품명</th><th style="width:15%;">불량</th>
+            <th style="width:17%;">불량율<small style="font-weight:600;color:#7f7f7f;">(PPM)</small></th>
+            <th style="width:26%;">주요 유형</th></tr></thead>
           <tbody>
-          {% for t in d.top[pl][:4] %}
+          {% for t in d.top[pl][:5] %}
             <tr><td class="c">{{ t.tm }}</td><td>{{ t.name }}</td>
               <td class="n">{{ '{:,}'.format(t.defect) }}</td>
-              <td style="font-size:10.5px;">{% for n, q in t.by[:2] %}{{ n }} {{ '{:,}'.format(q) }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
+              <td class="n"><b>{{ '{:,}'.format(t.ppm) if t.ppm is not none else '-' }}</b></td>
+              <td style="font-size:10px;">{% for n, q in t.by[:2] %}{{ n }} {{ '{:,}'.format(q) }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
           {% else %}
-            <tr><td colspan="4" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
+            <tr><td colspan="5" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
           {% endfor %}
           </tbody>
         </table>
