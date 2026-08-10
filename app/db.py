@@ -193,6 +193,12 @@ CREATE TABLE IF NOT EXISTS permission (
   can_view INTEGER NOT NULL DEFAULT 1, can_edit INTEGER NOT NULL DEFAULT 0,
   UNIQUE(role, menu_key)
 );
+CREATE TABLE IF NOT EXISTS week_cache (
+  -- 주마감 보고서 조립 결과(JSON). 월마감의 report_cache와 같은 역할이며,
+  -- 키는 그 주의 **목요일 날짜**(주차 = 금~목, app/report_week.py 참고).
+  wk TEXT PRIMARY KEY, payload TEXT NOT NULL,
+  built_at TEXT DEFAULT '', built_by TEXT DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS defect_alias (
   -- 불량유형 통합표(대표 불량유형) — 2026-08-10 신설.
   -- 같은 불량을 시트마다 다르게 적어(녹/녹불량, 산화/산화불량, 이물소착/이물질소착, CRACK/크랙)
@@ -512,7 +518,7 @@ def _ensure_default_aliases(conn):
 
 
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
-PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "internal_issue", "capa", "oreview",
+PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "weekly", "svp", "claim", "incident", "internal_issue", "capa", "oreview",
                   "data_check", "products", "processes", "defect_types",
                   "customers", "scan", "target")
 # 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 메뉴만 편집 가능.

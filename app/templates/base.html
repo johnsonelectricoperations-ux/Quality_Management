@@ -33,6 +33,7 @@
   {% endif %}
   <div class="cap">리포트</div>
   {% call nav('monthly', '/report/monthly') %}📋 월마감{% endcall %}
+  {% call nav('weekly', '/report/weekly') %}🗓 주마감{% endcall %}
   <div class="cap">관리</div>
   {% call nav('data_check', '/admin/data-check') %}🩺 데이터 점검{% if unreg_alert %}<span class="warn-ic" title="미등록 TM-NO {{ unreg_alert }}건">⚠ {{ unreg_alert }}</span>{% endif %}{% endcall %}
   {% call nav('products', '/admin/products') %}📦 제품 마스터 (단가 포함){% endcall %}

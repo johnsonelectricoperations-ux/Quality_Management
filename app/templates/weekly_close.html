@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="fyrow">
+  <label style="font:600 11px/1 inherit;color:var(--tx3);">보고 주차</label>
+  <select onchange="location.href='/report/weekly?wk='+this.value" style="min-width:230px;">
+    {% for o, lbl in wk_opts %}<option value="{{ o }}" {{ 'selected' if o==wk }}>{{ lbl }}</option>{% endfor %}
+  </select>
+  <a class="btn btn-sm btn-p" href="/report/weekly/view?wk={{ wk }}" target="_blank"
+     style="text-decoration:none;margin-left:8px;">▶ 보고서 보기 (새창)</a>
+  {% if can_edit %}
+  <form method="post" action="/report/weekly/rebuild" style="display:inline;">
+    <input type="hidden" name="wk" value="{{ wk }}">
+    <button class="btn btn-s btn-sm">↻ 재계산</button>
+  </form>
+  {% endif %}
+  <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">
+    수치는 시스템이 자동 계산합니다. 여기에는 서술 내용만 입력하세요(필요할 때만).
+  </span>
+</div>
+
+<div class="panel"><div class="pbody" style="font-size:12px;line-height:1.7;color:var(--tx2);">
+  <b>주차는 금요일~목요일</b>입니다 — 금·토·일 특근분 사내불량 데이터가 차주 월요일에 정리되므로,
+  월요일 아침 보고 시점에 빠지는 날이 없도록 목요일까지로 끊습니다.
+  <br>
+  · 이번 보고 대상: <b>{{ wk_label }}</b>
+  <br>
+  · <b>Scrap Cost·COPQ는 추정치</b>입니다. 분모(SVP)가 월 단위 값이라 그 주의 생산금액 비중으로
+    나눠 계산합니다 — 보고서에도 '추정' 표시가 붙습니다. 확정 수치는 월마감에서 봅니다.
+  <br>
+  · 나머지 지표(공정불량·셋팅불량 PPM, Scrap Quantity, Incident)는 <b>실제 수량 기준</b>이라
+    추정이 아닙니다.
+</div></div>
+
+<div class="panel"><div class="pbody" style="display:flex;align-items:center;gap:10px;font-size:12px;">
+  {% if cache %}
+    <span class="badge bg-info">계산됨</span>
+    <span style="color:var(--tx3);">최종 계산 {{ cache.built_at }}{% if cache.built_by %} · {{ cache.built_by }}{% endif %}</span>
+    <span style="color:var(--tx3);">— 아래 서술 내용은 저장하면 자동 반영됩니다.
+      <b>↻ 재계산</b>은 원천 데이터(불량·생산량)가 바뀐 뒤 누르세요.</span>
+  {% else %}
+    <span class="badge bg-hold">미계산</span>
+    <span style="color:var(--tx3);">'보고서 보기'를 처음 열 때 자동으로 계산됩니다.</span>
+  {% endif %}
+</div></div>
+
+<form method="post" action="/report/weekly/save">
+  <input type="hidden" name="wk" value="{{ wk }}">
+  {% for s in sections %}
+  <div class="panel"><div class="phead"><h2>{{ s.name }}</h2>
+    <span class="tot">{{ wk_label }}</span>
+    {% if s.updated_at %}<span style="margin-left:12px;font:500 11px/1 inherit;color:var(--tx3);">
+      최종 수정 {{ s.updated_at }} · {{ s.updated_by }}</span>{% endif %}
+  </div>
+    <div class="pbody">
+      <div style="color:var(--tx3);font-size:11.5px;margin:-2px 0 8px;white-space:pre-line;">{{ s.hint }}</div>
+      <textarea class="in" name="{{ s.key }}" rows="10"
+                style="width:100%;font:400 13px/1.7 inherit;resize:vertical;"
+                {{ 'readonly' if not can_edit }}
+                placeholder="예)&#10;· 소결로 벨트 교체 완료 (8/5)&#10;· TM6027 Crack 재현시험 진행 중&#10;· 협력사 정기 감사 1개사 시행">{{ s.content }}</textarea>
+    </div>
+  </div>
+  {% endfor %}
+  {% if can_edit %}
+  <div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
+    <button class="btn btn-p">저장</button>
+    <span style="color:var(--tx3);font-size:12px;">
+      저장하면 해당 주차 보고서 마지막 장에 <b>바로 반영</b>됩니다.
+      비워두면 보고서에서 그 칸은 '입력된 내용이 없습니다'로 표시됩니다.
+    </span>
+  </div></div>
+  {% endif %}
+</form>
+{% endblock %}

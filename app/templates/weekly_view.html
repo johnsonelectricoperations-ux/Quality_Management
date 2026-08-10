@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>품질 주간보고 {{ d.label }}</title>
+<style>
+/* 주마감(월요일 아침 보고) 슬라이드. 뷰어 껍데기·타이포는 월마감(monthly_view.html)과
+   동일하게 맞춰 두 보고서가 같은 문서처럼 보이게 한다(2026-08-10 신설). */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:#111;font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;}
+#stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+.slide{width:1280px;height:720px;background:#fff;color:#1b1b1b;position:relative;
+  display:none;flex-direction:column;padding:34px 40px 44px;transform-origin:center center;}
+.slide.on{display:flex;}
+.stitle{font-size:23px;font-weight:800;color:#1f3864;border-bottom:3px solid #1f3864;
+  padding-bottom:7px;margin-bottom:14px;display:flex;align-items:baseline;gap:10px;}
+.stitle small{font-size:13px;font-weight:600;color:#7f7f7f;}
+.foot{position:absolute;left:40px;right:40px;bottom:14px;display:flex;justify-content:space-between;
+  font-size:11px;color:#8c8c8c;border-top:1px solid #e4e4e4;padding-top:6px;}
+.body{flex:1;min-height:0;overflow:hidden;}
+
+/* 표지 */
+.cover{background:linear-gradient(135deg,#1f3864,#2e5c9a);color:#fff;justify-content:center;align-items:center;}
+.cover h1{font-size:52px;font-weight:800;letter-spacing:-1px;}
+.cover p{margin-top:16px;font-size:20px;opacity:.9;}
+.cover .badge2{margin-top:34px;border:2px solid rgba(255,255,255,.6);border-radius:999px;
+  padding:8px 22px;font-size:14px;letter-spacing:3px;}
+/* 표지 로고 — 짙은 남색 배경이라 흰 칩에 올린다(로고 원색 유지) */
+.cover .clogo{width:230px;background:#fff;padding:14px 18px;border-radius:10px;margin-bottom:34px;}
+
+/* 목차 */
+.toc{display:flex;flex-direction:column;gap:12px;justify-content:center;height:100%;padding-left:60px;}
+.toc li{list-style:none;font-size:24px;font-weight:700;color:#1f3864;display:flex;align-items:center;gap:16px;}
+.toc li span{width:34px;height:34px;border-radius:50%;background:#1f3864;color:#fff;font-size:14px;
+  display:flex;align-items:center;justify-content:center;}
+
+/* 표 */
+table{border-collapse:collapse;width:100%;font-size:11px;}
+th,td{border:1px solid #cfcfcf;padding:3px 5px;text-align:center;white-space:nowrap;}
+th{background:#eaeef5;font-weight:700;color:#1f3864;}
+td.l,th.l{text-align:left;}
+td.r{text-align:right;}
+tr.act td{font-weight:700;}
+tr.tgt td{color:#7f7f7f;}
+tr.ach td{color:#1f6f3c;font-weight:700;}
+tr.sum td{background:#f5f7fa;font-weight:800;}
+.up{color:#c00000;} .dn{color:#1f6f3c;}
+
+/* 미니 막대 차트 (CSS만 사용 — 렌더 지연 없음) */
+.mchart{display:flex;align-items:flex-end;gap:5px;height:100%;padding:14px 4px 0;position:relative;}
+.mchart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;}
+.mchart .bar{width:74%;background:linear-gradient(180deg,#4472c4,#2e5c9a);border-radius:2px 2px 0 0;min-height:1px;}
+.mchart .bar.over{background:linear-gradient(180deg,#e06666,#c00000);}
+.mchart .bar.etc{background:linear-gradient(180deg,#bdbdbd,#909090);}
+.mchart .v{font-size:10px;font-weight:700;margin-bottom:2px;color:#333;}
+.mchart .x{font-size:10px;color:#666;margin-top:3px;}
+.tline{position:absolute;left:4px;right:4px;border-top:2px dashed #ed7d31;}
+.tlab{position:absolute;right:4px;font-size:9px;color:#ed7d31;font-weight:700;
+  transform:translateY(-12px);background:#fff;padding:0 3px;border-radius:2px;}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;height:100%;}
+.grid2r{display:grid;grid-template-rows:1fr 1fr;gap:12px;height:100%;}
+.card{border:1px solid #d9d9d9;border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;min-height:0;}
+.card h3{font-size:13px;font-weight:800;color:#1f3864;margin-bottom:5px;}
+.koi5{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:10px;height:100%;}
+.chartbox{flex:1;min-height:0;}
+/* KOI 카드: 월별 / FY누적 두 개의 차트를 나란히 둔다 */
+.twoch{display:flex;gap:8px;flex:1;min-height:0;}
+.twoch>div{flex:1;display:flex;flex-direction:column;min-height:0;}
+.ct{font-size:9.5px;font-weight:700;color:#7f7f7f;text-align:center;flex:none;}
+.ct b{color:#1f3864;}
+.narr{font-size:11px;line-height:1.6;}
+.narr b{color:#1f3864;}
+.narr .row{display:flex;gap:6px;padding:2px 0;border-bottom:1px dotted #e0e0e0;}
+.narr .k{width:86px;color:#7f7f7f;flex:none;white-space:nowrap;}
+.photos{display:flex;gap:6px;margin-top:5px;}
+.photos img{height:96px;border:1px solid #ccc;border-radius:3px;object-fit:cover;}
+.docs{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.docs a{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#3a5a8a;
+  border:1px solid #ccd6e4;border-radius:4px;padding:2px 6px;text-decoration:none;background:#f4f7fb;}
+.tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
+.empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
+
+/* 조작 바 */
+#nav{transition:opacity .4s;}
+#nav.dim{opacity:.12;}
+#nav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;
+  align-items:center;background:rgba(0,0,0,.62);border-radius:999px;padding:7px 14px;z-index:50;}
+#nav button{border:0;background:#fff;color:#111;border-radius:999px;width:32px;height:32px;
+  font-size:15px;cursor:pointer;font-weight:700;}
+#nav button:disabled{opacity:.35;cursor:default;}
+#nav .pg{color:#fff;font-size:12px;min-width:66px;text-align:center;}
+#nav a{color:#fff;font-size:11px;text-decoration:none;border:1px solid rgba(255,255,255,.5);
+  border-radius:999px;padding:4px 10px;}
+#hint{position:fixed;top:12px;right:14px;color:rgba(255,255,255,.55);font-size:11px;z-index:50;}
+
+@media print{
+  @page{size:A4 landscape;margin:0;}
+  html,body{overflow:visible;background:#fff;}
+  #stage{position:static;display:block;}
+  #nav,#hint{display:none!important;}
+  .slide{display:flex!important;transform:none!important;page-break-after:always;
+    width:100%;height:100vh;}
+}
+
+/* ── 주마감 전용 ── */
+.wk{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
+.mtile{border:1px solid #d9d9d9;border-radius:6px;padding:10px 12px;display:flex;
+  flex-direction:column;justify-content:center;}
+.mtile .nm{font-size:12px;font-weight:700;color:#7f7f7f;display:flex;align-items:center;gap:5px;}
+.mtile .est{font-size:9px;font-weight:700;color:#b06000;background:#fff3e0;
+  border:1px solid #f0c48a;border-radius:999px;padding:1px 5px;}
+.mtile .vv{font-size:34px;font-weight:800;color:#1f3864;line-height:1.15;margin-top:3px;}
+.mtile .vv small{font-size:14px;font-weight:700;color:#7f7f7f;margin-left:3px;}
+.mtile .cmp{font-size:11px;margin-top:4px;color:#7f7f7f;}
+.mtile .cmp b{font-size:13px;}
+.wtab{width:100%;border-collapse:collapse;font-size:12px;}
+.wtab th,.wtab td{border:1px solid #d9d9d9;padding:4px 7px;}
+.wtab th{background:#eef2f8;color:#1f3864;font-weight:700;text-align:center;}
+.wtab td.c{text-align:center;} .wtab td.n{text-align:right;}
+.wtab tr.sum td{background:#f7f7f7;font-weight:800;}
+.lst{font-size:11.5px;line-height:1.55;}
+.lst .it{border-bottom:1px dotted #e0e0e0;padding:4px 0;display:flex;gap:8px;}
+.lst .it .dt{color:#7f7f7f;flex:none;width:52px;}
+.lst .it .tx{flex:1;min-width:0;}
+.lst .it .tx b{color:#1f3864;}
+.cap3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
+.cap3 .hd{font-size:13px;font-weight:800;padding:5px 8px;border-radius:5px 5px 0 0;color:#fff;}
+.cap3 .od{background:#c00000;} .cap3 .so{background:#ed7d31;} .cap3 .dn2{background:#1f6f3c;}
+.cap3 .bx{border:1px solid #d9d9d9;border-top:0;border-radius:0 0 5px 5px;padding:7px 9px;
+  flex:1;min-height:0;overflow:hidden;}
+.cap3 .col{display:flex;flex-direction:column;min-height:0;}
+.cnt{font-size:11px;opacity:.9;font-weight:700;}
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- 표지 -->
+<section class="slide on cover">
+  <img class="clogo" src="/static/logo_JE.svg" alt="Johnson Electric">
+  <h1>품질 주간보고</h1>
+  <p>{{ d.label }}</p>
+  <div class="badge2">CONFIDENTIAL</div>
+</section>
+
+<!-- (1) 주간 KPI 현황 -->
+<section class="slide">
+  <div class="stitle">(1) 주간 KPI 현황 <small>{{ d.start }} ~ {{ d.end }} · 통합 · ( ) 안은 전주</small></div>
+  <div class="body">
+    <div class="wk">
+      {% for r in d.kpi['통합'].rows %}
+      <div class="mtile">
+        <div class="nm">{{ r.name }}{% if r.est %}<span class="est">추정</span>{% endif %}</div>
+        <div class="vv">{{ '%.*f'|format(r.dec, r.cur) if r.dec else '{:,}'.format(r.cur) }}<small>{{ r.unit }}</small></div>
+        <div class="cmp">
+          전주 {{ '%.*f'|format(r.dec, r.prev) if r.dec else '{:,}'.format(r.prev) }}{{ r.unit }}
+          {% if r.delta %}
+            <b class="{{ 'up' if r.worse else 'dn' }}">{{ '▲' if r.delta > 0 else '▼' }}
+              {{ '%.*f'|format(r.dec, r.delta|abs) if r.dec else '{:,}'.format(r.delta|abs) }}</b>
+          {% else %}<b style="color:#7f7f7f;">－</b>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="foot">
+    <span>Page 2 · Scrap Cost·COPQ는 월 SVP를 생산금액 비중으로 나눈 <b>추정치</b>입니다(확정은 월마감).</span>
+    <span>Confidential</span></div>
+</section>
+
+<!-- (2) 공정별 불량 현황 -->
+<section class="slide">
+  <div class="stitle">(2) 공정별 불량 현황 <small>공정불량 수량 · 금주 vs 전주</small></div>
+  <div class="body">
+    <div class="grid2">
+      {% for pl in ['1PART','2PART'] %}
+      <div class="card">
+        <h3>{{ pl }}</h3>
+        <table class="wtab">
+          <thead><tr><th style="width:26%;">공정</th><th>금주</th><th>전주</th><th style="width:24%;">증감</th></tr></thead>
+          <tbody>
+          {% for r in d.proc[pl].rows %}
+            <tr><td class="c">{{ r.name }}</td>
+              <td class="n">{{ '{:,}'.format(r.cur) }}</td>
+              <td class="n">{{ '{:,}'.format(r.prev) }}</td>
+              <td class="n {{ 'up' if r.delta > 0 else ('dn' if r.delta < 0 else '') }}">
+                {{ '{:+,}'.format(r.delta) if r.delta else '－' }}</td></tr>
+          {% endfor %}
+            <tr class="sum"><td class="c">합계</td>
+              <td class="n">{{ '{:,}'.format(d.proc[pl].total) }}</td>
+              <td class="n">{{ '{:,}'.format(d.proc[pl].total_prev) }}</td>
+              <td class="n {{ 'up' if d.proc[pl].total > d.proc[pl].total_prev else 'dn' }}">
+                {{ '{:+,}'.format(d.proc[pl].total - d.proc[pl].total_prev) }}</td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:9px;">불량 수량 상위 품목</h3>
+        <table class="wtab">
+          <thead><tr><th style="width:22%;">TM-NO</th><th>품명</th><th style="width:18%;">불량</th>
+            <th style="width:30%;">주요 유형</th></tr></thead>
+          <tbody>
+          {% for t in d.top[pl][:4] %}
+            <tr><td class="c">{{ t.tm }}</td><td>{{ t.name }}</td>
+              <td class="n">{{ '{:,}'.format(t.defect) }}</td>
+              <td style="font-size:10.5px;">{% for n, q in t.by[:2] %}{{ n }} {{ '{:,}'.format(q) }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
+          {% else %}
+            <tr><td colspan="4" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="foot"><span>Page 3</span><span>Confidential</span></div>
+</section>
+
+<!-- (3) 주요 품질 이슈 -->
+<section class="slide">
+  <div class="stitle">(3) 주요 품질 이슈 <small>금주 등록분</small></div>
+  <div class="body">
+    <div class="grid2">
+      <div class="card"><h3>내부품질 Issue ({{ d.issues.internal|length }}건)</h3>
+        <div class="lst">
+          {% for it in d.issues.internal %}
+          <div class="it"><span class="dt">{{ it.d[5:] }}</span>
+            <span class="tx"><b>{{ it.content }}</b>
+              <br>{{ it.process or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
+              {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}</span></div>
+          {% else %}<div class="empty">등록된 내부품질 Issue가 없습니다.</div>{% endfor %}
+        </div>
+      </div>
+      <div class="card"><h3>고객 품질 ISSUE ({{ d.issues.customer|length }}건)</h3>
+        <div class="lst">
+          {% for it in d.issues.customer %}
+          <div class="it"><span class="dt">{{ it.d[5:] }}</span>
+            <span class="tx"><b>{{ it.content }}</b>
+              <br>{{ it.customer or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
+              {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}</span></div>
+          {% else %}<div class="empty">등록된 고객 품질 ISSUE가 없습니다.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Page 4</span><span>Confidential</span></div>
+</section>
+
+<!-- (4) 개선대책 진행 현황 -->
+<section class="slide">
+  <div class="stitle">(4) 개선대책 진행 현황 <small>현장품질회의 대책서 기준</small></div>
+  <div class="body">
+    <div class="cap3">
+      {% for key, cls, ttl in [('overdue','od','기한 초과'), ('soon','so','금주 마감 예정'), ('done','dn2','지난주 완료')] %}
+      <div class="col">
+        <div class="hd {{ cls }}">{{ ttl }} <span class="cnt">{{ d.capa[key]|length }}건</span></div>
+        <div class="bx lst">
+          {% for a in d.capa[key][:8] %}
+          <div class="it"><span class="dt">{{ a.due[5:] if a.due else '-' }}</span>
+            <span class="tx"><b>{{ a.title or '(제목 없음)' }}</b>
+              <br>{{ a.content }}
+              <br><span style="color:#7f7f7f;">{{ a.dept or '-' }}{% if a.tm_no %} · {{ a.tm_no }}{% endif %}</span></span></div>
+          {% else %}<div class="empty">해당 없음</div>{% endfor %}
+          {% if d.capa[key]|length > 8 %}
+          <div style="font-size:10.5px;color:#7f7f7f;padding-top:4px;">… 외 {{ d.capa[key]|length - 8 }}건</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="foot"><span>Page 5</span><span>Confidential</span></div>
+</section>
+
+<!-- (5) 품질 주요 업무현황 -->
+<section class="slide">
+  <div class="stitle">(5) 품질 주요 업무현황</div>
+  <div class="body">
+    <div class="grid2">
+      <div class="card"><h3>지난주 진행 현황</h3>
+        {% if d.texts.last_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.last_week_tasks }}</div>
+        {% else %}<div class="empty">입력된 내용이 없습니다. [리포트 → 주마감] 화면에서 작성하세요.</div>{% endif %}
+      </div>
+      <div class="card"><h3>금주 계획</h3>
+        {% if d.texts.this_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.this_week_tasks }}</div>
+        {% else %}<div class="empty">입력된 내용이 없습니다.</div>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Page 6</span><span>Confidential</span></div>
+</section>
+
+</div>
+
+<div id="hint">← → 이동 · F 전체화면 · P 인쇄(PDF) · Esc 닫기</div>
+<div id="nav">
+  <button id="prev" title="이전 (←)">‹</button>
+  <span class="pg" id="pg">1 / 1</span>
+  <button id="next" title="다음 (→)">›</button>
+  <a href="/report/weekly/view?wk={{ d.wk }}&rebuild=1" title="데이터를 다시 계산합니다">↻ 재계산</a>
+  <a href="javascript:window.print()" title="PDF로 저장">⤓ PDF</a>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0, stage = document.getElementById('stage');
+  var pg = document.getElementById('pg'), prev = document.getElementById('prev'), next = document.getElementById('next');
+
+  // 1280x720 캔버스를 화면에 맞춰 축소 — 스크롤바가 생기지 않게 한다.
+  function fit(){
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    slides.forEach(function(el){ el.style.transform = 'scale(' + s + ')'; });
+  }
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(el, idx){ el.classList.toggle('on', idx === i); });
+    pg.textContent = (i + 1) + ' / ' + slides.length;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    try { location.hash = 'p' + (i + 1); } catch (e) {}
+  }
+  prev.addEventListener('click', function(){ show(i - 1); });
+  next.addEventListener('click', function(){ show(i + 1); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(i + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(i - 1); e.preventDefault(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'Escape') window.close();
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } else if (e.key === 'p' || e.key === 'P') { window.print(); e.preventDefault(); }
+  });
+  window.addEventListener('resize', fit);
+
+  // 조작바 자동 숨김 — 발표 중 화면을 가리지 않게 3초 후 흐려지고, 마우스를 움직이면 되돌아온다.
+  var nav = document.getElementById('nav'), hint = document.getElementById('hint'), t;
+  function wake(){
+    nav.classList.remove('dim'); hint.style.opacity = '';
+    clearTimeout(t);
+    t = setTimeout(function(){ nav.classList.add('dim'); hint.style.opacity = '0'; }, 3000);
+  }
+  ['mousemove', 'keydown', 'click'].forEach(function(ev){ document.addEventListener(ev, wake); });
+  hint.style.transition = 'opacity .4s';
+  wake();
+
+  fit();
+  var h = (location.hash || '').match(/^#p(\d+)$/);
+  show(h ? parseInt(h[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>

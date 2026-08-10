@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan, init_data, price_calc, report_kpi, report_monthly
+from . import db, calc, ingest, scan, init_data, price_calc, report_kpi, report_monthly, report_week
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -154,6 +154,7 @@ PERM_MENUS = [
     ("dash", "대시보드"),
     ("rdetail", "세부지표현황"),
     ("monthly", "월마감 보고서"),
+    ("weekly", "주마감 보고서"),
     ("svp", "SVP 입력"),
     ("claim", "Claim 입력"),
     ("incident", "Customer Incident 관리"),
@@ -750,6 +751,101 @@ async def monthly_close_save(request: Request):
         report_monthly.rebuild(conn, calc.Masters(conn), y, mth, u["name"])
     conn.close()
     return RedirectResponse(f"/report/monthly?ym={ym}&msg=저장됨 (보고서에 바로 반영됨)",
+                            status_code=303)
+
+
+# ── 주마감 보고서 (월요일 아침 보고용) ──────────────────
+# 주차 = 금~목. 월마감·대시보드의 주차(월~일, 월 경계 안 넘음)와 다르다 — app/report_week.py 참고.
+def _week_opts(conn, n=13):
+    return [(wk, report_week.week_label(wk)) for wk in report_week.recent_weeks(conn, n)]
+
+
+@app.get("/report/weekly", response_class=HTMLResponse)
+def weekly_close(request: Request, wk: str = "", msg: str = "", err: str = ""):
+    """주마감 보고서 — 서술 항목 작성 화면. 보고 주차를 골라 텍스트를 입력/수정한다."""
+    u, g = _perm_guard(request, "weekly", "view")
+    if g:
+        return g
+    conn = db.connect()
+    opts = _week_opts(conn)
+    valid = {o for o, _l in opts}
+    if wk not in valid:
+        wk = opts[0][0]
+    saved = {r["section"]: dict(r) for r in conn.execute(
+        "SELECT section, content, updated_at, updated_by FROM report_text WHERE ym=?", (wk,))}
+    cache = conn.execute("SELECT built_at, built_by FROM week_cache WHERE wk=?", (wk,)).fetchone()
+    cache = dict(cache) if cache else None
+    conn.close()
+    sections = [{"key": k, "name": n, "hint": h,
+                 "content": saved.get(k, {}).get("content", ""),
+                 "updated_at": saved.get(k, {}).get("updated_at", ""),
+                 "updated_by": saved.get(k, {}).get("updated_by", "")}
+                for k, n, h in report_week.WEEK_SECTIONS]
+    return render(request, "weekly_close.html", u, active="weekly", heading="주마감 보고서",
+                  crumb="리포트", pending=pending_count(), wk=wk, wk_opts=opts,
+                  wk_label=report_week.week_label(wk), sections=sections, cache=cache,
+                  msg=msg, err=err,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "weekly", "edit")))
+
+
+@app.get("/report/weekly/view", response_class=HTMLResponse)
+def weekly_view(request: Request, wk: str = "", rebuild: str = ""):
+    """주마감 보고서 발표 화면(새창). rebuild=1 이면 다시 계산해 캐시를 갱신한다."""
+    u, g = _perm_guard(request, "weekly", "view")
+    if g:
+        return g
+    conn = db.connect()
+    opts = _week_opts(conn)
+    if wk not in {o for o, _l in opts}:
+        wk = opts[0][0]
+    m = calc.Masters(conn)
+    if rebuild == "1":
+        data = report_week.rebuild(conn, m, wk, u["name"])
+    else:
+        data = report_week.get_or_build(conn, m, wk, u["name"])
+    conn.close()
+    return tpl.TemplateResponse(request, "weekly_view.html", {"user": u, "d": data})
+
+
+@app.post("/report/weekly/rebuild")
+def weekly_rebuild(request: Request, wk: str = Form(...)):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "weekly", "edit")):
+        return RedirectResponse("/report/weekly", status_code=303)
+    conn = db.connect()
+    if wk in {o for o, _l in _week_opts(conn)}:
+        report_week.rebuild(conn, calc.Masters(conn), wk, u["name"])
+    conn.close()
+    return RedirectResponse(f"/report/weekly?wk={wk}&msg=재계산 완료", status_code=303)
+
+
+@app.post("/report/weekly/save")
+async def weekly_close_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "weekly", "edit")):
+        return RedirectResponse("/report/weekly", status_code=303)
+    form = await request.form()
+    wk = (form.get("wk") or "").strip()
+    if len(wk) != 10:
+        return RedirectResponse("/report/weekly?err=보고 주차가 올바르지 않습니다", status_code=303)
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = db.connect()
+    # 서술 항목은 report_text를 그대로 쓴다(ym 자리에 주차키). 월마감 키는 'YYYY-MM'(7자),
+    # 주마감 키는 'YYYY-MM-DD'(10자)라 서로 겹치지 않는다.
+    for key, _name, _hint in report_week.WEEK_SECTIONS:
+        if key not in form:
+            continue
+        conn.execute(
+            "INSERT INTO report_text(ym,section,content,updated_at,updated_by) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(ym,section) DO UPDATE SET content=excluded.content, "
+            "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+            (wk, key, (form.get(key) or "").strip(), now, u["name"]))
+    conn.commit()
+    # 서술 내용도 캐시에 함께 구워지므로, 저장 즉시 다시 계산해 둔다(월마감과 동일).
+    if wk in {o for o, _l in _week_opts(conn)}:
+        report_week.rebuild(conn, calc.Masters(conn), wk, u["name"])
+    conn.close()
+    return RedirectResponse(f"/report/weekly?wk={wk}&msg=저장됨 (보고서에 바로 반영됨)",
                             status_code=303)
 
 
