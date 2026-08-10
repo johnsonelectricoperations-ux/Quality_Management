@@ -479,20 +479,29 @@ def month_kpi(conn, m, daily, y, mth, part):
     claim_total = claim_sum(conn, ym, parts, CLAIM_COPQ_ITEMS)
     warranty = claim_sum(conn, ym, parts, ["Warranty"])
     copq_cost = agg["scrap_cost_copq"] + claim_total
+    # 비율은 **소수 3자리**까지 남긴다. 2자리로 자르면 월마감 보고서(3자리 표시)에서
+    # 월 값과 FY누적 값이 달라 보인다 — 누적은 분자합/분모합으로 3자리까지 다시 계산하므로,
+    # 4월 하나뿐일 때도 월 0.490 / 누적 0.485처럼 어긋났다(2026-08-10 확인된 버그).
+    # 화면 표시 자리수는 템플릿 필터(cf2 등)가 따로 정하므로 대시보드 표기는 그대로다.
     def pct(a, b):
-        return round(a / b * 100, 2) if b else 0.0
+        return round(a / b * 100, 3) if b else 0.0
     def ppm(a, b):
         return round(a / b * 1_000_000) if b else 0
     # Scrap Quantity = 공정불량 + 셋팅불량, 분모는 입고수량(생산수량).
     scrap_qty = agg["proc_qty"] + agg["set_qty"]
+    # 누적(FY)은 여기서 내보내는 **반올림된** 금액을 합해 다시 비율을 낸다. 그래서 월 비율도
+    # 같은 반올림 값으로 계산해야 한 달짜리 누적이 월 값과 정확히 일치한다.
+    scrap_cost_r = round(agg["scrap_cost"])
+    copq_cost_r = round(copq_cost)
+    denom_r = round(denom)
     out = {
         "ym": ym,
-        "scrap_cost": round(agg["scrap_cost"]),
-        "scrap_cost_pct": pct(agg["scrap_cost"], denom),
+        "scrap_cost": scrap_cost_r,
+        "scrap_cost_pct": pct(scrap_cost_r, denom_r),
         "scrap_qty": scrap_qty,
         "scrap_qty_pct": pct(scrap_qty, agg["prod_qty"]),
-        "copq_cost": round(copq_cost),
-        "copq_pct": pct(copq_cost, denom),
+        "copq_cost": copq_cost_r,
+        "copq_pct": pct(copq_cost_r, denom_r),
         "warranty": round(warranty),
         "incident": incident_count(conn, ym, parts),
         "proc_ppm": ppm(agg["proc_qty"], agg["prod_qty"]),
@@ -500,7 +509,7 @@ def month_kpi(conn, m, daily, y, mth, part):
         "proc_qty": agg["proc_qty"],
         "set_qty": agg["set_qty"],
         "prod_qty": agg["prod_qty"],
-        "denom": round(denom),
+        "denom": denom_r,
         "denom_est": est,
     }
     actual = kpi_actual_of(conn, ym, part)
