@@ -460,11 +460,12 @@ def _ensure_default_aliases(conn):
 
 
 # editor/viewer 권한 매트릭스에 올릴 메뉴 키(사용자 관리는 항상 관리자 전용이라 제외).
-PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "internal_issue", "oreview",
+PERM_MENU_KEYS = ("dash", "rdetail", "monthly", "svp", "claim", "incident", "internal_issue", "capa", "oreview",
                   "data_check", "products", "processes", "defect_types",
                   "customers", "scan", "target")
-# 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 4개 메뉴만 편집 가능.
-_EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "internal_issue", "oreview"}
+# 기존 하드코딩 동작과 동일한 기본값: viewer는 전체 보기만, editor는 데이터입력 메뉴만 편집 가능.
+# capa(개선대책서)는 대책서를 해당 부서가 직접 작성하므로 editor에 편집을 열어둔다(2026-08-10).
+_EDITOR_DEFAULT_EDIT = {"svp", "claim", "incident", "internal_issue", "capa", "oreview"}
 
 
 def _ensure_default_permissions(conn):

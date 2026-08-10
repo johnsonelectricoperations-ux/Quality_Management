@@ -155,6 +155,7 @@ PERM_MENUS = [
     ("claim", "Claim 입력"),
     ("incident", "Customer Incident 관리"),
     ("internal_issue", "내부품질 Issue 관리"),
+    ("capa", "개선대책서 (현장품질회의)"),
     ("oreview", "불량 검토(100EA↑)"),
     ("data_check", "데이터 점검"),
     ("products", "제품 마스터"),
@@ -2333,6 +2334,268 @@ def internal_issue_delete(request: Request, iid: int):
     conn.commit()
     conn.close()
     return RedirectResponse("/input/internal-issue?msg=삭제됨", status_code=303)
+
+
+# ── 개선대책서 (현장품질회의) ──────────────────────────────
+# 사내에서 쓰던 1장짜리 대책서 양식을 그대로 담는다. 입력은 세로로 흐르는 폼(쓰기 편하게),
+# 보기는 원래 양식 배치(발표용)로 화면을 나눴다(2026-08-10 확정).
+CAPA_UPLOAD_ROOT = os.path.abspath(os.path.join(BASE, "..", "uploads", "capa"))
+
+
+def _capa_num(v, default=0):
+    try:
+        return int(str(v or "").replace(",", "").strip() or default)
+    except ValueError:
+        return default
+
+
+def _capa_load(conn, cid):
+    """대책서 1건 + 하위(대책·표준·수평전개·첨부) 전부를 dict로 묶어 반환."""
+    r = conn.execute("SELECT * FROM capa WHERE id=?", (cid,)).fetchone()
+    if not r:
+        return None
+    row = dict(r)
+    row["actions"] = [dict(x) for x in conn.execute(
+        "SELECT * FROM capa_action WHERE capa_id=? ORDER BY side,seq,id", (cid,))]
+    std = {x["name"]: dict(x) for x in conn.execute(
+        "SELECT * FROM capa_std WHERE capa_id=?", (cid,))}
+    # 표준 5종은 항상 같은 순서로 보여준다(미입력 건도 빈 줄로 나와야 체크가 빠진 게 보인다).
+    row["stds"] = [std.get(n, {"name": n, "revised": 0, "rev_date": ""}) for n in db.CAPA_STD_NAMES]
+    row["spreads"] = [dict(x) for x in conn.execute(
+        "SELECT * FROM capa_spread WHERE capa_id=? ORDER BY id", (cid,))]
+    files = defaultdict(list)
+    for f in conn.execute("SELECT * FROM capa_file WHERE capa_id=? ORDER BY id", (cid,)):
+        files[f["section"]].append(dict(f))
+    row["files"] = files
+    return row
+
+
+@app.get("/input/capa", response_class=HTMLResponse)
+def capa_page(request: Request, edit: int = 0, msg: str = "", err: str = ""):
+    u, g = _perm_guard(request, "capa", "view")
+    if g:
+        return g
+    conn = db.connect()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id,d,title,kind,part,cause_process,found_process,tm_no,product_name,defect_type,"
+        "equipment,dept,presenter,status,lot_qty,defect_qty FROM capa ORDER BY d DESC,id DESC LIMIT 200")]
+    # 목록에 '대책 진행률'을 같이 보여줘야 어느 건이 밀리고 있는지 한눈에 보인다.
+    prog = {r["capa_id"]: (r["n"], r["done_n"]) for r in conn.execute(
+        "SELECT capa_id, COUNT(*) n, SUM(done) done_n FROM capa_action GROUP BY capa_id")}
+    today = _dt.date.today().isoformat()
+    overdue = {r["capa_id"] for r in conn.execute(
+        "SELECT DISTINCT capa_id FROM capa_action WHERE done=0 AND due<>'' AND due<?", (today,))}
+    for r in rows:
+        n, dn = prog.get(r["id"], (0, 0))
+        r["act_n"], r["act_done"] = n, dn or 0
+        r["overdue"] = r["id"] in overdue
+    edit_row = _capa_load(conn, edit) if edit else None
+    # 설비명은 마스터를 따로 두지 않고 이미 입력된 값을 자동완성으로 제안해 표기를 통일한다.
+    equips = [r["equipment"] for r in conn.execute(
+        "SELECT DISTINCT equipment FROM capa WHERE equipment<>'' ORDER BY equipment")]
+    dtypes = [r["name"] for r in conn.execute(
+        "SELECT DISTINCT name FROM defect_type ORDER BY name")]
+    conn.close()
+    return render(request, "capa.html", u, active="capa", heading="개선대책서 (현장품질회의)",
+                  crumb="데이터 입력", pending=pending_count(), rows=rows, edit_row=edit_row,
+                  processes=db.AGG_PROCESSES, kinds=db.CAPA_KINDS, lot_actions=db.CAPA_LOT_ACTIONS,
+                  std_names=db.CAPA_STD_NAMES, m4=db.CAPA_4M, applied_opts=db.CAPA_APPLIED,
+                  equips=equips, dtypes=dtypes, today=today,
+                  can_edit=(u["role"] == "admin" or has_perm(u["role"], "capa", "edit")), msg=msg, err=err)
+
+
+@app.post("/input/capa/save")
+async def capa_save(request: Request):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "capa", "edit")):
+        return RedirectResponse("/input/capa", status_code=303)
+    form = await request.form()
+    orig_id = (form.get("orig_id") or "").strip()
+    d = (form.get("d") or "").strip()
+    if not d:
+        eq = f"&edit={orig_id}" if orig_id else ""
+        return RedirectResponse(f"/input/capa?err=작성일은 필수입니다{eq}", status_code=303)
+    kind = (form.get("kind") or "product").strip()
+    # 제품불량이 아니면 품번 관련 칸은 저장하지 않는다(설비 이슈에 빈 품번이 남지 않도록).
+    tm_no = calc.base_tmno((form.get("tm_no") or "").strip()) if kind == "product" else ""
+    vals = dict(
+        d=d, title=(form.get("title") or "").strip(), kind=kind,
+        part=form.get("part") or "VMS PART",
+        cause_process=(form.get("cause_process") or "").strip(),
+        found_process=(form.get("found_process") or "").strip(),
+        tm_no=tm_no,
+        product_name=(form.get("product_name") or "").strip() if kind == "product" else "",
+        defect_type=(form.get("defect_type") or "").strip() if kind == "product" else "",
+        equipment=(form.get("equipment") or "").strip(),
+        dept=(form.get("dept") or "").strip(), writer=(form.get("writer") or "").strip(),
+        presenter=(form.get("presenter") or "").strip(),
+        approver=(form.get("approver") or "").strip(),
+        approved_at=(form.get("approved_at") or "").strip(),
+        symptom=(form.get("symptom") or "").strip(),
+        occur_date=(form.get("occur_date") or "").strip(),
+        occur_ongoing=1 if form.get("occur_ongoing") else 0,
+        lot_qty=_capa_num(form.get("lot_qty")), defect_qty=_capa_num(form.get("defect_qty")),
+        lot_action=(form.get("lot_action") or "").strip(),
+        lot_action_etc=(form.get("lot_action_etc") or "").strip(),
+        interim=(form.get("interim") or "").strip(),
+        cause_occur=(form.get("cause_occur") or "").strip(),
+        cause_flow=(form.get("cause_flow") or "").strip(),
+        cause_4m=(form.get("cause_4m") or "").strip(),
+        status=(form.get("status") or "open").strip(),
+        updated_at=_dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+    )
+    conn = db.connect()
+    if orig_id:
+        sets = ",".join(f"{k}=?" for k in vals)
+        conn.execute(f"UPDATE capa SET {sets} WHERE id=?", (*vals.values(), orig_id))
+        cid = int(orig_id)
+        msg = "수정됨"
+    else:
+        cols = ",".join(vals) + ",reg_user"
+        qs = ",".join("?" * (len(vals) + 1))
+        cur = conn.execute(f"INSERT INTO capa({cols}) VALUES({qs})", (*vals.values(), u["name"]))
+        cid = cur.lastrowid
+        msg = "등록됨"
+
+    # 하위 3종(대책·표준·수평전개)은 행 수가 매번 달라져 부분 수정이 까다롭다.
+    # 전부 지우고 다시 넣는 편이 단순하고, 한 건당 행이 수십 개 수준이라 성능도 문제없다.
+    conn.execute("DELETE FROM capa_action WHERE capa_id=?", (cid,))
+    for side in ("occur", "flow"):
+        for i, txt in enumerate(form.getlist(f"act_{side}")):
+            txt = (txt or "").strip()
+            if not txt:
+                continue
+            dues = form.getlist(f"act_{side}_due")
+            dones = form.getlist(f"act_{side}_done")
+            conn.execute(
+                "INSERT INTO capa_action(capa_id,side,seq,content,due,done,done_at) VALUES(?,?,?,?,?,?,?)",
+                (cid, side, i, txt, dues[i] if i < len(dues) else "",
+                 1 if (i < len(dones) and dones[i] == "1") else 0, ""))
+
+    conn.execute("DELETE FROM capa_std WHERE capa_id=?", (cid,))
+    for name in db.CAPA_STD_NAMES:
+        revised = 1 if (form.get(f"std_{name}") == "1") else 0
+        conn.execute("INSERT INTO capa_std(capa_id,name,revised,rev_date) VALUES(?,?,?,?)",
+                     (cid, name, revised, (form.get(f"stddate_{name}") or "").strip() if revised else ""))
+
+    conn.execute("DELETE FROM capa_spread WHERE capa_id=?", (cid,))
+    targets = form.getlist("sp_target")
+    sp_tm, sp_ap, sp_pd, sp_mm = (form.getlist(k) for k in ("sp_tm", "sp_applied", "sp_plan", "sp_memo"))
+    for i, t in enumerate(targets):
+        t = (t or "").strip()
+        if not t and not (sp_tm[i].strip() if i < len(sp_tm) else ""):
+            continue
+        conn.execute(
+            "INSERT INTO capa_spread(capa_id,tm_no,target,applied,plan_date,memo) VALUES(?,?,?,?,?,?)",
+            (cid, calc.base_tmno(sp_tm[i].strip()) if i < len(sp_tm) else "", t,
+             sp_ap[i] if i < len(sp_ap) else "", sp_pd[i] if i < len(sp_pd) else "",
+             sp_mm[i].strip() if i < len(sp_mm) else ""))
+
+    n_up = 0
+    for field, section, kindf in (("f_photo", "photo", "photo"), ("f_cause", "cause", "doc"),
+                                  ("f_action", "action", "doc"), ("f_etc", "etc", "doc")):
+        for up in form.getlist(field):
+            if getattr(up, "filename", ""):
+                if _save_capa_file(conn, cid, section, kindf, up, u["name"]):
+                    n_up += 1
+    conn.commit()
+    conn.close()
+    if n_up:
+        msg += f" (첨부 {n_up}건)"
+    return RedirectResponse(f"/input/capa?edit={cid}&msg={msg}", status_code=303)
+
+
+def _save_capa_file(conn, capa_id, section, kind, upload, user_name):
+    data = upload.file.read()
+    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return None
+    os.makedirs(CAPA_UPLOAD_ROOT, exist_ok=True)
+    orig = _safe_name(upload.filename)
+    if kind != "photo" and orig.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")):
+        kind = "photo"       # 유첨으로 올렸어도 이미지면 보고서에서 그림으로 보여준다
+    stored = f"{capa_id}_{secrets.token_hex(6)}_{orig}"
+    with open(os.path.join(CAPA_UPLOAD_ROOT, stored), "wb") as f:
+        f.write(data)
+    conn.execute(
+        "INSERT INTO capa_file(capa_id,section,kind,orig_name,stored_name,size,uploaded_at,uploaded_by) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        (capa_id, section, kind, orig, stored, len(data),
+         _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), user_name))
+    return stored
+
+
+@app.get("/input/capa/file/{fid}")
+def capa_file_get(request: Request, fid: int):
+    u, g = _perm_guard(request, "capa", "view")
+    if g:
+        return g
+    conn = db.connect()
+    r = conn.execute("SELECT orig_name, stored_name FROM capa_file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if not r:
+        return RedirectResponse("/input/capa?err=파일을 찾을 수 없습니다", status_code=303)
+    path = os.path.join(CAPA_UPLOAD_ROOT, r["stored_name"])
+    if not os.path.isfile(path):
+        return RedirectResponse("/input/capa?err=파일이 서버에 없습니다", status_code=303)
+    return FileResponse(path, filename=r["orig_name"], content_disposition_type="inline")
+
+
+@app.post("/input/capa/file/{fid}/delete")
+def capa_file_delete(request: Request, fid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "capa", "edit")):
+        return RedirectResponse("/input/capa", status_code=303)
+    conn = db.connect()
+    r = conn.execute("SELECT capa_id, stored_name FROM capa_file WHERE id=?", (fid,)).fetchone()
+    if not r:
+        conn.close()
+        return RedirectResponse("/input/capa?err=파일을 찾을 수 없습니다", status_code=303)
+    try:
+        os.remove(os.path.join(CAPA_UPLOAD_ROOT, r["stored_name"]))
+    except OSError:
+        pass
+    conn.execute("DELETE FROM capa_file WHERE id=?", (fid,))
+    conn.commit()
+    cid = r["capa_id"]
+    conn.close()
+    return RedirectResponse(f"/input/capa?edit={cid}&msg=첨부 삭제됨", status_code=303)
+
+
+@app.get("/input/capa/{cid}/view", response_class=HTMLResponse)
+def capa_view(request: Request, cid: int):
+    """발표용 보기 화면 — 사내 대책서 양식(주황 제목바 + 4분할) 배치를 그대로 그린다."""
+    u, g = _perm_guard(request, "capa", "view")
+    if g:
+        return g
+    conn = db.connect()
+    row = _capa_load(conn, cid)
+    conn.close()
+    if not row:
+        return RedirectResponse("/input/capa?err=대책서를 찾을 수 없습니다", status_code=303)
+    row["rate"] = (row["defect_qty"] / row["lot_qty"] * 100) if row["lot_qty"] else None
+    return tpl.TemplateResponse(request, "capa_view.html", {
+        "r": row, "today": _dt.date.today().isoformat(),
+        "kind_ko": dict(db.CAPA_KINDS).get(row["kind"], row["kind"]),
+        "part_ko": PART_LABEL.get(row["part"], row["part"])})
+
+
+@app.post("/input/capa/{cid}/delete")
+def capa_delete(request: Request, cid: int):
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], "capa", "edit")):
+        return RedirectResponse("/input/capa", status_code=303)
+    conn = db.connect()
+    for f in conn.execute("SELECT stored_name FROM capa_file WHERE capa_id=?", (cid,)):
+        try:
+            os.remove(os.path.join(CAPA_UPLOAD_ROOT, f["stored_name"]))
+        except OSError:
+            pass
+    for t in ("capa_file", "capa_action", "capa_std", "capa_spread"):
+        conn.execute(f"DELETE FROM {t} WHERE capa_id=?", (cid,))
+    conn.execute("DELETE FROM capa WHERE id=?", (cid,))
+    conn.commit()
+    conn.close()
+    return RedirectResponse("/input/capa?msg=삭제됨", status_code=303)
 
 
 SOURCE_LABEL = {"outsource": "외주소재불량", "discard": "폐기불량"}

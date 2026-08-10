@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ r.title or '개선대책서' }}</title>
+<style>
+/* 사내 대책서 양식(1장짜리, 주황 제목바 + 4분할)을 화면에 그대로 재현한다.
+   입력은 capa.html(세로 흐름)이 담당하고, 이 화면은 발표·인쇄 전용이다(2026-08-10). */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#555;font:12px/1.45 "맑은 고딕","Malgun Gothic",sans-serif;color:#000;padding:18px;}
+.sheet{width:1320px;margin:0 auto;background:#fff;border:2px solid #000;padding:6px;}
+.g{display:grid;grid-template-columns:322px 492px 1fr;gap:0;border:1px solid #000;}
+.col{border-right:1px solid #000;}
+.col:last-child{border-right:0;}
+/* 제목 + 결재란 */
+.top{display:grid;grid-template-columns:1fr 700px;border:1px solid #000;border-bottom:0;}
+.ttl{background:#E8730C;color:#fff;font:700 21px/1.2 inherit;padding:11px 14px;display:flex;align-items:center;}
+.appr{display:grid;grid-template-columns:repeat(5,1fr);}
+.appr div{border-left:1px solid #000;text-align:center;padding:3px 2px;font-size:11.5px;}
+.appr .h{background:#D9D9D9;font-weight:700;border-bottom:1px solid #000;}
+.appr .v{min-height:34px;display:flex;align-items:center;justify-content:center;font-weight:700;}
+/* 섹션 제목 라벨 */
+/* 라벨은 각자 제 줄을 차지해야 원본 양식처럼 위아래로 쌓인다(inline-block이면 옆에 붙어버림).
+   배경은 글자 폭만 덮어야 하므로 width:fit-content로 블록이되 폭은 내용에 맞춘다. */
+.lb{background:#D9D9D9;border:1px solid #000;font-weight:700;font-size:13px;padding:3px 9px;
+  display:block;width:fit-content;margin:5px 0 4px 4px;}
+.lb.dk{background:#404040;color:#fff;}
+.sub{background:#D9D9D9;border:1px solid #000;font-weight:700;font-size:11.5px;padding:2px 7px;
+  display:block;width:fit-content;margin:4px 0 3px 4px;}
+.bx{margin:0 4px 6px;}
+tbl,table{border-collapse:collapse;}
+table.t{width:calc(100% - 8px);margin:0 4px 6px;border-collapse:collapse;}
+table.t th,table.t td{border:1px solid #000;padding:3px 5px;font-size:11.5px;}
+table.t th{background:#D9E2F3;font-weight:700;text-align:center;}
+table.t td.k{background:#F2F2F2;font-weight:700;text-align:center;width:34%;}
+table.t td.c{text-align:center;}
+.photo{border:1px solid #000;margin:0 4px 6px;height:210px;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;background:#fafafa;cursor:zoom-in;}
+.photo img{max-width:100%;max-height:100%;object-fit:contain;}
+.txt{white-space:pre-wrap;font-size:11.5px;padding:1px 5px 6px;min-height:20px;}
+.dash{border-top:1px dashed #000;margin:6px 4px;}
+/* 대책 + 일정 */
+.act{display:grid;grid-template-columns:1fr 84px;gap:0;align-items:start;margin:0 4px;}
+.act .c{white-space:pre-wrap;font-size:11.5px;padding:2px 5px;}
+.act .dt{border:1px solid #000;background:#FFFF00;text-align:center;font-size:11px;font-weight:700;padding:2px;}
+.act .dt.od{background:#FFC7CE;color:#9C0006;}
+.act .dt.dn{background:#C6EFCE;color:#006100;}
+.hd{display:grid;grid-template-columns:1fr 84px;margin:0 4px 2px;}
+.hd .e{background:#D9D9D9;border:1px solid #000;font-weight:700;font-size:11.5px;padding:2px 7px;text-align:center;}
+.docs{margin:2px 4px 6px;display:flex;flex-wrap:wrap;gap:5px;}
+.docs a{font-size:11px;color:#0563C1;text-decoration:none;border:1px solid #9DC3E6;
+  border-radius:4px;padding:2px 6px;background:#F2F8FF;}
+.docs img{height:64px;border:1px solid #000;cursor:zoom-in;object-fit:cover;}
+.logo{font:700 10px/1.1 inherit;text-align:right;padding:2px 6px 0;color:#333;}
+.bar{max-width:1320px;margin:0 auto 10px;display:flex;gap:8px;align-items:center;}
+.bar a,.bar button{font:600 12px/1 inherit;padding:7px 12px;border-radius:6px;border:1px solid #888;
+  background:#fff;color:#222;text-decoration:none;cursor:pointer;}
+.bar .sp{margin-left:auto;color:#eee;font-size:12px;}
+/* 이미지 확대 오버레이 */
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;
+  justify-content:center;z-index:100;cursor:zoom-out;}
+#zoom img{max-width:96%;max-height:96%;object-fit:contain;}
+#zoom .cl{position:fixed;top:14px;right:18px;color:#fff;font-size:26px;cursor:pointer;}
+@media print{
+  body{background:#fff;padding:0;}
+  .bar{display:none;}
+  .sheet{width:100%;border:0;}
+  @page{size:A4 landscape;margin:8mm;}
+}
+</style>
+</head>
+<body>
+<div class="bar">
+  <a href="/input/capa?edit={{ r.id }}">← 수정</a>
+  <button onclick="window.print()">🖨 인쇄</button>
+  <span class="sp">{{ kind_ko }} · {{ part_ko }} · {{ {'open':'진행','done':'완료','hold':'보류'}.get(r.status, r.status) }}</span>
+</div>
+
+<div class="sheet">
+  <div class="top">
+    <div class="ttl">■ {{ r.title or '개선 대책' }}</div>
+    <div>
+      <div class="logo">JOHNSON ELECTRIC</div>
+      <div class="appr">
+        <div class="h">작성일</div><div class="h">작성부서</div><div class="h">담당관리직</div>
+        <div class="h">발표자</div><div class="h">결재</div>
+        <div class="v">{{ r.d[5:] if r.d else '-' }}</div><div class="v">{{ r.dept or '-' }}</div>
+        <div class="v">{{ r.writer or '-' }}</div><div class="v">{{ r.presenter or '-' }}</div>
+        <div class="v">{{ r.approver or '' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="g">
+    <!-- ── 좌: 문제부위 · 현상 · 개요 ── -->
+    <div class="col">
+      <div class="lb">문제부위 (사진)</div>
+      {% set photos = r.files.get('photo') or [] %}
+      <div class="photo">
+        {% if photos %}<img src="/input/capa/file/{{ photos[0].id }}" alt="" onclick="zoom(this.src)">
+        {% else %}<span style="color:#999;font-size:11px;">사진 없음</span>{% endif %}
+      </div>
+      {% if photos|length > 1 %}
+      <div class="docs">{% for f in photos[1:] %}
+        <img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>
+      {% endif %}
+
+      <table class="t"><tr><td class="k">현상</td><td>{{ r.symptom or '-' }}</td></tr></table>
+
+      <div class="lb">개요</div>
+      <table class="t">
+        <thead><tr><th style="width:38%;">항목</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td class="k">발생일</td><td class="c">{{ '지속 발생' if r.occur_ongoing else (r.occur_date or '-') }}</td></tr>
+          <tr><td class="k">원인공정</td><td class="c">{{ r.cause_process or '-' }}</td></tr>
+          <tr><td class="k">발견공정</td><td class="c">{{ r.found_process or '-' }}</td></tr>
+          <tr><td class="k">작업설비</td><td class="c">{{ r.equipment or '-' }}</td></tr>
+          {% if r.kind == 'product' %}
+          <tr><td class="k">품번 / 불량유형</td><td class="c">{{ r.tm_no or '-' }} / {{ r.defect_type or '-' }}</td></tr>
+          {% endif %}
+          <tr><td class="k">해당Lot.수량</td><td class="c">{{ '{:,}'.format(r.lot_qty) if r.lot_qty else '-' }}</td></tr>
+          <tr><td class="k">불량 수량</td><td class="c">{{ '{:,}ea'.format(r.defect_qty) if r.defect_qty else '-' }}</td></tr>
+          {% if r.cause_4m %}<tr><td class="k">원인 분류</td><td class="c">{{ r.cause_4m }}</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 중: 임시조치 · 원인분석 ── -->
+    <div class="col">
+      <div class="lb">임시 조치</div>
+      <div class="sub">해당Lot. 처리</div>
+      <div style="margin:0 4px 5px;font-size:11.5px;">
+        {% for la in ['선별','재작업','특채','기타'] %}
+          <span style="margin-right:14px;{{ 'border:1.5px solid #C00;border-radius:999px;padding:1px 8px;font-weight:700;' if r.lot_action==la }}">{{ la }}</span>
+        {% endfor %}
+        {% if r.lot_action_etc %}<span>({{ r.lot_action_etc }})</span>{% endif %}
+      </div>
+      <table class="t">
+        <thead><tr><th>Lot 수량(ea)</th><th>불량 수량(ea)</th><th>불량률 (%)</th></tr></thead>
+        <tbody><tr>
+          <td class="c">{{ '{:,}'.format(r.lot_qty) if r.lot_qty else '-' }}</td>
+          <td class="c">{{ '{:,}'.format(r.defect_qty) if r.defect_qty else '-' }}</td>
+          <td class="c">{{ '%.1f%%'|format(r.rate) if r.rate is not none else '-' }}</td>
+        </tr></tbody>
+      </table>
+
+      <div class="sub">근본개선 완료전 차기생산 임시조치 방법</div>
+      <div class="txt">{{ r.interim or '-' }}</div>
+
+      <div class="lb dk">원인 분석{% if r.files.get('cause') %} - 유첨{% endif %}</div>
+      <div class="sub">발생측면</div>
+      <div class="txt">{{ r.cause_occur or '-' }}</div>
+      <div class="dash"></div>
+      <div class="sub">유출측면</div>
+      <div class="txt">{{ r.cause_flow or '-' }}</div>
+      {% if r.files.get('cause') %}
+      <div class="docs">{% for f in r.files.get('cause') %}
+        {% if f.kind == 'photo' %}<img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">
+        {% else %}
+        <a href="{{ ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) }}"
+           target="_blank">📄 {{ f.orig_name }}</a>{% endif %}{% endfor %}</div>
+      {% endif %}
+    </div>
+
+    <!-- ── 우: 근본개선 · 표준반영 · 수평전개 ── -->
+    <div class="col">
+      <div class="lb dk">근본 개선{% if r.files.get('action') %} - 유첨{% endif %}</div>
+      {% set occ = r.actions | selectattr('side','equalto','occur') | list %}
+      {% set flw = r.actions | selectattr('side','equalto','flow') | list %}
+      <div class="hd"><div class="sub" style="margin:0;">발생 및 유출 방지 대책</div><div class="e">일정</div></div>
+      {% for a in occ %}
+      <div class="act">
+        <div class="c">{{ loop.index }}. {{ a.content }}</div>
+        <div class="dt {{ 'dn' if a.done else ('od' if a.due and a.due < today else '') }}">
+          {{ (a.due[5:] if a.due else '-') }}{{ ' ✓' if a.done }}</div>
+      </div>
+      {% else %}<div class="txt">-</div>{% endfor %}
+
+      <div class="dash"></div>
+      <div class="hd"><div class="sub" style="margin:0;">유출 측면</div><div class="e">일정</div></div>
+      {% for a in flw %}
+      <div class="act">
+        <div class="c">{{ loop.index }}. {{ a.content }}</div>
+        <div class="dt {{ 'dn' if a.done else ('od' if a.due and a.due < today else '') }}">
+          {{ (a.due[5:] if a.due else '-') }}{{ ' ✓' if a.done }}</div>
+      </div>
+      {% else %}<div class="txt">-</div>{% endfor %}
+
+      {% if r.files.get('action') %}
+      <div class="docs">{% for f in r.files.get('action') %}
+        {% if f.kind == 'photo' %}<img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">
+        {% else %}
+        <a href="{{ ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) }}"
+           target="_blank">📄 {{ f.orig_name }}</a>{% endif %}{% endfor %}</div>
+      {% endif %}
+
+      <div class="lb">표준 반영</div>
+      <table class="t">
+        <thead><tr><th style="width:36%;">표준류</th><th>개정여부</th><th style="width:28%;">일자</th></tr></thead>
+        <tbody>
+        {% for s in r.stds %}
+          <tr><td class="c">{{ s.name }}</td>
+            <td class="c">{{ '☑ 개정' if s.revised else '☑ 불필요' }}</td>
+            <td class="c">{{ s.rev_date[5:] if s.rev_date else '' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="lb">수평전개</div>
+      <table class="t">
+        <thead><tr><th>대상부품</th><th style="width:20%;">적용유무</th>
+          <th style="width:22%;">적용계획</th><th style="width:18%;">비고</th></tr></thead>
+        <tbody>
+        {% for sp in r.spreads %}
+          <tr><td class="c">{{ sp.target or sp.tm_no or '-' }}</td>
+            <td class="c">{{ sp.applied or '-' }}</td>
+            <td class="c">{{ sp.plan_date[5:] if sp.plan_date else '-' }}</td>
+            <td class="c">{{ sp.memo or '-' }}</td></tr>
+        {% else %}
+          <tr><td class="c" colspan="4">-</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="zoom" onclick="this.style.display='none'"><span class="cl">✕</span><img id="zoomImg" src="" alt=""></div>
+<script>
+// 사진·표 이미지가 작아 잘 안 보이면 클릭해서 전체화면으로 확대한다(요청사항, 2026-08-10).
+function zoom(src){
+  document.getElementById('zoomImg').src = src;
+  document.getElementById('zoom').style.display = 'flex';
+}
+window.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') document.getElementById('zoom').style.display = 'none';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block content %}
+{# 항목(section)별 등록된 첨부를 작게 보여주는 조각. 삭제 버튼은 폼 중첩 금지 때문에
+   여기 두지 않고, 저장 폼 바깥의 '등록된 첨부' 패널에 모아뒀다. #}
+{% macro attach_list(row, sec) %}
+  {% if row and row.files.get(sec) %}
+  <div class="attach">
+    {% for f in row.files.get(sec) %}
+    {% set fhref = ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) %}
+    <span class="fchip">
+      {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">{% endif %}
+      <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# 대책 항목표 — 한 덩어리 글이 아니라 줄마다 기한·완료를 갖는다(기한 지난 건 자동 추적용). #}
+{% macro action_table(side, label, row, applied_today) %}
+<div style="margin-top:10px;">
+  <label style="font:600 11px/1 inherit;color:var(--tx3);">{{ label }}</label>
+  <table class="grid act-tb" data-side="{{ side }}">
+    <thead><tr><th>대책 내용</th><th style="width:150px;">일정(기한)</th>
+      <th style="width:70px;">완료</th><th style="width:36px;"></th></tr></thead>
+    <tbody>
+    {% set items = (row.actions | selectattr('side','equalto',side) | list) if row else [] %}
+    {% for a in (items if items else [none]) %}
+      <tr>
+        <td><input class="in" name="act_{{ side }}" value="{{ a.content if a }}"
+                   placeholder="예: 하 1단 변경 후 조건 Test 진행"></td>
+        <td><input class="in{{ ' od' if a and a.due and not a.done and a.due < applied_today }}"
+                   type="date" name="act_{{ side }}_due" value="{{ a.due if a }}"></td>
+        <td style="text-align:center;">
+          {# 체크박스는 꺼져 있으면 값이 아예 안 넘어와 행 순서가 밀린다. 그래서 hidden에 값을
+             담아 보내고 체크박스는 그 값을 바꾸는 역할만 한다(getlist 순서 유지).
+             hidden의 초기값도 저장된 상태로 맞춰야 한다 — 0으로 두면 화면엔 체크로 보이는데
+             onchange가 안 걸린 채 재저장돼 완료가 풀려버린다(2026-08-10 확인된 버그). #}
+          <input type="hidden" name="act_{{ side }}_done" value="{{ '1' if a and a.done else '0' }}">
+          <input type="checkbox" onchange="this.previousElementSibling.value = this.checked ? '1':'0';"
+                 {{ 'checked' if a and a.done }}></td>
+        <td><button type="button" class="btn btn-ghost btn-sm" onclick="delRow(this)">✕</button></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <button type="button" class="btn-row" onclick="addAct(this)">+ 대책 추가</button>
+</div>
+{% endmacro %}
+<style>
+/* 입력은 세로로 흐르게 — 발표용 양식 배치(4분할)를 그대로 입력폼에 쓰면 칸이 좁아 쓰기 힘들다.
+   보기 화면(capa_view.html)이 원래 양식 모양을 담당한다(2026-08-10 확정). */
+.sec{border:1px solid var(--bd);border-radius:8px;margin-top:12px;background:var(--card);}
+.sec>summary{cursor:pointer;padding:9px 12px;font:700 12.5px/1.4 inherit;color:var(--tx2);
+  list-style:none;display:flex;align-items:center;gap:8px;}
+.sec>summary::-webkit-details-marker{display:none;}
+.sec>summary::before{content:'▸';font-size:11px;color:var(--tx3);}
+.sec[open]>summary::before{content:'▾';}
+.sec>summary .d8{margin-left:auto;font:600 10.5px/1 inherit;color:var(--tx3);
+  border:1px solid var(--bd);border-radius:999px;padding:3px 7px;}
+.secb{padding:0 12px 12px;}
+.rowline{display:grid;gap:10px;margin-top:10px;}
+.hint{color:var(--tx3);font-size:11.5px;margin-top:5px;}
+table.grid{width:100%;border-collapse:collapse;margin-top:8px;}
+table.grid th,table.grid td{border:1px solid var(--bd);padding:5px 7px;font-size:12px;}
+table.grid th{background:var(--bg2);font-weight:600;color:var(--tx2);}
+table.grid input.in,table.grid select.in{width:100%;}
+.attach{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+.attach .fchip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--bd);
+  border-radius:6px;font:500 11px/1.4 inherit;background:var(--bg2);}
+.attach .fchip a{color:var(--tx2);text-decoration:none;}
+.attach .fchip form{display:inline;}
+.attach .fchip button{border:0;background:none;color:var(--err);cursor:pointer;font-size:12px;padding:0 2px;}
+.thumb{height:46px;border:1px solid var(--bd);border-radius:5px;object-fit:cover;}
+.btn-row{border:1px dashed var(--bd);background:none;color:var(--tx3);border-radius:6px;
+  padding:5px 10px;font:600 11.5px/1 inherit;cursor:pointer;margin-top:7px;}
+.rate{font:700 13px/1 inherit;color:var(--p-600);}
+.od{color:var(--err);font-weight:700;}
+</style>
+
+{% if can_edit %}
+<form method="post" action="/input/capa/save" enctype="multipart/form-data">
+{% if edit_row %}<input type="hidden" name="orig_id" value="{{ edit_row.id }}">{% endif %}
+
+<div class="panel"><div class="phead"><h2>{{ '개선대책서 수정' if edit_row else '개선대책서 작성' }}</h2>
+  {% if edit_row %}
+  <a class="btn btn-s btn-sm" href="/input/capa/{{ edit_row.id }}/view" target="_blank"
+     style="margin-left:auto;text-decoration:none;">📄 보고서 보기</a>
+  <a class="btn btn-s btn-sm" href="/input/capa" style="text-decoration:none;">취소</a>
+  {% endif %}</div>
+  <div class="pbody">
+    <div class="frow" style="grid-template-columns:1fr 150px;">
+      <div class="f"><label>제목</label>
+        <input class="in" name="title" value="{{ edit_row.title if edit_row }}"
+               placeholder="예: Pulley 동심도 불량 개선 대책"></div>
+      <div class="f"><label>작성일</label>
+        <input class="in" type="date" name="d" value="{{ edit_row.d if edit_row else today }}" required></div>
+    </div>
+  </div>
+</div>
+
+<!-- ① 기본정보 -->
+<details class="sec" open><summary>기본 정보<span class="d8">공통</span></summary>
+  <div class="secb">
+    <div class="frow" style="grid-template-columns:150px 130px 1fr;">
+      <div class="f"><label>이슈구분</label>
+        <select class="in" name="kind" id="kindSel" onchange="kindToggle()">
+          {% for kv, kl in kinds %}
+          <option value="{{ kv }}" {{ 'selected' if edit_row and edit_row.kind==kv else ('selected' if not edit_row and kv=='product' else '') }}>{{ kl }}</option>
+          {% endfor %}
+        </select></div>
+      <div class="f"><label>파트</label><select class="in" name="part">
+        {% for pv, pl in PARTS %}<option value="{{ pv }}" {{ 'selected' if edit_row and edit_row.part==pv }}>{{ pl }}</option>{% endfor %}
+      </select></div>
+      <div class="f"><label>작업설비</label>
+        <input class="in" name="equipment" list="equipList" value="{{ edit_row.equipment if edit_row }}"
+               placeholder="예: JHC100/6">
+        <datalist id="equipList">{% for e in equips %}<option value="{{ e }}">{% endfor %}</datalist></div>
+    </div>
+    <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
+      <div class="f"><label>원인공정 (어디서 만들어졌나)</label>
+        <select class="in" name="cause_process">
+          <option value="">(선택)</option>
+          {% for p in processes %}<option value="{{ p }}" {{ 'selected' if edit_row and edit_row.cause_process==p }}>{{ p }}</option>{% endfor %}
+        </select></div>
+      <div class="f"><label>발견공정 (어디서 걸러졌나)</label>
+        <select class="in" name="found_process">
+          <option value="">(선택)</option>
+          {% for p in processes %}<option value="{{ p }}" {{ 'selected' if edit_row and edit_row.found_process==p }}>{{ p }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div class="hint">· 원인공정과 발견공정을 나눠 적어야 "왜 우리 검사가 못 걸렀나"(유출) 분석이 가능합니다.</div>
+
+    <div id="prodRow" class="frow" style="grid-template-columns:170px 1fr 170px;margin-top:10px;">
+      <div class="f"><label>TM-NO</label>
+        <input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1785-00"></div>
+      <div class="f"><label>품명</label>
+        <input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}"></div>
+      <div class="f"><label>불량유형</label>
+        <input class="in" name="defect_type" list="dtypeList" value="{{ edit_row.defect_type if edit_row }}">
+        <datalist id="dtypeList">{% for t in dtypes %}<option value="{{ t }}">{% endfor %}</datalist></div>
+    </div>
+
+    <div class="frow" style="grid-template-columns:130px 130px 130px 150px 130px;margin-top:10px;">
+      <div class="f"><label>작성부서</label><input class="in" name="dept" value="{{ edit_row.dept if edit_row }}"></div>
+      <div class="f"><label>담당관리직</label><input class="in" name="writer" value="{{ edit_row.writer if edit_row }}"></div>
+      <div class="f"><label>발표자</label><input class="in" name="presenter" value="{{ edit_row.presenter if edit_row }}"></div>
+      <div class="f"><label>결재자</label><input class="in" name="approver" value="{{ edit_row.approver if edit_row }}"></div>
+      <div class="f"><label>상태</label><select class="in" name="status">
+        <option value="open" {{ 'selected' if edit_row and edit_row.status=='open' }}>진행</option>
+        <option value="done" {{ 'selected' if edit_row and edit_row.status=='done' }}>완료</option>
+        <option value="hold" {{ 'selected' if edit_row and edit_row.status=='hold' }}>보류</option>
+      </select></div>
+    </div>
+  </div>
+</details>
+
+<!-- ② 문제 정의 -->
+<details class="sec" open><summary>문제 정의<span class="d8">D2</span></summary>
+  <div class="secb">
+    <div class="frow" style="grid-template-columns:1fr 200px 130px;">
+      <div class="f"><label>현상</label>
+        <input class="in" name="symptom" value="{{ edit_row.symptom if edit_row }}" placeholder="예: 동심도 불량"></div>
+      <div class="f"><label>발생일</label>
+        <input class="in" name="occur_date" value="{{ edit_row.occur_date if edit_row }}" placeholder="예: 6/10 또는 6월"></div>
+      <div class="f" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:6px;">
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" name="occur_ongoing" {{ 'checked' if edit_row and edit_row.occur_ongoing }}> 지속 발생</label></div>
+    </div>
+    <div class="frow" style="grid-template-columns:180px 180px 130px;margin-top:10px;">
+      <div class="f"><label>해당 Lot 수량 (ea)</label>
+        <input class="in" type="number" min="0" name="lot_qty" id="lotQty" style="text-align:right;"
+               oninput="calcRate()" value="{{ edit_row.lot_qty if edit_row and edit_row.lot_qty else '' }}"></div>
+      <div class="f"><label>불량 수량 (ea)</label>
+        <input class="in" type="number" min="0" name="defect_qty" id="defQty" style="text-align:right;"
+               oninput="calcRate()" value="{{ edit_row.defect_qty if edit_row and edit_row.defect_qty else '' }}"></div>
+      <div class="f"><label>불량률</label><div class="rate" id="rateOut" style="padding-top:7px;">-</div></div>
+    </div>
+    <div class="f" style="margin-top:10px;"><label>문제부위 사진 (여러 장 가능)</label>
+      <input class="in" type="file" name="f_photo" accept="image/*" multiple></div>
+    {{ attach_list(edit_row, 'photo') }}
+  </div>
+</details>
+
+<!-- ③ 임시 조치 -->
+<details class="sec" open><summary>임시 조치<span class="d8">D3</span></summary>
+  <div class="secb">
+    <div class="f" style="margin-top:8px;"><label>해당 Lot. 처리</label>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        {% for la in lot_actions %}
+        <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;">
+          <input type="radio" name="lot_action" value="{{ la }}"
+                 {{ 'checked' if edit_row and edit_row.lot_action==la }}> {{ la }}</label>
+        {% endfor %}
+        <input class="in" name="lot_action_etc" style="max-width:220px;" placeholder="기타 내용"
+               value="{{ edit_row.lot_action_etc if edit_row }}">
+      </div></div>
+    <div class="f" style="margin-top:10px;"><label>근본개선 완료 전 차기생산 임시조치 방법</label>
+      <textarea class="in" name="interim" rows="3" style="resize:vertical;"
+                placeholder="예: 1. 원인 분석 및 개선 검토 계획 수립">{{ edit_row.interim if edit_row }}</textarea></div>
+  </div>
+</details>
+
+<!-- ④ 원인 분석 -->
+<details class="sec" open><summary>원인 분석<span class="d8">D4</span></summary>
+  <div class="secb">
+    <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:8px;">
+      <div class="f"><label>발생측면 (왜 만들어졌나)</label>
+        <textarea class="in" name="cause_occur" rows="6" style="resize:vertical;"
+                  placeholder="1. Feeder System 변경 후 동심도 불량 지속 발생&#10;  → 분말 충진 미흡으로 인한 밀도 편차 발생">{{ edit_row.cause_occur if edit_row }}</textarea></div>
+      <div class="f"><label>유출측면 (왜 못 걸렀나)</label>
+        <textarea class="in" name="cause_flow" rows="6" style="resize:vertical;"
+                  placeholder="1. 간헐적 발생, 성형품 동심도 Spec내 분포하더라도 정형 시 증가">{{ edit_row.cause_flow if edit_row }}</textarea></div>
+    </div>
+    <div class="frow" style="grid-template-columns:200px 1fr;margin-top:10px;">
+      <div class="f"><label>원인 분류 (4M)</label>
+        <select class="in" name="cause_4m">
+          <option value="">(선택)</option>
+          {% for m in m4 %}<option value="{{ m }}" {{ 'selected' if edit_row and edit_row.cause_4m==m }}>{{ m }}</option>{% endfor %}
+        </select></div>
+      <div class="f"><label>원인분석 유첨 (상세자료)</label>
+        <input class="in" type="file" name="f_cause" multiple></div>
+    </div>
+    <div class="hint">· 4M 분류를 채우면 "설비 원인이 전체의 몇 %인지" 같은 집계가 가능해집니다.</div>
+    {{ attach_list(edit_row, 'cause') }}
+  </div>
+</details>
+
+<!-- ⑤ 근본 개선 -->
+<details class="sec" open><summary>근본 개선 (발생·유출 방지 대책)<span class="d8">D5·D6</span></summary>
+  <div class="secb">
+    {{ action_table('occur', '발생 방지 대책', edit_row, today) }}
+    {{ action_table('flow', '유출 방지 대책', edit_row, today) }}
+    <div class="f" style="margin-top:10px;"><label>근본개선 유첨 (상세자료)</label>
+      <input class="in" type="file" name="f_action" multiple></div>
+    {{ attach_list(edit_row, 'action') }}
+  </div>
+</details>
+
+<!-- ⑥ 표준 반영 -->
+<details class="sec" open><summary>표준 반영<span class="d8">D7</span></summary>
+  <div class="secb">
+    <table class="grid" style="max-width:520px;">
+      <thead><tr><th style="width:160px;">표준류</th><th style="width:180px;">개정여부</th><th>일자</th></tr></thead>
+      <tbody>
+      {% for nm in std_names %}
+        {% set s = (edit_row.stds | selectattr('name','equalto',nm) | first) if edit_row else none %}
+        {% set rv = s.revised if s else 0 %}
+        {% set rd = s.rev_date if s else '' %}
+        <tr><td>{{ nm }}</td>
+          <td><label style="margin-right:10px;"><input type="radio" name="std_{{ nm }}" value="1" {{ 'checked' if rv }}> 개정</label>
+              <label><input type="radio" name="std_{{ nm }}" value="0" {{ 'checked' if not rv }}> 불필요</label></td>
+          <td><input class="in" type="date" name="stddate_{{ nm }}" value="{{ rd }}"></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="hint">· '개정'을 고른 항목은 일자를 채워야 완료로 봅니다.</div>
+  </div>
+</details>
+
+<!-- ⑦ 수평전개 -->
+<details class="sec" open><summary>수평전개<span class="d8">D7</span></summary>
+  <div class="secb">
+    <table class="grid" id="spTable">
+      <thead><tr><th style="width:150px;">대상 TM-NO</th><th>대상부품</th>
+        <th style="width:110px;">적용유무</th><th style="width:150px;">적용계획</th><th style="width:150px;">비고</th>
+        <th style="width:36px;"></th></tr></thead>
+      <tbody>
+      {% for sp in (edit_row.spreads if edit_row and edit_row.spreads else [none]) %}
+        <tr>
+          <td><input class="in" name="sp_tm" value="{{ sp.tm_no if sp }}" placeholder="선택"></td>
+          <td><input class="in" name="sp_target" value="{{ sp.target if sp }}" placeholder="예: Pulley 4종"></td>
+          <td><select class="in" name="sp_applied">
+            <option value=""></option>
+            {% for a in applied_opts %}<option value="{{ a }}" {{ 'selected' if sp and sp.applied==a }}>{{ a }}</option>{% endfor %}
+          </select></td>
+          <td><input class="in" type="date" name="sp_plan" value="{{ sp.plan_date if sp }}"></td>
+          <td><input class="in" name="sp_memo" value="{{ sp.memo if sp }}"></td>
+          <td><button type="button" class="btn btn-ghost btn-sm" onclick="delRow(this)">✕</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn-row" onclick="addSpread()">+ 수평전개 행 추가</button>
+  </div>
+</details>
+
+<div class="panel"><div class="pbody" style="display:flex;gap:8px;align-items:center;">
+  <button class="btn btn-p">{{ '수정 저장' if edit_row else '저장' }}</button>
+  <span class="hint" style="margin:0;">저장 후 '보고서 보기'로 발표용 양식을 확인할 수 있습니다.</span>
+</div></div>
+</form>
+
+<!-- 첨부 삭제는 자체 폼이라 위 저장 폼 안에 두면 폼이 중첩돼(HTML 금지) 저장 버튼이 죽는다.
+     incident.html에서 실제로 겪은 버그라 여기서도 폼 바깥으로 뺀다(2026-07-31 확인). -->
+{% if edit_row %}
+<div class="panel"><div class="phead"><h2>등록된 첨부</h2></div><div class="pbody">
+  {% for sec, label in [('photo','문제부위 사진'),('cause','원인분석 유첨'),('action','근본개선 유첨'),('etc','기타')] %}
+    {% if edit_row.files.get(sec) %}
+    <div style="margin-bottom:10px;">
+      <label style="font:600 11px/1 inherit;color:var(--tx3);">{{ label }}</label>
+      <div class="attach">
+        {% for f in edit_row.files.get(sec) %}
+        {% set fhref = ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) %}
+        <span class="fchip">
+          {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">{% endif %}
+          <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+          <form method="post" action="/input/capa/file/{{ f.id }}/delete"
+                onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
+            <button type="submit" title="삭제">✕</button></form>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div></div>
+{% endif %}
+{% endif %}
+
+<div class="panel"><div class="phead"><h2>개선대책서 목록</h2><span class="tot">{{ rows|length }}건</span></div>
+  <table>
+    <thead><tr><th>작성일</th><th>제목</th><th>구분</th><th>파트</th><th>원인/발견공정</th>
+      <th>TM-NO</th><th>불량유형</th><th>설비</th><th>부서</th><th class="num">대책</th><th>상태</th>
+      {% if can_edit %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mono">{{ r.d }}</td>
+        <td><a href="/input/capa/{{ r.id }}/view" target="_blank" style="color:var(--p-600);text-decoration:none;">{{ r.title or '(제목 없음)' }}</a></td>
+        <td>{{ {'product':'제품불량','equip':'설비','process':'공정·작업','etc':'기타'}.get(r.kind, r.kind) }}</td>
+        <td>{{ r.part|pl }}</td>
+        <td>{{ r.cause_process or '-' }} / {{ r.found_process or '-' }}</td>
+        <td class="mono">{{ r.tm_no or '-' }}</td>
+        <td>{{ r.defect_type or '-' }}</td>
+        <td>{{ r.equipment or '-' }}</td>
+        <td>{{ r.dept or '-' }}</td>
+        <td class="num {{ 'od' if r.overdue }}">{{ r.act_done }}/{{ r.act_n }}{{ ' ⚠' if r.overdue }}</td>
+        <td>{{ {'open':'진행','done':'완료','hold':'보류'}.get(r.status, r.status) }}</td>
+        {% if can_edit %}<td style="white-space:nowrap;">
+          <a class="btn btn-ghost btn-sm" href="/input/capa?edit={{ r.id }}" style="text-decoration:none;">수정</a>
+          <form method="post" action="/input/capa/{{ r.id }}/delete" style="display:inline;"
+                onsubmit="return confirm('삭제할까요? (첨부파일도 함께 삭제됩니다)');">
+            <button class="btn btn-ghost btn-sm">삭제</button></form></td>{% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ 12 if can_edit else 11 }}" style="color:var(--tx3);">등록된 개선대책서가 없습니다.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// 이슈구분이 '제품불량'이 아니면 품번 관련 칸을 숨긴다 — 설비 이슈("소결로 벨트 파손")처럼
+// 특정 품번을 지정할 수 없는 건이 많아서, 빈 칸에 억지로 채워넣는 걸 막는다(2026-08-10).
+function kindToggle(){
+  var k = document.getElementById('kindSel').value;
+  document.getElementById('prodRow').style.display = (k === 'product') ? '' : 'none';
+}
+// 불량률은 저장하지 않고 그때그때 계산해서 보여준다(수기 계산 오류 방지).
+function calcRate(){
+  var lot = parseFloat(document.getElementById('lotQty').value || 0);
+  var def = parseFloat(document.getElementById('defQty').value || 0);
+  document.getElementById('rateOut').textContent =
+    (lot > 0) ? (def / lot * 100).toFixed(1) + ' %' : '-';
+}
+function delRow(btn){
+  var tb = btn.closest('tbody');
+  if (tb.rows.length > 1) btn.closest('tr').remove();
+}
+function addSpread(){
+  var tb = document.querySelector('#spTable tbody');
+  var tr = tb.rows[0].cloneNode(true);
+  tr.querySelectorAll('input').forEach(function(i){ i.value = ''; });
+  tr.querySelectorAll('select').forEach(function(s){ s.selectedIndex = 0; });
+  tb.appendChild(tr);
+}
+function addAct(btn){
+  var tb = btn.previousElementSibling.querySelector('tbody');
+  var tr = tb.rows[0].cloneNode(true);
+  tr.querySelectorAll('input[type=text],input:not([type])').forEach(function(i){ i.value = ''; });
+  tr.querySelectorAll('input[type=date]').forEach(function(i){ i.value = ''; i.classList.remove('od'); });
+  tr.querySelectorAll('input[type=hidden]').forEach(function(i){ i.value = '0'; });
+  tr.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = false; });
+  tb.appendChild(tr);
+}
+kindToggle(); calcRate();
+</script>
+{% endblock %}
