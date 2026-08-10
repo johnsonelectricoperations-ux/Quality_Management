@@ -8,8 +8,10 @@
     {% for f in row.files.get(sec) %}
     {% set fhref = ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) %}
     <span class="fchip">
-      {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">{% endif %}
-      <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+      {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">
+      {% elif f.kind=='video' and (f.orig_name|is_playable_video) %}
+      <video class="thumb" src="/input/capa/file/{{ f.id }}" preload="metadata" muted></video>{% endif %}
+      <a href="{{ fhref }}" target="_blank">{{ {'photo':'🖼','video':'🎬'}.get(f.kind,'📄') }} {{ f.orig_name }}</a>
     </span>
     {% endfor %}
   </div>
@@ -211,8 +213,10 @@ table.grid input.in,table.grid select.in{width:100%;}
         <input class="in" name="defect_qty_note" value="{{ edit_row.defect_qty_note if edit_row }}"
                placeholder="예: 가유 3ea, 사내1ea"></div>
     </div>
-    <div class="f" style="margin-top:10px;"><label>문제부위 사진 (여러 장 가능)</label>
-      <input class="in" type="file" name="f_photo" accept="image/*" multiple></div>
+    <div class="f" style="margin-top:10px;"><label>문제부위 사진·동영상 (여러 개 가능)</label>
+      <input class="in" type="file" name="f_photo" accept="image/*,video/*" multiple></div>
+    <div class="hint">· 동영상은 <b>mp4</b>로 넣으면 보고서에서 바로 재생됩니다(avi·wmv는 재생 안 되니
+      mp4로 변환해 주세요). 사진 20MB, 동영상 150MB까지.</div>
     {{ attach_list(edit_row, 'photo') }}
   </div>
 </details>
@@ -338,8 +342,10 @@ table.grid input.in,table.grid select.in{width:100%;}
         {% for f in edit_row.files.get(sec) %}
         {% set fhref = ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) %}
         <span class="fchip">
-          {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">{% endif %}
-          <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+          {% if f.kind=='photo' %}<img class="thumb" src="/input/capa/file/{{ f.id }}" alt="">
+          {% elif f.kind=='video' and (f.orig_name|is_playable_video) %}
+          <video class="thumb" src="/input/capa/file/{{ f.id }}" preload="metadata" muted controls></video>{% endif %}
+          <a href="{{ fhref }}" target="_blank">{{ {'photo':'🖼','video':'🎬'}.get(f.kind,'📄') }} {{ f.orig_name }}</a>
           <form method="post" action="/input/capa/file/{{ f.id }}/delete"
                 onsubmit="return confirm('{{ f.orig_name }} 을 삭제할까요?');">
             <button type="submit" title="삭제">✕</button></form>

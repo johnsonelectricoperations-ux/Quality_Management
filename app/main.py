@@ -28,6 +28,9 @@ tpl.env.filters["cf2"] = lambda v: f"{v:,.2f}" if isinstance(v, (int, float)) el
 PART_LABEL = {"VMS PART": "1PART", "TM PART": "2PART"}
 tpl.env.filters["pl"] = lambda v: PART_LABEL.get(str(v).strip(), v)
 tpl.env.filters["is_pdf"] = lambda name: str(name or "").lower().endswith(".pdf")
+# 동영상 첨부: 브라우저가 그대로 재생할 수 있는 형식만 플레이어로 띄운다(나머지는 변환 안내).
+tpl.env.filters["is_playable_video"] = lambda name: str(name or "").lower().endswith(
+    (".mp4", ".webm", ".ogg", ".ogv", ".m4v"))
 tpl.env.globals["PARTS"] = [("VMS PART", "1PART"), ("TM PART", "2PART")]
 
 # 발생원인·개선대책처럼 여러 줄로 입력받는 textarea 값을 보고서 한 줄에 이어붙일 때,
@@ -2048,6 +2051,14 @@ async def incident_save(request: Request):
 # static이 아닌 uploads/ 에 두고 **로그인·권한 확인 후에만** 내려준다(세부자료가 섞여 있으므로).
 UPLOAD_ROOT = os.path.abspath(os.path.join(BASE, "..", "uploads", "incident"))
 MAX_UPLOAD_MB = 20
+# 동영상은 사진보다 훨씬 커서 20MB로는 몇 초짜리도 안 들어간다(휴대폰 촬영분은 보통 수십 MB).
+# 그래서 동영상 첨부만 한도를 따로 둔다(2026-08-10 추가).
+MAX_VIDEO_MB = 150
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")
+# 브라우저가 그대로 재생할 수 있는 형식만 '재생'으로 취급한다. avi·wmv·mkv는 파일로만 보관하고
+# 재생은 안 되므로(코덱 문제) 화면에서 변환 안내를 띄운다.
+VIDEO_EXTS = (".mp4", ".webm", ".ogg", ".ogv", ".m4v", ".mov")
+VIDEO_PLAYABLE_EXTS = (".mp4", ".webm", ".ogg", ".ogv", ".m4v")
 
 
 def _safe_name(name):
@@ -2544,12 +2555,18 @@ async def capa_save(request: Request):
 
 def _save_capa_file(conn, capa_id, section, kind, upload, user_name):
     data = upload.file.read()
-    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+    orig = _safe_name(upload.filename)
+    low = orig.lower()
+    is_video = low.endswith(VIDEO_EXTS)
+    limit = MAX_VIDEO_MB if is_video else MAX_UPLOAD_MB
+    if len(data) > limit * 1024 * 1024:
         return None
     os.makedirs(CAPA_UPLOAD_ROOT, exist_ok=True)
-    orig = _safe_name(upload.filename)
-    if kind != "photo" and orig.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")):
-        kind = "photo"       # 유첨으로 올렸어도 이미지면 보고서에서 그림으로 보여준다
+    # 유첨으로 올렸어도 이미지·동영상이면 보고서에서 그림/플레이어로 보여준다.
+    if is_video:
+        kind = "video"
+    elif kind != "photo" and low.endswith(IMAGE_EXTS):
+        kind = "photo"
     stored = f"{capa_id}_{secrets.token_hex(6)}_{orig}"
     with open(os.path.join(CAPA_UPLOAD_ROOT, stored), "wb") as f:
         f.write(data)

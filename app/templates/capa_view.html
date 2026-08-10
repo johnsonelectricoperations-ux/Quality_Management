@@ -52,6 +52,13 @@ table.t td.c{text-align:center;}
 .docs a{font-size:11px;color:#0563C1;text-decoration:none;border:1px solid #9DC3E6;
   border-radius:4px;padding:2px 6px;background:#F2F8FF;}
 .docs img{height:64px;border:1px solid #000;cursor:zoom-in;object-fit:cover;}
+/* 동영상 첨부 — 보고서에서 바로 재생하고, 클릭하면 크게 볼 수 있다(2026-08-10 추가). */
+.vid{position:relative;display:inline-block;}
+.vid video{height:84px;border:1px solid #000;background:#000;display:block;}
+.vid .big{position:absolute;right:3px;bottom:5px;background:rgba(0,0,0,.65);color:#fff;
+  font-size:10px;border:0;border-radius:4px;padding:2px 6px;cursor:pointer;}
+.vidbad{font-size:11px;color:#9C0006;border:1px solid #E6B9B9;background:#FDF2F2;
+  border-radius:4px;padding:3px 7px;}
 .logo{font:700 10px/1.1 inherit;text-align:right;padding:2px 6px 0;color:#333;}
 .bar{max-width:1320px;margin:0 auto 10px;display:flex;gap:8px;align-items:center;}
 .bar a,.bar button{font:600 12px/1 inherit;padding:7px 12px;border-radius:6px;border:1px solid #888;
@@ -60,7 +67,10 @@ table.t td.c{text-align:center;}
 /* 이미지 확대 오버레이 */
 #zoom{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;
   justify-content:center;z-index:100;cursor:zoom-out;}
-#zoom img{max-width:96%;max-height:96%;object-fit:contain;}
+#zoom img,#zoom video{max-width:96%;max-height:96%;object-fit:contain;}
+/* 동영상 확대 중에는 배경 클릭으로 닫히면 안 된다 — 재생·볼륨 조작이 배경 클릭으로 먹혀
+   창이 닫혀버리기 때문. 그래서 동영상일 때만 커서를 기본으로 두고 ✕/Esc로만 닫는다. */
+#zoom.playing{cursor:default;}
 #zoom .cl{position:fixed;top:14px;right:18px;color:#fff;font-size:26px;cursor:pointer;}
 @media print{
   body{background:#fff;padding:0;}
@@ -71,6 +81,26 @@ table.t td.c{text-align:center;}
 </style>
 </head>
 <body>
+{# 첨부 1건을 종류에 맞게 그린다: 이미지=썸네일(클릭 확대) / 동영상=플레이어(클릭 크게보기)
+   / PDF=뷰어 링크 / 그 외=다운로드 링크. 원인분석·근본개선 유첨에서 같이 쓴다. #}
+{% macro att(f) %}
+  {% if f.kind == 'photo' %}
+    <img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">
+  {% elif f.kind == 'video' %}
+    {% if f.orig_name|is_playable_video %}
+    <span class="vid">
+      <video src="/input/capa/file/{{ f.id }}" preload="metadata" controls muted playsinline></video>
+      <button class="big" type="button" onclick="zoomVideo('/input/capa/file/{{ f.id }}')">⤢ 크게</button>
+    </span>
+    {% else %}
+    <span class="vidbad">🎬 {{ f.orig_name }} — 브라우저에서 재생 불가(mp4로 변환 필요)
+      <a href="/input/capa/file/{{ f.id }}" target="_blank">받기</a></span>
+    {% endif %}
+  {% else %}
+    <a href="{{ ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) }}"
+       target="_blank">📄 {{ f.orig_name }}</a>
+  {% endif %}
+{% endmacro %}
 <div class="bar">
   <a href="/input/capa?edit={{ r.id }}">← 수정</a>
   <button onclick="window.print()">🖨 인쇄</button>
@@ -95,15 +125,20 @@ table.t td.c{text-align:center;}
   <div class="g">
     <!-- ── 좌: 문제부위 · 현상 · 개요 ── -->
     <div class="col">
-      <div class="lb">문제부위 (사진)</div>
+      <div class="lb">문제부위 (사진·동영상)</div>
       {% set photos = r.files.get('photo') or [] %}
       <div class="photo">
-        {% if photos %}<img src="/input/capa/file/{{ photos[0].id }}" alt="" onclick="zoom(this.src)">
+        {% if photos %}
+          {% if photos[0].kind == 'video' %}
+          <video src="/input/capa/file/{{ photos[0].id }}" controls muted playsinline preload="metadata"
+                 style="max-width:100%;max-height:100%;background:#000;"></video>
+          {% else %}
+          <img src="/input/capa/file/{{ photos[0].id }}" alt="" onclick="zoom(this.src)">
+          {% endif %}
         {% else %}<span style="color:#999;font-size:11px;">사진 없음</span>{% endif %}
       </div>
       {% if photos|length > 1 %}
-      <div class="docs">{% for f in photos[1:] %}
-        <img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>
+      <div class="docs">{% for f in photos[1:] %}{{ att(f) }}{% endfor %}</div>
       {% endif %}
 
       <table class="t"><tr><td class="k">현상</td><td>{{ r.symptom or '-' }}</td></tr></table>
@@ -160,11 +195,7 @@ table.t td.c{text-align:center;}
       <div class="sub">유출측면</div>
       <div class="txt">{{ r.cause_flow or '-' }}</div>
       {% if r.files.get('cause') %}
-      <div class="docs">{% for f in r.files.get('cause') %}
-        {% if f.kind == 'photo' %}<img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">
-        {% else %}
-        <a href="{{ ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) }}"
-           target="_blank">📄 {{ f.orig_name }}</a>{% endif %}{% endfor %}</div>
+      <div class="docs">{% for f in r.files.get('cause') %}{{ att(f) }}{% endfor %}</div>
       {% endif %}
     </div>
 
@@ -193,11 +224,7 @@ table.t td.c{text-align:center;}
       {% else %}<div class="txt">-</div>{% endfor %}
 
       {% if r.files.get('action') %}
-      <div class="docs">{% for f in r.files.get('action') %}
-        {% if f.kind == 'photo' %}<img src="/input/capa/file/{{ f.id }}" alt="" onclick="zoom(this.src)">
-        {% else %}
-        <a href="{{ ('/view/pdf?src=/input/capa/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/capa/file/' ~ f.id) }}"
-           target="_blank">📄 {{ f.orig_name }}</a>{% endif %}{% endfor %}</div>
+      <div class="docs">{% for f in r.files.get('action') %}{{ att(f) }}{% endfor %}</div>
       {% endif %}
 
       <div class="lb">표준 반영</div>
@@ -231,15 +258,37 @@ table.t td.c{text-align:center;}
   </div>
 </div>
 
-<div id="zoom" onclick="this.style.display='none'"><span class="cl">✕</span><img id="zoomImg" src="" alt=""></div>
+<div id="zoom" onclick="if(event.target===this) closeZoom();">
+  <span class="cl" onclick="closeZoom()">✕</span>
+  <img id="zoomImg" src="" alt="">
+  <video id="zoomVid" controls playsinline style="display:none;"></video>
+</div>
 <script>
 // 사진·표 이미지가 작아 잘 안 보이면 클릭해서 전체화면으로 확대한다(요청사항, 2026-08-10).
+var zoomEl = document.getElementById('zoom');
+var zImg = document.getElementById('zoomImg');
+var zVid = document.getElementById('zoomVid');
+
 function zoom(src){
-  document.getElementById('zoomImg').src = src;
-  document.getElementById('zoom').style.display = 'flex';
+  zVid.pause(); zVid.style.display = 'none'; zVid.removeAttribute('src');
+  zImg.src = src; zImg.style.display = '';
+  zoomEl.classList.remove('playing');
+  zoomEl.style.display = 'flex';
+}
+function zoomVideo(src){
+  zImg.style.display = 'none'; zImg.removeAttribute('src');
+  zVid.src = src; zVid.style.display = '';
+  zoomEl.classList.add('playing');
+  zoomEl.style.display = 'flex';
+  zVid.play().catch(function(){ /* 자동재생이 막히면 사용자가 재생 버튼을 누르면 된다 */ });
+}
+function closeZoom(){
+  // 창을 닫을 때 소리가 계속 나면 안 되므로 반드시 정지시킨다.
+  zVid.pause(); zVid.removeAttribute('src');
+  zoomEl.style.display = 'none';
 }
 window.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') document.getElementById('zoom').style.display = 'none';
+  if (e.key === 'Escape') closeZoom();
 });
 </script>
 </body>
