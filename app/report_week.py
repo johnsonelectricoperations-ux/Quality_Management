@@ -22,13 +22,13 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
 
 CONTENTS = [
-    "(1) 주간 KPI 현황",
+    "(1) 주간 KPI 현황 (1PART / 2PART)",
     "(2) 공정별 불량 현황",
     "(3) 주요 품질 이슈",
     "(4) 개선대책 진행 현황",
@@ -237,8 +237,7 @@ def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
         tgt = None
         tk = TARGET_KEY.get(key)
         if tk and fy:
-            tpart = "VMS PART" if (key in ("proc_ppm", "set_ppm") and part == "통합") else part
-            tgt = _target_val(conn, fy, tpart, tk)
+            tgt = _target_val(conn, fy, part, tk)
             if tgt:
                 vmax = max(vmax, tgt)
         out[key] = {"labels": labels, "values": vals, "vmax": vmax or 1, "target": tgt, "dec": dec}
@@ -335,15 +334,15 @@ def build(conn, m, wk):
     """주마감 보고서 payload 조립."""
     daily = calc.compute_daily(conn, m)
     d0, d1 = week_bounds(wk)
-    parts = [("통합", "통합"), ("VMS PART", "1PART"), ("TM PART", "2PART")]
+    # KPI는 1PART/2PART로만 본다 — 통합은 보지 않는다(2026-08-10 사용자 확정).
+    parts = [("VMS PART", "1PART"), ("TM PART", "2PART")]
     return {
         "v": CACHE_VERSION, "wk": wk, "start": d0, "end": d1, "label": week_label(wk),
         "contents": CONTENTS,
         "kpi": {lbl: _kpi_block(conn, m, daily, wk, p) for p, lbl in parts},
-        # 추이 그래프는 보고서 (1)장에 쓰는 통합만 계산한다(파트별까지 하면 계산량만 3배).
-        "trend": _trend(conn, m, daily, wk, "통합"),
-        "proc": {lbl: _process_block(conn, m, daily, wk, p) for p, lbl in parts[1:]},
-        "top": {lbl: _top_items(conn, m, wk, p) for p, lbl in parts[1:]},
+        "trend": {lbl: _trend(conn, m, daily, wk, p) for p, lbl in parts},
+        "proc": {lbl: _process_block(conn, m, daily, wk, p) for p, lbl in parts},
+        "top": {lbl: _top_items(conn, m, wk, p) for p, lbl in parts},
         "issues": _issue_block(conn, wk),
         "capa": _capa_block(conn, wk),
         "texts": _texts(conn, wk),
