@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 16
+CACHE_VERSION = 17
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -624,9 +624,10 @@ def build(conn, m, y, mth):
         "top5": {PART_LABEL[p]: _top5(conn, m, agg, y, mth, p) for p in ("VMS PART", "TM PART")},
         # 품번이 비어 있는 불량은 TOP5(품목별 순위)에 구조적으로 못 들어가서 따로 건별로 싣는다
         # (정전폐기 녹처럼 큰 건이 여기 있다, 2026-08-10 신설).
+        # 최대 2건만 보여준다(2026-08-10 확정) — 표가 길어지면 TOP5보다 시선을 더 끌어버린다.
         "unassigned": {PART_LABEL[p]: calc.unassigned_defects(
             conn, m, "%04d-%02d-01" % (y, mth),
-            "%04d-%02d-%02d" % (y, mth, calendar.monthrange(y, mth)[1]), p)
+            "%04d-%02d-%02d" % (y, mth, calendar.monthrange(y, mth)[1]), p, limit=2)
             for p in ("VMS PART", "TM PART")},
         "ban": {PART_LABEL[p]: _ban_block(conn, m, agg, fy, p, mth)
                 for p in ("VMS PART", "TM PART")},

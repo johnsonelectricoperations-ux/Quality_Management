@@ -36,6 +36,12 @@ html,body{height:100%;overflow:hidden;background:#111;font-family:"Malgun Gothic
 /* 표 */
 table{border-collapse:collapse;width:100%;font-size:11px;}
 th,td{border:1px solid #cfcfcf;padding:3px 5px;text-align:center;white-space:nowrap;}
+/* (2) 공정불량 현황 슬라이드 전용 — 표 두 개를 압축해 그래프(.twoch)가 더 크게 보이도록
+   여유를 만든다(2026-08-10 "그래프를 더 키워줘" 요청). */
+.pftbl th,.pftbl td{padding:2px 5px;font-size:10px;}
+.top5card table{font-size:9.5px;}
+.top5card th,.top5card td{padding:1.5px 4px;}
+.top5card h3{font-size:12px;margin-bottom:3px;}
 th{background:#eaeef5;font-weight:700;color:#1f3864;}
 td.l,th.l{text-align:left;}
 td.r{text-align:right;}
@@ -219,7 +225,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <div class="chartbox">{{ chart(p.ppm, p.target, p.vmax, p.months, 0, p.upto_i, none, '월', False) }}</div>
           </div>
         </div>
-        <table style="margin-top:6px;">
+        {# 실적표 폰트를 살짝 줄여 위 그래프(.twoch)가 더 크게 보이도록 여유를 만든다
+           (2026-08-10 "그래프를 더 키워줘" 요청 — 카드는 flex:1이라 이 표가 작아진 만큼
+           그래프가 그대로 커진다). #}
+        <table class="pftbl" style="margin-top:6px;">
           <tr><th class="l" style="width:74px;"></th><th>{{ d.fy_label }}<br>누계</th>
             {% for mo in p.months %}{% if loop.index0 <= p.upto_i %}<th>{{ mo }}월</th>{% endif %}{% endfor %}</tr>
           <tr><td class="l">불량(EA)</td><td class="r">{{ num(p.fy_cum_qty) }}</td>
@@ -233,7 +242,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         </table>
       </div>
     </div>
-    <div class="card" style="flex:none;">
+    {# TOP5·품번미지정 표도 폰트를 줄여 카드 높이를 낮춘다 — 이 카드는 flex:none(내용 크기)이라
+       여기서 줄어든 만큼 위 그래프 카드(flex:1)가 그만큼 더 커진다(2026-08-10 요청). #}
+    <div class="card top5card" style="flex:none;">
       <h3>공정불량 TOP 5 — {{ d.ym }}</h3>
       <table>
         <thead><tr><th style="width:28px;">#</th><th>TM-NO</th><th class="l">품명</th>
