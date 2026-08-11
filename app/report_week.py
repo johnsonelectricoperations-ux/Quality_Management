@@ -22,7 +22,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7

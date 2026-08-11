@@ -253,8 +253,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
          수량은 총량·공정별에 이미 반영돼 있고, 단가를 찾을 품번이 없어 비용은 0원이다. #}
       {% set ua = d.unassigned[lbl] %}
       {% if ua.n %}
-      <h3 style="margin-top:7px;">품번 미지정 불량 — {{ ua.n }}건 {{ num(ua.total) }} EA
-        <small style="font-weight:600;color:#7f7f7f;">(품번이 없어 TOP5에 미포함 · 총량·공정별에는 반영됨 · 비용 0원)</small></h3>
+      <h3 style="margin-top:7px;">품번 미지정 불량 — {{ ua.n }}건 {{ num(ua.total) }} EA</h3>
       <table>
         <thead><tr><th style="width:28px;">#</th><th style="width:88px;">발생일</th>
           <th class="l">불량유형</th><th style="width:64px;">공정</th><th style="width:88px;">불량(EA)</th></tr></thead>

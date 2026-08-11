@@ -257,8 +257,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         {# 품번이 없는 불량은 위 TOP5(품목별)에 구조적으로 못 들어가서 건별로 따로 싣는다. #}
         {% set ua = d.unassigned[pl] %}
         {% if ua.n %}
-        <h3 style="margin-top:8px;">품번 미지정 {{ ua.n }}건 · {{ '{:,}'.format(ua.total) }} EA
-          <small style="font-weight:600;color:#7f7f7f;">TOP5 미포함 (총량·공정별엔 반영, 비용 0원)</small></h3>
+        <h3 style="margin-top:8px;">품번 미지정 {{ ua.n }}건 · {{ '{:,}'.format(ua.total) }} EA</h3>
         <table class="wtab">
           <thead><tr><th style="width:17%;">발생일</th><th>불량유형</th>
             <th style="width:16%;">공정</th><th style="width:20%;">불량(EA)</th></tr></thead>
