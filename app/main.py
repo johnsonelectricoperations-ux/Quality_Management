@@ -5,6 +5,7 @@
 """
 import os
 import json
+import calendar
 import secrets
 import sqlite3
 import datetime as _dt
@@ -629,6 +630,22 @@ def report_tmno_defects(request: Request, tm: str = ""):
     rows = report_kpi.defect_names_for_tm(conn, calc.Masters(conn), tm.strip())
     conn.close()
     return JSONResponse(rows)
+
+
+@app.get("/report/defect-trend")
+def report_defect_trend(request: Request, tm: str = "", defect: str = "", asof: str = ""):
+    """TOP5 '주요유형' 클릭 시 최근 5개월/5주 추이 JSON (월마감·주마감 팝업 공용)."""
+    u = current_user(request)
+    if u is None or not tm.strip() or not defect.strip() or not asof.strip():
+        return JSONResponse({})
+    asof = asof.strip()
+    if len(asof) == 7:                     # 월마감에서 넘어온 "YYYY-MM" → 그 달 말일로 변환
+        y, mo = int(asof[:4]), int(asof[5:7])
+        asof = "%04d-%02d-%02d" % (y, mo, calendar.monthrange(y, mo)[1])
+    conn = db.connect()
+    data = report_week.defect_trend(conn, calc.Masters(conn), tm.strip(), defect.strip(), asof)
+    conn.close()
+    return JSONResponse(data)
 
 
 # ── (구) 공정별 불량현황 → 세부지표현황으로 통합 (옛 링크 호환) ──

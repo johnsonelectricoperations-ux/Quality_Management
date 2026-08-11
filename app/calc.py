@@ -797,3 +797,23 @@ def unassigned_defects(conn, m, date_from, date_to, part, limit=6):
     return {"rows": rows[:limit], "total": total, "n": len(rows),
             "more": max(0, len(rows) - limit),
             "more_qty": total - sum(x["qty"] for x in rows[:limit])}
+
+
+def defect_qty(conn, m, tm, defect_group, date_from, date_to):
+    """특정 TM-NO의 특정 대표 불량유형(dgroup 기준)이 기간 내 발생한 공정불량 수량.
+    TOP5 '주요유형' 클릭 시 추이 팝업에 쓴다(2026-08-11 신설)."""
+    prod = m.product.get(tm)
+    if not prod:
+        return 0
+    part = prod[1]
+    total = 0
+    for r in conn.execute(
+            "SELECT defect_name,SUM(qty) s FROM defect_entry "
+            "WHERE status='confirmed' AND tm_no=? AND d BETWEEN ? AND ? GROUP BY defect_name",
+            (tm, date_from, date_to)):
+        if m.kind_of(part, r["defect_name"]) != "공정":
+            continue
+        if m.dgroup(r["defect_name"]) != defect_group:
+            continue
+        total += r["s"]
+    return total

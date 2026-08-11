@@ -15,6 +15,7 @@
 그래서 **그 주가 걸친 달의 SVP를 생산금액 비중으로 안분한 추정치**를 쓴다 — 화면에 반드시
 '추정'으로 표시한다(2026-08-10 사용자 확정: 넣되 추정치로).
 """
+import calendar
 import datetime as _dt
 import json
 from collections import defaultdict
@@ -71,6 +72,31 @@ def week_label(wk):
     nth = (ed - first_end).days // WEEK_DAYS + 1
     sd = _dt.date.fromisoformat(s)
     return f"{ed.month}월 {nth}주차 ({sd.month}/{sd.day}~{ed.month}/{ed.day})"
+
+
+def defect_trend(conn, m, tm, defect_group, asof):
+    """특정 TM-NO·주요유형(대표명)의 최근 5개월/최근 5주 수량 추이 — TOP5 '주요유형' 클릭 팝업용
+    (2026-08-11 신설). asof: 기준일(YYYY-MM-DD). 월마감이면 마감월 말일, 주마감이면 그 주
+    목요일(주차키)을 넘긴다. 월 추이는 달력월, 주 추이는 이 파일의 금~목 주 기준이다."""
+    asof_d = _dt.date.fromisoformat(asof) if isinstance(asof, str) else asof
+    months = calc.trailing_months(asof_d.year, asof_d.month, 5)
+    month_pts = []
+    for (y, mo) in months:
+        d0 = "%04d-%02d-01" % (y, mo)
+        d1 = "%04d-%02d-%02d" % (y, mo, calendar.monthrange(y, mo)[1])
+        month_pts.append({"label": "%d월" % mo,
+                          "qty": calc.defect_qty(conn, m, tm, defect_group, d0, d1)})
+    wk_end = week_end_of(asof_d)
+    week_pts = []
+    for i in range(4, -1, -1):
+        we = wk_end - _dt.timedelta(days=WEEK_DAYS * i)
+        d0, d1 = week_bounds(we)
+        sd = _dt.date.fromisoformat(d0)
+        week_pts.append({"label": "%d/%d" % (sd.month, sd.day),
+                         "qty": calc.defect_qty(conn, m, tm, defect_group, d0, d1)})
+    name = m.product.get(tm, ("?",))[0]
+    return {"tm": tm, "name": name, "defect": defect_group,
+            "months": month_pts, "weeks": week_pts}
 
 
 def recent_weeks(conn, n=13):
