@@ -439,9 +439,15 @@ def build_weekly(conn, m, daily, cy, cm, part):
                               "proc_qty": 0, "set_qty": 0, "prod_qty": 0, "prod_amount": 0.0,
                               "start": None, "end": None})
     from datetime import date, timedelta
+    # 생산 데이터가 실제로 입력된 마지막 날짜까지만 주 버킷을 만든다. 예전엔 그 달 말일까지
+    # 무조건 순회해서, 아직 데이터가 없는 달 후반부에도 텅 빈 '미래 주'가 생겼다 — 그 빈 주가
+    # 배열 맨 끝에 남아 대시보드의 '이번주' TOP5·주별 그래프가 그 빈 주를 가리키는 버그가 있었다
+    # (2026-08-11 확인: 데이터는 8/7까지인데 대시보드 '이번주'가 8월 마지막 주를 가리켜 텅 빔).
+    row = conn.execute("SELECT MAX(d) m FROM production WHERE d LIKE ?", (ym + "-%",)).fetchone()
+    last_d = date.fromisoformat(row["m"]) if row and row["m"] else date(cy, cm, 1)
     d = date(cy, cm, 1)
     month_prod_amt = 0.0
-    while d.month == cm and d.year == cy:
+    while d.month == cm and d.year == cy and d <= last_d:
         ds = d.isoformat()
         w = calc.week_of_month(ds)
         cell = wk[w]
