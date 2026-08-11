@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 10
+CACHE_VERSION = 11
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -103,31 +103,54 @@ def _trend_stats(vals):
     return up, fit
 
 
+# 추이 그래프에 보여줄 개수(2026-08-11: 5→7로 확대). 생산이 아예 없던 달/주는 점을 만들 수
+# 없으므로(불량율 자체가 정의 안 됨) 건너뛰고 그 이전 기간에서 채운다 — 그래서 "최근 7개"가
+# 아니라 "생산이 있었던 최근 7개"가 된다.
+TREND_POINTS = 7
+TREND_LOOKBACK_MONTHS = 36     # 이 안에서도 7개를 못 채우면(신제품 등) 있는 만큼만 보여준다.
+TREND_LOOKBACK_WEEKS = 104
+
+
 def defect_trend(conn, m, tm, defect_group, asof):
-    """특정 TM-NO·주요유형(대표명)의 최근 5개월/최근 5주 **불량율(PPM) 추이** + 증가추세 판정
-    — TOP5 '주요유형' 클릭 팝업 및 글자색 표시용(2026-08-11 신설). 수량이 아니라 불량율로 보는
-    이유는 생산량이 많고 적음에 따른 착시를 없애기 위함(사용자 확정). asof: 기준일(YYYY-MM-DD).
-    월마감이면 마감월 말일, 주마감이면 그 주 목요일(주차키)을 넘긴다. "YYYY-MM"(월마감 ym)을
-    바로 넘겨도 그 달 말일로 변환해 처리한다."""
+    """특정 TM-NO·주요유형(대표명)의 최근 7개월/최근 7주(생산이 있었던 기간만) **불량율(PPM)
+    추이** + 증가추세 판정 — TOP5 '주요유형' 클릭 팝업 및 글자색 표시용(2026-08-11 신설).
+    수량이 아니라 불량율로 보는 이유는 생산량이 많고 적음에 따른 착시를 없애기 위함(사용자 확정).
+    생산이 아예 없던 달/주는 불량율이 정의되지 않으므로 그래프에서 제외한다(사용자 확정).
+    asof: 기준일(YYYY-MM-DD). 월마감이면 마감월 말일, 주마감이면 그 주 목요일(주차키)을 넘긴다.
+    "YYYY-MM"(월마감 ym)을 바로 넘겨도 그 달 말일로 변환해 처리한다."""
     if isinstance(asof, str) and len(asof) == 7:
         ay, am = int(asof[:4]), int(asof[5:7])
         asof = "%04d-%02d-%02d" % (ay, am, calendar.monthrange(ay, am)[1])
     asof_d = _dt.date.fromisoformat(asof) if isinstance(asof, str) else asof
-    months = calc.trailing_months(asof_d.year, asof_d.month, 5)
+
     month_pts = []
-    for (y, mo) in months:
+    y, mo = asof_d.year, asof_d.month
+    for _ in range(TREND_LOOKBACK_MONTHS):
+        if len(month_pts) >= TREND_POINTS:
+            break
         d0 = "%04d-%02d-01" % (y, mo)
         d1 = "%04d-%02d-%02d" % (y, mo, calendar.monthrange(y, mo)[1])
         r = calc.defect_rate(conn, m, tm, defect_group, d0, d1)
-        month_pts.append({"label": "%d월" % mo, "ppm": r["ppm"], "qty": r["qty"]})
-    wk_end = week_end_of(asof_d)
+        if r["prod"]:                                    # 생산이 있었던 달만 점으로 남긴다.
+            month_pts.append({"label": "%d월" % mo, "ppm": r["ppm"], "qty": r["qty"]})
+        mo -= 1
+        if mo == 0:
+            mo, y = 12, y - 1
+    month_pts.reverse()                                   # 오래된→최신
+
     week_pts = []
-    for i in range(4, -1, -1):
-        we = wk_end - _dt.timedelta(days=WEEK_DAYS * i)
+    we = week_end_of(asof_d)
+    for _ in range(TREND_LOOKBACK_WEEKS):
+        if len(week_pts) >= TREND_POINTS:
+            break
         d0, d1 = week_bounds(we)
-        sd = _dt.date.fromisoformat(d0)
         r = calc.defect_rate(conn, m, tm, defect_group, d0, d1)
-        week_pts.append({"label": "%d/%d" % (sd.month, sd.day), "ppm": r["ppm"], "qty": r["qty"]})
+        if r["prod"]:
+            sd = _dt.date.fromisoformat(d0)
+            week_pts.append({"label": "%d/%d" % (sd.month, sd.day), "ppm": r["ppm"], "qty": r["qty"]})
+        we -= _dt.timedelta(days=WEEK_DAYS)
+    week_pts.reverse()
+
     month_up, month_fit = _trend_stats([p["ppm"] for p in month_pts])
     week_up, week_fit = _trend_stats([p["ppm"] for p in week_pts])
     for p, f in zip(month_pts, month_fit):
