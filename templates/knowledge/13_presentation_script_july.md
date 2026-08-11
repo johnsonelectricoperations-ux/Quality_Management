@@ -8,9 +8,9 @@ In July, our actual COPQ was 0.36%. Our target was 0.31%. Year-to-date, we are a
 
 This month, 100% of our COPQ was internal scrap cost — 53 million won. There was no customer cost at all. No warranty, no sorting.
 
-Two items drove the scrap cost. First, carrier brazing in TM part sintering — 10 million won. Second, a belt pulley crack scrap — 7 million won. Together, about one third of the total.
+The largest single item was carrier brazing in TM part sintering — 10 million won, about 19 percent of our scrap cost. The rest was spread across several items, with no single dominant cause.
 
-The brazing issue is improving. It was 13 million won in June, and 10 million in July. We replaced the generator cooling coil in June, and we completed five prevention actions through mid-July.
+The brazing issue is improving. It was 13 million won in June, and 10 million in July. We replaced the generator cooling coil in June, and we completed five prevention actions through mid-July. So we expect the full effect from August.
 
 We will continue improvement activities to reduce COPQ."
 
@@ -26,7 +26,7 @@ By part: Part 2, transmission parts, was 69% of the cost — 36 million won. Par
 
 The reason is simple. Transmission parts cost more per piece. So even a small scrap quantity creates a big cost impact.
 
-Compared to June, the total is almost the same. But the content changed. Our biggest June item, outsourced sintering defects at 14 million won, went to zero. Brazing came down 23 percent. But we had a new issue — belt pulley cracks, 7 million won.
+Compared to June, the total is almost the same. But the content changed. Our biggest June item, outsourced sintering defects at 14 million won, went to zero. Brazing came down 23 percent. Transmission part cost overall went down, from 40 million to 36 million won.
 
 We will continue process improvement to reduce this cost."
 
@@ -40,7 +40,7 @@ In July, this was 0.21%. Our target was 0.17%. So this month we did not achieve 
 
 Our scrap quantity went up 54 percent from June — from 32,000 to 49,000 pieces.
 
-Most of the increase was low-cost VMS parts — rust, dimension adjustment, and dents. We also had a power outage on July 22nd, which caused about 2,400 pieces of rust scrap.
+Most of the increase was low-cost VMS parts — rust, dimension adjustment, and dents. We also had a power outage on July 22nd, which added about 2,400 pieces.
 
 On the transmission side, the main quantity item was pulley concentricity — 3,880 pieces. This is our largest issue by quantity, but only about five percent by cost.
 
