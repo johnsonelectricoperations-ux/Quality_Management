@@ -186,9 +186,14 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .lst .it .tx{flex:1;min-width:0;}
 .lst .it .tx b{color:#1f3864;}
 
-/* TOP5 '주요유형' 클릭 팝업 — 최근 5개월/5주 추이(2026-08-11 신설) */
+/* TOP5 '주요유형' 클릭 팝업 — 최근 5개월/5주 불량율(PPM) 추이(2026-08-11 신설) */
 .dtrend{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;}
-.dtrend:hover{color:#2e5c9a;}
+.dtrend:hover{opacity:.75;}
+/* 증가추세 글자색 — 월별만 증가:주황 / 주별만 증가:녹색 / 둘 다 증가:진한 붉은색
+   (추세선 상승폭이 구간 평균의 20% 이상일 때만 "증가"로 판정, 2026-08-11 확정). */
+.dtrend.up-month{color:#c55a11;font-weight:700;}
+.dtrend.up-week{color:#1f6f3c;font-weight:700;}
+.dtrend.up-both{color:#c00000;font-weight:800;}
 #dmodal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;
   justify-content:center;z-index:9999;}
 #dmodal.on{display:flex;}
@@ -196,14 +201,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   box-shadow:0 10px 40px rgba(0,0,0,.35);position:relative;font-family:inherit;}
 #dmodal h4{margin:0 0 3px;font-size:15px;color:#1f3864;}
 #dmodal .dsub{color:#666;font-size:11.5px;margin-bottom:12px;}
-#dmodal .dlbl{font-size:11.5px;font-weight:700;color:#333;margin:12px 0 4px;}
-#dmodal .dchart{display:flex;align-items:flex-end;gap:8px;height:90px;}
-#dmodal .dchart .col{flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:flex-end;height:100%;}
-#dmodal .dchart .bar{width:56%;background:linear-gradient(180deg,#4472c4,#2e5c9a);
-  border-radius:2px 2px 0 0;min-height:1px;}
-#dmodal .dchart .v{font-size:10px;color:#333;margin-bottom:2px;}
-#dmodal .dchart .x{font-size:9.5px;color:#666;margin-top:4px;}
+#dmodal .dlbl{font-size:11.5px;font-weight:700;color:#333;margin:12px 0 4px;display:flex;
+  align-items:center;gap:6px;}
+#dmodal .dtag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;
+  background:#fdecea;}
+#dmodal .dchart{height:94px;}
+#dmodal .dchart svg{display:block;}
 #dmodal .dclose{position:absolute;top:10px;right:14px;cursor:pointer;font-size:18px;
   color:#999;line-height:1;}
 #dmodal .dclose:hover{color:#333;}
@@ -326,7 +329,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
           <tr><td class="c">{{ t.tm }}</td><td>{{ t.name }}</td>
             <td class="n">{{ '{:,}'.format(t.defect) }}</td>
             <td class="n"><b>{{ '{:,}'.format(t.ppm) if t.ppm is not none else '-' }}</b></td>
-            <td style="font-size:10px;">{% for n, q in t.by[:2] %}<span class="dtrend" data-tm="{{ t.tm }}" data-defect="{{ n }}" data-asof="{{ d.wk }}">{{ n }} {{ '{:,}'.format(q) }}</span>{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
+            <td style="font-size:10px;">{% for b in t.by_info %}<span class="dtrend {{ b.cls }}" data-tm="{{ t.tm }}" data-defect="{{ b.name }}" data-asof="{{ d.wk }}">{{ b.name }} {{ '{:,}'.format(b.qty) }}</span>{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
         {% else %}
           <tr><td colspan="5" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
         {% endfor %}
@@ -489,14 +492,36 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
     });
   }
-  function barChart(pts){
-    var vmax = Math.max.apply(null, pts.map(function(p){ return p.qty; }).concat([1]));
-    return pts.map(function(p){
-      var h = vmax ? Math.round(p.qty / vmax * 100) : 0;
-      return '<div class="col"><span class="v">' + p.qty.toLocaleString() + '</span>' +
-             '<div class="bar" style="height:' + h + '%"></div>' +
-             '<span class="x">' + esc(p.label) + '</span></div>';
-    }).join('');
+  // 막대(불량율 PPM) + 추세선(선형회귀 적합값, 점선)을 SVG로 함께 그린다.
+  function chartSVG(pts, upColor){
+    var W = 480, H = 94, n = pts.length, padTop = 16, padBottom = 16;
+    var bw = W / n;
+    var vals = pts.map(function(p){ return p.ppm == null ? 0 : p.ppm; });
+    var vmax = Math.max.apply(null, vals.concat([1]));
+    var bars = '', labels = '';
+    pts.forEach(function(p, i){
+      var v = p.ppm == null ? 0 : p.ppm;
+      var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
+      var x = i * bw + bw * 0.22, w = bw * 0.56, y = H - padBottom - h;
+      bars += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + Math.max(h, 1) +
+              '" rx="2" fill="#4472c4"></rect>';
+      bars += '<text x="' + (x + w / 2) + '" y="' + (y - 4) + '" font-size="9.5" fill="#333" ' +
+              'text-anchor="middle">' + (p.ppm == null ? '-' : p.ppm.toLocaleString()) + '</text>';
+      labels += '<text x="' + (i * bw + bw / 2) + '" y="' + (H - 3) + '" font-size="9" fill="#666" ' +
+                'text-anchor="middle">' + esc(p.label) + '</text>';
+    });
+    var linePts = [];
+    pts.forEach(function(p, i){
+      if (p.fit == null) return;
+      var v = Math.max(0, p.fit);
+      var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
+      linePts.push((i * bw + bw / 2) + ',' + (H - padBottom - h));
+    });
+    var line = linePts.length >= 2 ?
+      '<polyline points="' + linePts.join(' ') + '" fill="none" stroke="' + upColor +
+      '" stroke-width="2" stroke-dasharray="5,3"></polyline>' : '';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' +
+           bars + line + labels + '</svg>';
   }
 
   document.addEventListener('click', function(e){
@@ -511,13 +536,15 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d || !d.months) { body.innerHTML = '<div class="dload">데이터가 없습니다</div>'; return; }
+        var monthTag = d.month_up ? '<span class="dtag" style="color:#c55a11;background:#fdf1e6;">▲ 증가추세</span>' : '';
+        var weekTag = d.week_up ? '<span class="dtag" style="color:#1f6f3c;background:#e9f5ee;">▲ 증가추세</span>' : '';
         body.innerHTML =
           '<h4>' + esc(d.tm) + ' ' + esc(d.name) + '</h4>' +
-          '<div class="dsub">주요유형: ' + esc(d.defect) + '</div>' +
-          '<div class="dlbl">최근 5개월 추이</div>' +
-          '<div class="dchart">' + barChart(d.months) + '</div>' +
-          '<div class="dlbl">최근 5주 추이</div>' +
-          '<div class="dchart">' + barChart(d.weeks) + '</div>';
+          '<div class="dsub">주요유형: ' + esc(d.defect) + ' · 단위 PPM(불량율)</div>' +
+          '<div class="dlbl">최근 5개월 추이 ' + monthTag + '</div>' +
+          '<div class="dchart">' + chartSVG(d.months, '#c55a11') + '</div>' +
+          '<div class="dlbl">최근 5주 추이 ' + weekTag + '</div>' +
+          '<div class="dchart">' + chartSVG(d.weeks, '#1f6f3c') + '</div>';
       })
       .catch(function(){ body.innerHTML = '<div class="dload">불러오기 실패</div>'; });
   });

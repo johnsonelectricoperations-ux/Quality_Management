@@ -799,14 +799,15 @@ def unassigned_defects(conn, m, date_from, date_to, part, limit=6):
             "more_qty": total - sum(x["qty"] for x in rows[:limit])}
 
 
-def defect_qty(conn, m, tm, defect_group, date_from, date_to):
-    """특정 TM-NO의 특정 대표 불량유형(dgroup 기준)이 기간 내 발생한 공정불량 수량.
-    TOP5 '주요유형' 클릭 시 추이 팝업에 쓴다(2026-08-11 신설)."""
-    prod = m.product.get(tm)
-    if not prod:
-        return 0
-    part = prod[1]
-    total = 0
+def defect_rate(conn, m, tm, defect_group, date_from, date_to):
+    """특정 TM-NO의 특정 대표 불량유형(dgroup 기준)이 기간 내 발생한 공정불량 **수량·불량율(PPM)**.
+    TOP5 '주요유형' 클릭 시 추이 팝업/증가추세 판정에 쓴다(2026-08-11 신설). 불량율은 생산량 대비
+    (수량 기준으로 보면 생산량이 많고 적음에 따라 착시가 생기므로 반드시 비율로 본다 — 사용자 확정)."""
+    prod_info = m.product.get(tm)
+    if not prod_info:
+        return {"qty": 0, "prod": 0, "ppm": None}
+    part = prod_info[1]
+    qty = 0
     for r in conn.execute(
             "SELECT defect_name,SUM(qty) s FROM defect_entry "
             "WHERE status='confirmed' AND tm_no=? AND d BETWEEN ? AND ? GROUP BY defect_name",
@@ -815,5 +816,10 @@ def defect_qty(conn, m, tm, defect_group, date_from, date_to):
             continue
         if m.dgroup(r["defect_name"]) != defect_group:
             continue
-        total += r["s"]
+        qty += r["s"]
+    row = conn.execute("SELECT SUM(qty) s FROM production WHERE tm_no=? AND d BETWEEN ? AND ?",
+                       (tm, date_from, date_to)).fetchone()
+    prod = row["s"] or 0
+    ppm = round(qty / prod * 1_000_000) if prod else None
+    return {"qty": qty, "prod": prod, "ppm": ppm}
     return total

@@ -20,7 +20,7 @@ import datetime as _dt
 import json
 from collections import defaultdict
 
-from . import db, calc
+from . import db, calc, report_week
 
 BUCKETS = ["성형", "소결", "정형", "가공", "기타"]
 BAN_PROCS = ["성형", "소결", "정형", "가공"]        # 반별목표제 대상(기타후공정 제외)
@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 17
+CACHE_VERSION = 18
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -333,8 +333,11 @@ def _top5(conn, m, agg, y, mth, part):
     tot = agg["rq"].get((ym, part, "공정"), 0) or 1
     for r in rows:
         r["share"] = round(r["defect"] / tot * 100, 1)
-        # 주요유형은 2가지만(calc.top5_defect가 이미 2개로 제한하지만 명시적으로 한 번 더 자른다).
-        r["by_txt"] = " / ".join("%s %d" % (n, q) for n, q in r["by"][:2])
+        # 주요유형별로 월별/주별 불량율 추세를 미리 판정해 글자색에 쓴다(2026-08-11 신설) —
+        # 월만 증가:주황 / 주만 증가:녹색 / 둘 다 증가:진한 붉은색. 클릭 팝업과 같은 계산을 쓴다.
+        r["by_info"] = [{"name": n, "qty": q,
+                         "cls": report_week.defect_trend(conn, m, r["tm"], n, ym)["cls"]}
+                        for n, q in r["by"][:2]]
     return rows
 
 

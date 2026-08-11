@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 9
+CACHE_VERSION = 10
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -74,29 +74,71 @@ def week_label(wk):
     return f"{ed.month}월 {nth}주차 ({sd.month}/{sd.day}~{ed.month}/{ed.day})"
 
 
+# 추세선(선형회귀) 상승폭이 구간 평균의 이 비율 이상이면 "증가추세"로 본다 — 미세한 흔들림과
+# 진짜 증가를 구분하기 위한 최소 기준(2026-08-11 사용자 확정).
+TREND_RISE_RATIO = 0.20
+
+
+def _trend_stats(vals):
+    """PPM 시계열(None=생산량 없어 계산불가, 계산에서 제외)의 추세선(선형회귀).
+    반환: (증가추세 여부, 각 지점의 추세선 적합값 리스트 — 그래프에 선으로 그리는 용도).
+    유효 점이 2개 미만이면 적합값도 전부 None(추세선을 그릴 수 없음)."""
+    pts = [(i, v) for i, v in enumerate(vals) if v is not None]
+    fit = [None] * len(vals)
+    if len(pts) < 2:
+        return False, fit
+    n = len(pts)
+    mx = sum(p[0] for p in pts) / n
+    my = sum(p[1] for p in pts) / n
+    den = sum((p[0] - mx) ** 2 for p in pts)
+    if den == 0:
+        return False, fit
+    slope = sum((p[0] - mx) * (p[1] - my) for p in pts) / den
+    intercept = my - slope * mx
+    fit = [slope * i + intercept for i in range(len(vals))]
+    if slope <= 0 or my == 0:
+        return False, fit
+    rise = slope * (pts[-1][0] - pts[0][0])
+    up = (rise / my) >= TREND_RISE_RATIO
+    return up, fit
+
+
 def defect_trend(conn, m, tm, defect_group, asof):
-    """특정 TM-NO·주요유형(대표명)의 최근 5개월/최근 5주 수량 추이 — TOP5 '주요유형' 클릭 팝업용
-    (2026-08-11 신설). asof: 기준일(YYYY-MM-DD). 월마감이면 마감월 말일, 주마감이면 그 주
-    목요일(주차키)을 넘긴다. 월 추이는 달력월, 주 추이는 이 파일의 금~목 주 기준이다."""
+    """특정 TM-NO·주요유형(대표명)의 최근 5개월/최근 5주 **불량율(PPM) 추이** + 증가추세 판정
+    — TOP5 '주요유형' 클릭 팝업 및 글자색 표시용(2026-08-11 신설). 수량이 아니라 불량율로 보는
+    이유는 생산량이 많고 적음에 따른 착시를 없애기 위함(사용자 확정). asof: 기준일(YYYY-MM-DD).
+    월마감이면 마감월 말일, 주마감이면 그 주 목요일(주차키)을 넘긴다. "YYYY-MM"(월마감 ym)을
+    바로 넘겨도 그 달 말일로 변환해 처리한다."""
+    if isinstance(asof, str) and len(asof) == 7:
+        ay, am = int(asof[:4]), int(asof[5:7])
+        asof = "%04d-%02d-%02d" % (ay, am, calendar.monthrange(ay, am)[1])
     asof_d = _dt.date.fromisoformat(asof) if isinstance(asof, str) else asof
     months = calc.trailing_months(asof_d.year, asof_d.month, 5)
     month_pts = []
     for (y, mo) in months:
         d0 = "%04d-%02d-01" % (y, mo)
         d1 = "%04d-%02d-%02d" % (y, mo, calendar.monthrange(y, mo)[1])
-        month_pts.append({"label": "%d월" % mo,
-                          "qty": calc.defect_qty(conn, m, tm, defect_group, d0, d1)})
+        r = calc.defect_rate(conn, m, tm, defect_group, d0, d1)
+        month_pts.append({"label": "%d월" % mo, "ppm": r["ppm"], "qty": r["qty"]})
     wk_end = week_end_of(asof_d)
     week_pts = []
     for i in range(4, -1, -1):
         we = wk_end - _dt.timedelta(days=WEEK_DAYS * i)
         d0, d1 = week_bounds(we)
         sd = _dt.date.fromisoformat(d0)
-        week_pts.append({"label": "%d/%d" % (sd.month, sd.day),
-                         "qty": calc.defect_qty(conn, m, tm, defect_group, d0, d1)})
+        r = calc.defect_rate(conn, m, tm, defect_group, d0, d1)
+        week_pts.append({"label": "%d/%d" % (sd.month, sd.day), "ppm": r["ppm"], "qty": r["qty"]})
+    month_up, month_fit = _trend_stats([p["ppm"] for p in month_pts])
+    week_up, week_fit = _trend_stats([p["ppm"] for p in week_pts])
+    for p, f in zip(month_pts, month_fit):
+        p["fit"] = round(f, 1) if f is not None else None
+    for p, f in zip(week_pts, week_fit):
+        p["fit"] = round(f, 1) if f is not None else None
+    cls = "up-both" if (month_up and week_up) else ("up-month" if month_up else ("up-week" if week_up else ""))
     name = m.product.get(tm, ("?",))[0]
     return {"tm": tm, "name": name, "defect": defect_group,
-            "months": month_pts, "weeks": week_pts}
+            "months": month_pts, "weeks": week_pts,
+            "month_up": month_up, "week_up": week_up, "cls": cls}
 
 
 def recent_weeks(conn, n=13):
@@ -319,7 +361,13 @@ def _process_block(conn, m, daily, wk, part):
 def _top_items(conn, m, wk, part, limit=5):
     """그 주 불량수량 상위 TM-NO + 주요 불량유형(통합 반영)."""
     d0, d1 = week_bounds(wk)
-    return calc.top5_defect(conn, m, d0, d1, part, limit=limit)
+    rows = calc.top5_defect(conn, m, d0, d1, part, limit=limit)
+    for r in rows:
+        # 주요유형별 월별/주별 불량율 증가추세 판정 → 글자색(2026-08-11 신설). 클릭 팝업과 동일 계산.
+        r["by_info"] = [{"name": n, "qty": q,
+                         "cls": defect_trend(conn, m, r["tm"], n, wk)["cls"]}
+                        for n, q in r["by"][:2]]
+    return rows
 
 
 def _issue_block(conn, wk):

@@ -5,7 +5,6 @@
 """
 import os
 import json
-import calendar
 import secrets
 import sqlite3
 import datetime as _dt
@@ -638,12 +637,8 @@ def report_defect_trend(request: Request, tm: str = "", defect: str = "", asof: 
     u = current_user(request)
     if u is None or not tm.strip() or not defect.strip() or not asof.strip():
         return JSONResponse({})
-    asof = asof.strip()
-    if len(asof) == 7:                     # 월마감에서 넘어온 "YYYY-MM" → 그 달 말일로 변환
-        y, mo = int(asof[:4]), int(asof[5:7])
-        asof = "%04d-%02d-%02d" % (y, mo, calendar.monthrange(y, mo)[1])
     conn = db.connect()
-    data = report_week.defect_trend(conn, calc.Masters(conn), tm.strip(), defect.strip(), asof)
+    data = report_week.defect_trend(conn, calc.Masters(conn), tm.strip(), defect.strip(), asof.strip())
     conn.close()
     return JSONResponse(data)
 
