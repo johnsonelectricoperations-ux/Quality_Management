@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 15
+CACHE_VERSION = 16
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -304,8 +304,9 @@ def _ban_block(conn, m, agg, fy, part, upto, top=2):
                 "qty": v["qty"],
                 "dates": ", ".join("%d/%d" % (int(d[5:7]), int(d[8:10])) for d in shown)
                          + (" 외 %d일" % (len(days) - len(shown)) if len(days) > len(shown) else ""),
+                # 주요유형은 2가지만(2026-08-10 확정, 시스템 전체 동일 기준).
                 "defects": " / ".join("%s %d" % (n, q) for n, q in
-                                      sorted(v["by"].items(), key=lambda kv: -kv[1])[:3]),
+                                      sorted(v["by"].items(), key=lambda kv: -kv[1])[:2]),
             })
         vmax = max([v for v in ppm if v] + [t for t in tgt if t] + [0])
         cum_vmax = max([v for v in [cum, ft] if v] + [0])
@@ -332,7 +333,8 @@ def _top5(conn, m, agg, y, mth, part):
     tot = agg["rq"].get((ym, part, "공정"), 0) or 1
     for r in rows:
         r["share"] = round(r["defect"] / tot * 100, 1)
-        r["by_txt"] = " / ".join("%s %d" % (n, q) for n, q in r["by"][:3])
+        # 주요유형은 2가지만(calc.top5_defect가 이미 2개로 제한하지만 명시적으로 한 번 더 자른다).
+        r["by_txt"] = " / ".join("%s %d" % (n, q) for n, q in r["by"][:2])
     return rows
 
 

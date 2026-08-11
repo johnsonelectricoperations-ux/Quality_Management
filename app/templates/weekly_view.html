@@ -105,6 +105,37 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 /* ── 주마감 전용 ── */
 .wk{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
+/* (1) 주요 KPI: Scrap·COPQ·Incident 4개 지표, 통합 기준 4열 1행뿐이라 세로 공간이 많이
+   남는다 — 타일을 슬라이드 높이 전체로 늘려 추이 그래프를 크게 키운다(2026-08-10 요청). */
+.wk4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;height:100%;}
+.wk4 .mtile{height:100%;padding:16px 16px 10px;}
+.wk4 .nm{font-size:14px;}
+.wk4 .vv{font-size:44px;}
+.wk4 .vv small{font-size:17px;}
+.wk4 .cmp{font-size:13px;}
+.wk4 .cmp b{font-size:16px;}
+.wk4 .mini{padding-top:16px;}
+.wk4 .mini .bv{font-size:11px;}
+.wk4 .mini .x{font-size:10.5px;}
+/* (2)(3) 공정별 불량율 막대그래프 — 전주(회색)·금주(파랑/빨강) 막대를 나란히 둬서 비교가
+   바로 보이게 한다(2026-08-10 "그래프도 같이" 요청). */
+.pchart{height:190px;}
+.pchart .col{justify-content:flex-end;}
+.pchart .pair{display:flex;gap:5px;align-items:flex-end;justify-content:center;height:100%;width:100%;}
+.pchart .pair .b{width:34%;border-radius:2px 2px 0 0;min-height:1px;}
+.pchart .pair .prevb{background:#cdd6e6;}
+.pchart .pair .curb{background:linear-gradient(180deg,#4472c4,#2e5c9a);}
+.pchart .pair .curb.over{background:linear-gradient(180deg,#e06666,#c00000);}
+.pchart .vv2{display:flex;gap:5px;justify-content:center;width:100%;font-size:10px;font-weight:700;margin-bottom:2px;}
+.pchart .vv2 .pv{color:#9aa5b8;width:34%;text-align:center;}
+.pchart .vv2 .cv{color:#1f3864;width:34%;text-align:center;}
+.pchart .x b{display:block;color:#1f3864;font-size:12px;}
+.pchart .x span{font-size:9.5px;font-weight:700;}
+.pleg{display:flex;gap:14px;font-size:9.5px;color:#7f7f7f;margin:2px 0 4px;align-items:center;}
+.pleg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:-1px;}
+/* (2)(3) 상단의 공정불량율·셋팅불량율 타일 — KPI 타일과 같은 모양이되 2개만 옆으로 크게. */
+.wk2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+.wk2 .mtile{min-height:150px;}
 .mtile{border:1px solid #d9d9d9;border-radius:6px;padding:9px 11px 6px;display:flex;
   flex-direction:column;min-height:0;}
 .mtile .nm{font-size:12px;font-weight:700;color:#7f7f7f;display:flex;align-items:center;gap:5px;}
@@ -139,16 +170,49 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .lst .it .dt{color:#7f7f7f;flex:none;width:52px;}
 .lst .it .tx{flex:1;min-width:0;}
 .lst .it .tx b{color:#1f3864;}
-.cap3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
-.cap3 .hd{font-size:13px;font-weight:800;padding:5px 8px;border-radius:5px 5px 0 0;color:#fff;}
-.cap3 .od{background:#c00000;} .cap3 .so{background:#ed7d31;} .cap3 .dn2{background:#1f6f3c;}
-.cap3 .bx{border:1px solid #d9d9d9;border-top:0;border-radius:0 0 5px 5px;padding:7px 9px;
-  flex:1;min-height:0;overflow:hidden;}
-.cap3 .col{display:flex;flex-direction:column;min-height:0;}
-.cnt{font-size:11px;opacity:.9;font-weight:700;}
 </style>
 </head>
 <body>
+{# KPI 타일 1개(값 + 전주대비 + 최근 5주 추이그래프+목표선). (1)(2)(3) 슬라이드가 공용으로 쓴다. #}
+{% macro kpi_tile(r, t) %}
+<div class="mtile">
+  <div class="nm">{{ r.name }}{% if r.est %}<span class="est">추정</span>{% endif %}</div>
+  <div class="vv">{{ '%.*f'|format(r.dec, r.cur) if r.dec else '{:,}'.format(r.cur) }}<small>{{ r.unit }}</small></div>
+  <div class="cmp">
+    전주 {{ '%.*f'|format(r.dec, r.prev) if r.dec else '{:,}'.format(r.prev) }}{{ r.unit }}
+    {% if r.delta %}
+      <b class="{{ 'up' if r.worse else 'dn' }}">{{ '▲' if r.delta > 0 else '▼' }}
+        {{ '%.*f'|format(r.dec, r.delta|abs) if r.dec else '{:,}'.format(r.delta|abs) }}</b>
+    {% else %}<b style="color:#7f7f7f;">－</b>{% endif %}
+    {% if t.target %}
+    {# 그래프 목표 점선을 숫자로도 보여준다(2026-08-10 요청) — 점선만으로는 정확한 값을 읽기 어렵다.
+       DB의 target.value는 항상 REAL(float)이라 dec=0인 지표(PPM 등)는 '{:,}'로 그냥 찍으면
+       "1,670.0"처럼 소수점이 남는다 — 고정 소수자리 포맷으로 항상 dec자리로 맞춘다. #}
+    <span style="color:#ed7d31;font-weight:700;margin-left:6px;">목표 {{ '{:,.{}f}'.format(t.target, t.dec) }}{{ r.unit }}</span>
+    {% endif %}
+  </div>
+  <div class="mini" title="최근 {{ t['values']|length }}주 추이">
+    {% if t.target %}
+    {# 목표선. 막대 높이와 같은 비율(74%)로 맞춰 눈금이 어긋나지 않게 한다. #}
+    <div class="tl" style="bottom:calc({{ (t.target / t.vmax * 100)|round(1) }}% * 0.74 + 14px)"></div>
+    {% endif %}
+    {% for v in t['values'] %}
+    <div class="col {{ 'cur' if loop.last }}">
+      {% if v is none %}
+      {# 데이터가 없는 주 — 0 막대로 그리면 '불량 0'으로 오해되므로 자리표시만 둔다. #}
+      <div class="nod" title="데이터 없음">–</div>
+      {% else %}
+      {# 막대마다 값을 작게 얹는다 — 그래프만으로 수치를 읽을 수 있게. #}
+      <div class="bv">{{ '%.*f'|format(t.dec, v) if t.dec else '{:,}'.format(v) }}</div>
+      <div class="bar" style="height:{{ (v / t.vmax * 74)|round(1) }}%"></div>
+      {% endif %}
+      {# 5주뿐이라 x축 날짜는 하나도 빼지 않고 전부 표시한다(격주로 비우면 정렬이 흐트러진다). #}
+      <div class="x">{{ t.labels[loop.index0] }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
 <div id="stage">
 
 <!-- 표지 -->
@@ -159,130 +223,105 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   <div class="badge2">CONFIDENTIAL</div>
 </section>
 
-<!-- (1) 주간 KPI 현황 — 1PART / 2PART 각 1장 (통합은 보지 않음, 2026-08-10 확정) -->
-{% for pl in ['1PART','2PART'] %}
+<!-- (1) 주요 KPI 현황 — Scrap Quantity·Scrap Cost·COPQ·Customer Incident, **통합만**(2026-08-10 확정
+     — 파트별 상세는 이미 (2)(3) 슬라이드에서 보므로 요약 장은 전사 숫자 하나면 충분하다).
+     공정불량율·셋팅불량율은 TOP5와 함께 볼 수 있도록 (2)(3) 파트별 슬라이드로 옮겼고,
+     개선대책 진행 현황 슬라이드는 삭제했다. -->
 <section class="slide">
-  <div class="stitle">(1) 주간 KPI 현황 <small>{{ pl }} · {{ d.start }} ~ {{ d.end }}</small></div>
+  <div class="stitle">(1) 주요 KPI 현황 <small>통합 · Scrap · COPQ · Customer Incident · {{ d.start }} ~ {{ d.end }}</small></div>
   <div class="body">
-    <div class="wk">
-      {% for r in d.kpi[pl].rows %}
-      <div class="mtile">
-        <div class="nm">{{ r.name }}{% if r.est %}<span class="est">추정</span>{% endif %}</div>
-        <div class="vv">{{ '%.*f'|format(r.dec, r.cur) if r.dec else '{:,}'.format(r.cur) }}<small>{{ r.unit }}</small></div>
-        <div class="cmp">
-          전주 {{ '%.*f'|format(r.dec, r.prev) if r.dec else '{:,}'.format(r.prev) }}{{ r.unit }}
-          {% if r.delta %}
-            <b class="{{ 'up' if r.worse else 'dn' }}">{{ '▲' if r.delta > 0 else '▼' }}
-              {{ '%.*f'|format(r.dec, r.delta|abs) if r.dec else '{:,}'.format(r.delta|abs) }}</b>
-          {% else %}<b style="color:#7f7f7f;">－</b>{% endif %}
-        </div>
-        {% set t = d.trend[pl][r.key] %}
-        <div class="mini" title="최근 {{ t['values']|length }}주 추이">
-          {% if t.target %}
-          {# 목표선. 막대 높이와 같은 비율(86%)로 맞춰 눈금이 어긋나지 않게 한다. #}
-          <div class="tl" style="bottom:calc({{ (t.target / t.vmax * 100)|round(1) }}% * 0.74 + 14px)"></div>
-          {% endif %}
-          {% for v in t['values'] %}
-          <div class="col {{ 'cur' if loop.last }}">
-            {% if v is none %}
-            {# 데이터가 없는 주 — 0 막대로 그리면 '불량 0'으로 오해되므로 자리표시만 둔다. #}
-            <div class="nod" title="데이터 없음">–</div>
-            {% else %}
-            {# 막대마다 값을 작게 얹는다(2026-08-10 요청) — 그래프만으로 수치를 읽을 수 있게. #}
-            <div class="bv">{{ '%.*f'|format(t.dec, v) if t.dec else '{:,}'.format(v) }}</div>
-            <div class="bar" style="height:{{ (v / t.vmax * 74)|round(1) }}%"></div>
-            {% endif %}
-            {# 5주뿐이라 x축 날짜는 하나도 빼지 않고 전부 표시한다(격주로 비우면 정렬이 흐트러진다). #}
-            <div class="x">{{ t.labels[loop.index0] }}</div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
+    <div class="wk4">
+      {% for r in d.kpi['통합'].rows if r.key in ['scrap_qty_pct','scrap_cost_pct','copq_pct','incident'] %}
+        {{ kpi_tile(r, d.trend['통합'][r.key]) }}
       {% endfor %}
     </div>
   </div>
   <div class="foot">
-    <span>Page {{ loop.index + 1 }} · 그래프는 최근 {{ d.trend[pl].proc_ppm['values']|length }}주 추이(맨 오른쪽이 이번 주, 주황 점선은 목표) · Scrap Cost·COPQ는 월 SVP를 생산금액 비중으로 나눈 <b>추정치</b>입니다.</span>
+    <span>Page 2 · 그래프는 최근 {{ d.trend['통합'].proc_ppm['values']|length }}주 추이(맨 오른쪽이 이번 주, 주황 점선은 목표) · Scrap Cost·COPQ는 월 SVP를 생산금액 비중으로 나눈 <b>추정치</b>입니다.</span>
     <span>Confidential</span></div>
+</section>
+
+<!-- (2)(3) 파트별: 공정불량율·셋팅불량율(그래프) + TOP5 -->
+{% for pl, pn, pg in [('1PART','생산1P',3), ('2PART','생산2P',4)] %}
+<section class="slide">
+  <div class="stitle">({{ pg - 1 }}) {{ pn }} 공정불량율 현황 <small>{{ d.start }} ~ {{ d.end }}</small></div>
+  <div class="body" style="display:flex;flex-direction:column;gap:10px;">
+    <div class="wk2">
+      {% for r in d.kpi[pl].rows if r.key in ['proc_ppm','set_ppm'] %}
+        {{ kpi_tile(r, d.trend[pl][r.key]) }}
+      {% endfor %}
+    </div>
+    <div style="flex:1;min-height:0;overflow:hidden;">
+      <h3 style="font-size:13px;font-weight:800;color:#1f3864;margin-bottom:5px;">공정별 불량율
+        <small style="font-weight:600;color:#7f7f7f;">(PPM) · 합계 {{ '{:,}'.format(d.proc[pl].cur) }}
+          (전주 {{ '{:,}'.format(d.proc[pl].prev) }},
+          {{ '{:+,}'.format(d.proc[pl].delta) if d.proc[pl].delta else '증감없음' }})</small></h3>
+      {# 공정마다 막대 2개(전주 회색 · 금주 파랑/빨강)를 나란히 둬서 비교가 그래프만으로 보이게
+         한다. 금주가 전주보다 늘었으면 빨강(over) — 색만 봐도 나빠진 공정이 바로 보인다
+         (2026-08-10 "그래프도 같이" 요청). #}
+      <div class="pleg"><i style="background:#cdd6e6;"></i>전주 <i style="background:#4472c4;margin-left:8px;"></i>금주</div>
+      <div class="mchart pchart">
+        {% for r in d.proc[pl].rows %}
+        <div class="col">
+          <div class="vv2"><span class="pv">{{ '{:,}'.format(r.prev) }}</span><span class="cv">{{ '{:,}'.format(r.cur) }}</span></div>
+          <div class="pair">
+            <div class="b prevb" style="height:{{ (r.prev / d.proc[pl].vmax * 100)|round(1) if d.proc[pl].vmax else 0 }}%"></div>
+            <div class="b curb {{ 'over' if r.delta > 0 }}"
+                 style="height:{{ (r.cur / d.proc[pl].vmax * 100)|round(1) if d.proc[pl].vmax else 0 }}%"></div>
+          </div>
+          <div class="x"><b>{{ r.name }}</b>
+            <span style="color:{{ '#c00000' if r.delta > 0 else ('#1f6f3c' if r.delta < 0 else '#7f7f7f') }};">
+              {{ '▲' if r.delta > 0 else ('▼' if r.delta < 0 else '－') }}{{ r.delta|abs if r.delta else '' }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="font-size:9.5px;color:#7f7f7f;margin:2px 0 6px;">
+        생산수량 {{ '{:,}'.format(d.proc[pl].prod) }}ea (전주 {{ '{:,}'.format(d.proc[pl].prod_prev) }}ea) 기준</div>
+      <h3 style="font-size:13px;font-weight:800;color:#1f3864;margin:8px 0 5px;">TOP5 품목
+        <small style="font-weight:600;color:#7f7f7f;">불량수량 순</small></h3>
+      <table class="wtab">
+        <thead><tr><th style="width:12%;">TM-NO</th><th>품명</th><th style="width:11%;">불량</th>
+          <th style="width:14%;">불량율<small style="font-weight:600;color:#7f7f7f;">(PPM)</small></th>
+          <th style="width:30%;">주요유형</th></tr></thead>
+        <tbody>
+        {% for t in d.top[pl][:5] %}
+          <tr><td class="c">{{ t.tm }}</td><td>{{ t.name }}</td>
+            <td class="n">{{ '{:,}'.format(t.defect) }}</td>
+            <td class="n"><b>{{ '{:,}'.format(t.ppm) if t.ppm is not none else '-' }}</b></td>
+            <td style="font-size:10px;">{% for n, q in t.by[:2] %}{{ n }} {{ '{:,}'.format(q) }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
+        {% else %}
+          <tr><td colspan="5" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {# 품번이 없는 불량은 위 TOP5(품목별)에 구조적으로 못 들어가서 건별로 따로 싣는다. #}
+      {% set ua = d.unassigned[pl] %}
+      {% if ua.n %}
+      <h3 style="font-size:13px;font-weight:800;color:#1f3864;margin:8px 0 5px;">품번 미지정 {{ ua.n }}건 · {{ '{:,}'.format(ua.total) }} EA</h3>
+      <table class="wtab">
+        <thead><tr><th style="width:14%;">발생일</th><th>주요유형</th>
+          <th style="width:14%;">공정</th><th style="width:16%;">불량(EA)</th></tr></thead>
+        <tbody>
+        {% for r in ua.rows %}
+          <tr><td class="c">{{ r.d[5:] }}</td><td>{{ r.name }}</td>
+            <td class="c">{{ r.process }}</td><td class="n">{{ '{:,}'.format(r.qty) }}</td></tr>
+        {% endfor %}
+        {% if ua.more %}
+          <tr><td colspan="3" style="color:#7f7f7f;">… 외 {{ ua.more }}건</td>
+            <td class="n" style="color:#7f7f7f;">{{ '{:,}'.format(ua.more_qty) }}</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+  <div class="foot"><span>Page {{ pg }}</span><span>Confidential</span></div>
 </section>
 {% endfor %}
 
-<!-- (2) 공정별 불량 현황 -->
+<!-- (4) 주요 품질 이슈 -->
 <section class="slide">
-  <div class="stitle">(2) 공정별 불량율 현황 <small>공정불량 PPM · 금주 vs 전주 · TOP5는 불량수량 순</small></div>
-  <div class="body">
-    <div class="grid2">
-      {% for pl in ['1PART','2PART'] %}
-      <div class="card">
-        <h3>{{ pl }}</h3>
-        <table class="wtab">
-          <thead><tr><th style="width:20%;">공정</th><th style="width:19%;">불량수량</th>
-            <th style="width:21%;">불량율<small style="font-weight:600;color:#7f7f7f;">(PPM)</small></th>
-            <th style="width:20%;">전주</th><th>증감</th></tr></thead>
-          <tbody>
-          {% for r in d.proc[pl].rows %}
-            <tr><td class="c">{{ r.name }}</td>
-              <td class="n" style="color:#7f7f7f;">{{ '{:,}'.format(r.qty) }}</td>
-              <td class="n"><b>{{ '{:,}'.format(r.cur) }}</b></td>
-              <td class="n">{{ '{:,}'.format(r.prev) }}</td>
-              <td class="n {{ 'up' if r.delta > 0 else ('dn' if r.delta < 0 else '') }}">
-                {{ '{:+,}'.format(r.delta) if r.delta else '－' }}</td></tr>
-          {% endfor %}
-            <tr class="sum"><td class="c">합계</td>
-              <td class="n">{{ '{:,}'.format(d.proc[pl].qty) }}</td>
-              <td class="n">{{ '{:,}'.format(d.proc[pl].cur) }}</td>
-              <td class="n">{{ '{:,}'.format(d.proc[pl].prev) }}</td>
-              <td class="n {{ 'up' if d.proc[pl].delta > 0 else ('dn' if d.proc[pl].delta < 0 else '') }}">
-                {{ '{:+,}'.format(d.proc[pl].delta) if d.proc[pl].delta else '－' }}</td></tr>
-          </tbody>
-        </table>
-        <div style="font-size:9.5px;color:#7f7f7f;margin-top:2px;">
-          생산수량 {{ '{:,}'.format(d.proc[pl].prod) }}ea (전주 {{ '{:,}'.format(d.proc[pl].prod_prev) }}ea) 기준</div>
-        <h3 style="margin-top:9px;">TOP5 품목 <small style="font-weight:600;color:#7f7f7f;">불량수량 순</small></h3>
-        <table class="wtab">
-          <thead><tr><th style="width:19%;">TM-NO</th><th>품명</th><th style="width:15%;">불량</th>
-            <th style="width:17%;">불량율<small style="font-weight:600;color:#7f7f7f;">(PPM)</small></th>
-            <th style="width:26%;">주요 유형</th></tr></thead>
-          <tbody>
-          {% for t in d.top[pl][:5] %}
-            <tr><td class="c">{{ t.tm }}</td><td>{{ t.name }}</td>
-              <td class="n">{{ '{:,}'.format(t.defect) }}</td>
-              <td class="n"><b>{{ '{:,}'.format(t.ppm) if t.ppm is not none else '-' }}</b></td>
-              <td style="font-size:10px;">{% for n, q in t.by[:2] %}{{ n }} {{ '{:,}'.format(q) }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
-          {% else %}
-            <tr><td colspan="5" class="c" style="color:#a0a0a0;">해당 없음</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        {# 품번이 없는 불량은 위 TOP5(품목별)에 구조적으로 못 들어가서 건별로 따로 싣는다. #}
-        {% set ua = d.unassigned[pl] %}
-        {% if ua.n %}
-        <h3 style="margin-top:8px;">품번 미지정 {{ ua.n }}건 · {{ '{:,}'.format(ua.total) }} EA</h3>
-        <table class="wtab">
-          <thead><tr><th style="width:17%;">발생일</th><th>불량유형</th>
-            <th style="width:16%;">공정</th><th style="width:20%;">불량(EA)</th></tr></thead>
-          <tbody>
-          {% for r in ua.rows %}
-            <tr><td class="c">{{ r.d[5:] }}</td><td>{{ r.name }}</td>
-              <td class="c">{{ r.process }}</td><td class="n">{{ '{:,}'.format(r.qty) }}</td></tr>
-          {% endfor %}
-          {% if ua.more %}
-            <tr><td colspan="3" style="color:#7f7f7f;">… 외 {{ ua.more }}건</td>
-              <td class="n" style="color:#7f7f7f;">{{ '{:,}'.format(ua.more_qty) }}</td></tr>
-          {% endif %}
-          </tbody>
-        </table>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  <div class="foot"><span>Page 4</span><span>Confidential</span></div>
-</section>
-
-<!-- (3) 주요 품질 이슈 -->
-<section class="slide">
-  <div class="stitle">(3) 주요 품질 이슈 <small>금주 등록분</small></div>
+  <div class="stitle">(4) 주요 품질 이슈 <small>금주 등록분</small></div>
   <div class="body">
     <div class="grid2">
       <div class="card"><h3>내부품질 Issue ({{ d.issues.internal|length }}건)</h3>
@@ -312,32 +351,6 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   <div class="foot"><span>Page 5</span><span>Confidential</span></div>
 </section>
 
-<!-- (4) 개선대책 진행 현황 -->
-<section class="slide">
-  <div class="stitle">(4) 개선대책 진행 현황 <small>현장품질회의 대책서 기준</small></div>
-  <div class="body">
-    <div class="cap3">
-      {% for key, cls, ttl in [('overdue','od','기한 초과'), ('soon','so','금주 마감 예정'), ('done','dn2','지난주 완료')] %}
-      <div class="col">
-        <div class="hd {{ cls }}">{{ ttl }} <span class="cnt">{{ d.capa[key]|length }}건</span></div>
-        <div class="bx lst">
-          {% for a in d.capa[key][:8] %}
-          <div class="it"><span class="dt">{{ a.due[5:] if a.due else '-' }}</span>
-            <span class="tx"><b>{{ a.title or '(제목 없음)' }}</b>
-              <br>{{ a.content }}
-              <br><span style="color:#7f7f7f;">{{ a.dept or '-' }}{% if a.tm_no %} · {{ a.tm_no }}{% endif %}</span></span></div>
-          {% else %}<div class="empty">해당 없음</div>{% endfor %}
-          {% if d.capa[key]|length > 8 %}
-          <div style="font-size:10.5px;color:#7f7f7f;padding-top:4px;">… 외 {{ d.capa[key]|length - 8 }}건</div>
-          {% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  <div class="foot"><span>Page 6</span><span>Confidential</span></div>
-</section>
-
 <!-- (5) 품질 주요 업무현황 -->
 <section class="slide">
   <div class="stitle">(5) 품질 주요 업무현황</div>
@@ -353,7 +366,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page 7</span><span>Confidential</span></div>
+  <div class="foot"><span>Page 6</span><span>Confidential</span></div>
 </section>
 
 </div>

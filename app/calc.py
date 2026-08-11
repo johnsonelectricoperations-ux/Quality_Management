@@ -759,7 +759,8 @@ def top5_defect(conn, m, date_from, date_to, part, limit=5):
         prod_by_tm[r["tm_no"]] += r["s"]
     rows = []
     for tm, a in agg.items():
-        by = sorted(a["by"].items(), key=lambda x: x[1], reverse=True)[:3]
+        # 주요유형은 2가지만 보여준다(2026-08-10 확정 — 3가지는 표가 빽빽해 가독성이 떨어졌다).
+        by = sorted(a["by"].items(), key=lambda x: x[1], reverse=True)[:2]
         prod = prod_by_tm.get(tm, 0)
         ppm = round(a["defect"] / prod * 1_000_000) if prod else None
         rows.append({"tm": tm, "name": m.product.get(tm, ("?",))[0],

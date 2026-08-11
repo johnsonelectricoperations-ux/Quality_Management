@@ -22,16 +22,16 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 6
+CACHE_VERSION = 8
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
 
 CONTENTS = [
-    "(1) 주간 KPI 현황 (1PART / 2PART)",
-    "(2) 공정별 불량 현황",
-    "(3) 주요 품질 이슈",
-    "(4) 개선대책 진행 현황",
+    "(1) 주요 KPI 현황 (Scrap · COPQ · Incident)",
+    "(2) 생산1P 공정불량율 현황",
+    "(3) 생산2P 공정불량율 현황",
+    "(4) 주요 품질 이슈",
     "(5) 품질 주요 업무현황",
 ]
 
@@ -282,10 +282,12 @@ def _process_block(conn, m, daily, wk, part):
         rows.append({"name": proc, "qty": c, "qty_prev": p,
                      "cur": cr, "prev": pr, "delta": cr - pr})
     tot_c, tot_p = sum(r["qty"] for r in rows), sum(r["qty_prev"] for r in rows)
+    # 공정별 막대그래프의 축 높이 — 금주·전주 값 중 가장 큰 것에 맞춘다(2026-08-10, 그래프 추가).
+    vmax = max([r["cur"] for r in rows] + [r["prev"] for r in rows] + [0])
     return {"rows": rows, "qty": tot_c, "qty_prev": tot_p,
             "cur": ppm(tot_c, cur_prod), "prev": ppm(tot_p, prv_prod),
             "delta": ppm(tot_c, cur_prod) - ppm(tot_p, prv_prod),
-            "prod": cur_prod, "prod_prev": prv_prod}
+            "prod": cur_prod, "prod_prev": prv_prod, "vmax": vmax}
 
 
 def _top_items(conn, m, wk, part, limit=5):
@@ -306,24 +308,6 @@ def _issue_block(conn, wk):
     return {"internal": internal, "customer": customer}
 
 
-def _capa_block(conn, wk):
-    """개선대책 진행 현황 — 월요일 아침에 '지난주에 하기로 한 게 됐나'를 확인하는 장.
-    기한초과 / 금주 마감예정 / 지난주 완료 세 덩어리로 나눈다."""
-    d0, d1 = week_bounds(wk)
-    nxt0 = (_dt.date.fromisoformat(d1) + _dt.timedelta(days=1)).isoformat()
-    nxt1 = (_dt.date.fromisoformat(d1) + _dt.timedelta(days=WEEK_DAYS)).isoformat()
-    sql = ("SELECT a.id,a.capa_id,a.side,a.content,a.due,a.done,a.done_at, "
-           "c.title,c.dept,c.cause_process,c.tm_no,c.equipment "
-           "FROM capa_action a JOIN capa c ON c.id=a.capa_id WHERE ")
-    over = [dict(r) for r in conn.execute(
-        sql + "a.done=0 AND a.due<>'' AND a.due<? ORDER BY a.due", (nxt0,))]
-    soon = [dict(r) for r in conn.execute(
-        sql + "a.done=0 AND a.due BETWEEN ? AND ? ORDER BY a.due", (nxt0, nxt1))]
-    done = [dict(r) for r in conn.execute(
-        sql + "a.done=1 AND a.due BETWEEN ? AND ? ORDER BY a.due", (d0, d1))]
-    return {"overdue": over, "soon": soon, "done": done}
-
-
 def _texts(conn, wk):
     saved = {r["section"]: r["content"] for r in conn.execute(
         "SELECT section, content FROM report_text WHERE ym=?", (wk,))}
@@ -334,20 +318,22 @@ def build(conn, m, wk):
     """주마감 보고서 payload 조립."""
     daily = calc.compute_daily(conn, m)
     d0, d1 = week_bounds(wk)
-    # KPI는 1PART/2PART로만 본다 — 통합은 보지 않는다(2026-08-10 사용자 확정).
     parts = [("VMS PART", "1PART"), ("TM PART", "2PART")]
+    # 공정불량율·셋팅불량율·TOP5는 1PART/2PART로만 본다(파트마다 원인공정이 달라 통합은 의미가
+    # 옅다). 다만 (1) 요약 슬라이드의 Scrap·COPQ·Incident는 **통합만** 본다(2026-08-10 확정) —
+    # 파트별 상세는 (2)(3) 슬라이드에서 이미 보므로 요약 장은 전사 숫자 하나로 충분하다.
+    kpi_parts = parts + [("통합", "통합")]
     return {
         "v": CACHE_VERSION, "wk": wk, "start": d0, "end": d1, "label": week_label(wk),
         "contents": CONTENTS,
-        "kpi": {lbl: _kpi_block(conn, m, daily, wk, p) for p, lbl in parts},
-        "trend": {lbl: _trend(conn, m, daily, wk, p) for p, lbl in parts},
+        "kpi": {lbl: _kpi_block(conn, m, daily, wk, p) for p, lbl in kpi_parts},
+        "trend": {lbl: _trend(conn, m, daily, wk, p) for p, lbl in kpi_parts},
         "proc": {lbl: _process_block(conn, m, daily, wk, p) for p, lbl in parts},
         "top": {lbl: _top_items(conn, m, wk, p) for p, lbl in parts},
         # 품번이 없는 불량(설비 단위 폐기 등)은 TOP5에 못 들어가므로 건별로 따로 싣는다.
         "unassigned": {lbl: calc.unassigned_defects(conn, m, d0, d1, p, limit=4)
                        for p, lbl in parts},
         "issues": _issue_block(conn, wk),
-        "capa": _capa_block(conn, wk),
         "texts": _texts(conn, wk),
         "built_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
     }

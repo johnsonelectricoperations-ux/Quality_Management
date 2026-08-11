@@ -237,7 +237,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       <h3>공정불량 TOP 5 — {{ d.ym }}</h3>
       <table>
         <thead><tr><th style="width:28px;">#</th><th>TM-NO</th><th class="l">품명</th>
-          <th>생산/입고(EA)</th><th>불량(EA)</th><th>불량율(PPM)</th><th>점유율</th><th class="l">주요 불량 내용</th></tr></thead>
+          <th>생산/입고(EA)</th><th>불량(EA)</th><th>불량율(PPM)</th><th>점유율</th><th class="l">주요유형</th></tr></thead>
         <tbody>
         {% for r in d.top5[lbl] %}
           <tr><td>{{ loop.index }}</td><td>{{ r.tm }}</td><td class="l">{{ r.name }}</td>
@@ -256,7 +256,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       <h3 style="margin-top:7px;">품번 미지정 불량 — {{ ua.n }}건 {{ num(ua.total) }} EA</h3>
       <table>
         <thead><tr><th style="width:28px;">#</th><th style="width:88px;">발생일</th>
-          <th class="l">불량유형</th><th style="width:64px;">공정</th><th style="width:88px;">불량(EA)</th></tr></thead>
+          <th class="l">주요유형</th><th style="width:64px;">공정</th><th style="width:88px;">불량(EA)</th></tr></thead>
         <tbody>
         {% for r in ua.rows %}
           <tr><td>{{ loop.index }}</td><td>{{ r.d[5:] }}</td><td class="l">{{ r.name }}</td>
