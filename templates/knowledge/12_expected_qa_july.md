@@ -74,6 +74,19 @@
 - 한국어: 냉각대 수리 후 CO2 비율이 조정되지 않는 현상이 있었음. 변성로 1·2호기를 배관으로 통합 운영하다 보니 압력차로 CO2값이 수시로 변했던 것. 7월 1일부터 두 호기를 분할 운영해서 해결했고, 호기별로 Air:LNG 비율 기준도 따로 세웠음 — 1호기 3대 1, 2호기 2.6대 1.
 - 영어: "After the repair, the CO2 ratio would not adjust. The two generators shared piping, so pressure differences kept changing the value. Since July 1st we run them separately, and we set a ratio standard for each unit."
 
+### Q15-1. 지난달에는 7월 6일에 수리 완료했다고 했는데, 8D에는 6월 14일로 되어 있다. 어느 쪽인가?
+- 한국어: 냉각대 교체 같은 설비 수리는 6월 중에 완료했고, 가스 조건 안정화 확인과 재발 방지 대책 적용까지는 7월 중순에 마무리했음. 정확한 일자는 확인해서 이메일로 회신하겠음.
+- 영어: "The equipment repair, including the coil replacement, was done in June. Stabilizing the gas condition and completing the prevention actions ran through mid-July. Let me confirm the exact dates and follow up by email."
+- **주의: 특정 날짜를 단정하지 말 것. 자료 간 불일치가 있어 확인이 필요한 상태임.**
+
+### Q15-2. 변성로가 2대라고 했는데, 나머지 1대는 안전한가?
+- 한국어: 나머지 1대에도 동일한 점검 주기를 적용하고 있음. 7월부터는 두 호기를 분할 운영하면서 호기별로 Air:LNG 비율 기준을 따로 세웠고, CO2값도 매일 점검하고 있음.
+- 영어: "We apply the same regular checks to the second unit. Since July we run them separately, with a gas ratio standard for each unit and a daily CO2 check."
+
+### Q15-3. 고장 기간에 고객 납품 영향은 없었나?
+- 한국어: 납품 영향 없음. 라인을 세우면 고객 라인 정지로 이어지기 때문에 나머지 1대로 가동을 유지했고, 불량품은 전수 선별로 걸러내 양품만 출하했음.
+- 영어: "No. We kept the line running to protect the customer's supply, using the second generator. We sorted 100 percent of the parts, so only good parts were shipped."
+
 ### Q16. 브레이징 불량이 8월에도 계속되면 어떻게 할 건가?
 - 한국어: 12시간마다 30개씩 모니터링하는 프로세스로 조기에 감지되므로, 발생 시 즉시 원인을 확인할 수 있음. 8월 데이터로 대책 효과를 확인해서 공유하겠고, 효과가 부족하면 추가 대책을 검토하겠음.
 - 영어: "Our twelve-hour sampling process will detect it early. I will confirm the effect with August data. If it is not enough, we will add further countermeasures."
@@ -161,8 +174,25 @@
 - 영어: "That was a June item and it is closed. There was no new cost in July."
 
 ### Q34. 워런티 비용은 이번 달 얼마인가?
-- 한국어: 7월에는 신규 등록 건이 없어 0원이며, YTD 누계는 6월과 동일하게 유지되고 있음.
-- 영어: "There were no new warranty items in July. The year-to-date total is unchanged from June."
+- 한국어: 7월에는 신규 등록 건이 없어 0원이며, YTD 누계는 6월과 동일하게 36.6백만원으로 유지되고 있음.
+- 영어: "There were no new warranty items in July. The year-to-date total is unchanged at 36.6 million won."
+
+### Q34-1. YTD 워런티/선별 비용 36.6백만원의 구성은?
+- 한국어: 6건임. 최대는 GMK 외관 crack 22.6백만원, 그다음 만도 damping force 9.0백만원. 나머지는 소액으로 MBC 반품점검 2.4, ZF 풀리 녹 1.2, 만도 필드클레임 1.0, 만도 라인 스크랩 0.4백만원임. 외부 회수 0.4백만원 합의했고 분쟁 중인 건은 없음.
+- 영어: "There are six items. The biggest is the GMK crack issue at 22.6 million won, then the Mando damping force issue at 9 million. The other four are small. We agreed a recovery of 0.4 million, and nothing is in dispute."
+
+### Q34-2. GMK 22.6백만원이 제일 큰데 그건 뭔가? 왜 이번 발표에서 안 다뤘나?
+- 한국어: GMK 외관 crack 이슈로, 성형 초기 세팅 시 springback 보상 부족이 원인임. 세팅 불량 카드 관리와 QC 검사원 교차 확인을 시행 중이고, 100% 자동 crack 검출을 위한 비파괴검사 설비를 도입할 예정임. 이번 달 신규 발생분이 아니라 누계 항목이라 별도로 다루지 않았음.
+- 영어: "That is the appearance crack issue at GMK. The cause was insufficient springback compensation during the initial compacting setting. We manage setting defect cards with QC cross-checks, and we will install non-destructive inspection for 100 percent automatic crack detection. It is a year-to-date item, not a new July cost."
+
+### Q34-3. ZF 풀리 녹 이슈는 뭔가?
+- 한국어: 물류 운송 중 전용 용기에 수분이 유입되어 풀리에 녹이 발생한 건임. 내부 용기 타입을 변경해 제품을 하나씩 독립 적재하고 점접촉으로 뜨게 해서 재발을 방지했음. 종결된 건임.
+- 영어: "Moisture got into the shipping container during transport and caused rust on the pulleys. We changed the container design, so each product is loaded separately with minimal contact. This issue is closed."
+
+### Q34-4. 만도 damping force 이슈의 원인과 현재 상태는?
+- 한국어: 제품은 Self Body TM985임. 성형 공정에서 CRACK이 발생했고, 고객 조립 후 그 부위로 오일이 새어 감쇄력 불량으로 이어진 건임. 3자 선별 완료로 추가 비용은 없고, 금형 공차를 줄여 정밀도를 높인 개선 tooling을 이미 적용했으며, LOT별로 사내 CRACK 검사를 하고 있음. 종결된 이슈임.
+- 영어: "The product is the Self Body, TM985. A crack occurred during compacting. After assembly at Mando, oil leaked through the crack and caused the damping force failure. Sorting is complete with no additional cost, the improved tooling is applied, and we inspect every lot in-house. This issue is closed."
+- **주의: 이 건은 고객 단계에서 발견된 것이므로 "고객 유출 없음"과 섞어 답하지 말 것.**
 
 ### Q35. VMS Part 비용이 12.3에서 16.4백만원으로 늘었는데 왜인가?
 - 한국어: VMS Part는 특정 한 건이 아니라 녹·깨짐·찍힘 등 여러 항목이 고르게 늘었음. 수량도 28천 개에서 40천 개로 증가했음. 개별 항목별 상세는 정리해서 회신하겠음.
