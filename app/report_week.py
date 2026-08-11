@@ -22,7 +22,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -343,6 +343,9 @@ def build(conn, m, wk):
         "trend": {lbl: _trend(conn, m, daily, wk, p) for p, lbl in parts},
         "proc": {lbl: _process_block(conn, m, daily, wk, p) for p, lbl in parts},
         "top": {lbl: _top_items(conn, m, wk, p) for p, lbl in parts},
+        # 품번이 없는 불량(설비 단위 폐기 등)은 TOP5에 못 들어가므로 건별로 따로 싣는다.
+        "unassigned": {lbl: calc.unassigned_defects(conn, m, d0, d1, p, limit=4)
+                       for p, lbl in parts},
         "issues": _issue_block(conn, wk),
         "capa": _capa_block(conn, wk),
         "texts": _texts(conn, wk),

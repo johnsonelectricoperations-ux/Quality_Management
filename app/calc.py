@@ -766,3 +766,33 @@ def top5_defect(conn, m, date_from, date_to, part, limit=5):
                      "prod": prod, "defect": a["defect"], "ppm": ppm, "by": by})
     rows.sort(key=lambda x: x["defect"], reverse=True)
     return rows[:limit]
+
+
+def unassigned_defects(conn, m, date_from, date_to, part, limit=6):
+    """**품번(TM-NO)이 비어 있는 불량**을 건별로 돌려준다 — 2026-08-10 신설.
+
+    TOP5는 품목(TM-NO)별 순위라 품번이 없는 건은 구조적으로 들어갈 수 없다. 그런데 실제로는
+    '정전폐기 녹 2,435EA'처럼 큰 건이 여기 들어 있어(설비 단위 사건이라 품번을 특정할 수 없다)
+    총량·공정별에는 잡히는데 TOP5에서만 안 보였다. 그래서 **별도 표로 건별로** 보여준다.
+
+    주의: 이런 건은 단가를 찾을 키(품번)가 없어 **Scrap Cost가 0원으로 계산된다**
+    (2026-08-10 사용자 확정: 추정하지 않고 0원 유지). 수량 지표에는 정상 반영된다.
+    """
+    parts = _parts_for(part)
+    ph = ",".join("?" * len(parts))
+    rows = []
+    for r in conn.execute(
+            f"SELECT d,defect_name,qty,process,part,kind,source FROM defect_entry "
+            f"WHERE status='confirmed' AND (tm_no='' OR tm_no IS NULL) "
+            f"AND d BETWEEN ? AND ? AND part IN ({ph}) ORDER BY qty DESC, d",
+            [date_from, date_to] + list(parts)):
+        # 저장된 kind를 우선 본다 — 품번이 없으면 마스터로 유추할 근거가 약하기 때문.
+        if m.kind_from(r["part"], r["defect_name"], r["kind"]) != "공정":
+            continue
+        rows.append({"d": r["d"], "name": m.dgroup(r["defect_name"]),
+                     "raw_name": r["defect_name"], "qty": r["qty"],
+                     "process": r["process"] or "-", "source": r["source"]})
+    total = sum(x["qty"] for x in rows)
+    return {"rows": rows[:limit], "total": total, "n": len(rows),
+            "more": max(0, len(rows) - limit),
+            "more_qty": total - sum(x["qty"] for x in rows[:limit])}
