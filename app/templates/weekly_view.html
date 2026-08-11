@@ -105,9 +105,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 /* ── 주마감 전용 ── */
 .wk{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;height:100%;}
-/* (1) 주요 KPI: Scrap·COPQ·Incident 4개 지표, 통합 기준 4열 1행뿐이라 세로 공간이 많이
-   남는다 — 타일을 슬라이드 높이 전체로 늘려 추이 그래프를 크게 키운다(2026-08-10 요청). */
-.wk4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;height:100%;}
+/* (1) 주요 KPI: Scrap·COPQ·Incident 4개 지표, 통합 기준 4열 1행. 타일을 키워 추이 그래프를
+   크게 보여주되, 페이지 맨 아래까지 채우면 답답해 보이므로 하단 여백을 남긴다
+   (2026-08-10 — 처음엔 height:100%로 꽉 채웠다가 "너무 길다" 피드백으로 고정 높이로 변경). */
+.wk4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;height:480px;flex:none;}
 .wk4 .mtile{height:100%;padding:16px 16px 10px;}
 .wk4 .nm{font-size:14px;}
 .wk4 .vv{font-size:44px;}
@@ -119,7 +120,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .wk4 .mini .x{font-size:10.5px;}
 /* (2)(3) 공정별 불량율 막대그래프 — 전주(회색)·금주(파랑/빨강) 막대를 나란히 둬서 비교가
    바로 보이게 한다(2026-08-10 "그래프도 같이" 요청). */
-.pchart{height:190px;}
+.pchart{height:78px;}
 .pchart .col{justify-content:flex-end;}
 .pchart .pair{display:flex;gap:5px;align-items:flex-end;justify-content:center;height:100%;width:100%;}
 .pchart .pair .b{width:34%;border-radius:2px 2px 0 0;min-height:1px;}
@@ -134,8 +135,22 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .pleg{display:flex;gap:14px;font-size:9.5px;color:#7f7f7f;margin:2px 0 4px;align-items:center;}
 .pleg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:-1px;}
 /* (2)(3) 상단의 공정불량율·셋팅불량율 타일 — KPI 타일과 같은 모양이되 2개만 옆으로 크게. */
-.wk2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-.wk2 .mtile{min-height:150px;}
+/* 공정불량율·셋팅불량율 타일 — 슬라이드에서 가장 중요한 2개 숫자라 크게 키우고,
+   그만큼 아래 공정별 그래프(.pchart)는 낮춰서 balance를 맞춘다(2026-08-10 요청). */
+.wk2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;height:220px;flex:none;}
+.wk2 .mtile{height:100%;padding:13px 16px 8px;}
+.wk2 .nm{font-size:13px;}
+.wk2 .vv{font-size:38px;}
+.wk2 .vv small{font-size:16px;}
+.wk2 .cmp{font-size:12px;}
+.wk2 .cmp b{font-size:14px;}
+.wk2 .mini{padding-top:12px;}
+.wk2 .mini .bv{font-size:10px;}
+.wk2 .mini .x{font-size:10px;}
+/* (2)(3) 하단 표들 — 위 두 그래프 영역을 키운 만큼 아래 표는 살짝 압축해서 한 슬라이드에
+   맞춘다(폰트·여백만 줄이고 정보는 그대로 유지). */
+.pwrap .wtab th,.pwrap .wtab td{padding:2.5px 6px;font-size:10.5px;}
+.pwrap h3{margin:6px 0 4px!important;}
 .mtile{border:1px solid #d9d9d9;border-radius:6px;padding:9px 11px 6px;display:flex;
   flex-direction:column;min-height:0;}
 .mtile .nm{font-size:12px;font-weight:700;color:#7f7f7f;display:flex;align-items:center;gap:5px;}
@@ -251,7 +266,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         {{ kpi_tile(r, d.trend[pl][r.key]) }}
       {% endfor %}
     </div>
-    <div style="flex:1;min-height:0;overflow:hidden;">
+    <div class="pwrap" style="flex:1;min-height:0;overflow:hidden;">
       <h3 style="font-size:13px;font-weight:800;color:#1f3864;margin-bottom:5px;">공정별 불량율
         <small style="font-weight:600;color:#7f7f7f;">(PPM) · 합계 {{ '{:,}'.format(d.proc[pl].cur) }}
           (전주 {{ '{:,}'.format(d.proc[pl].prev) }},
