@@ -23,9 +23,9 @@ In July, it was 0.21 percent against a target of 0.17, so we did not achieve the
 Total quantity was up 54 percent from June, from 32,000 to 49,000 pieces.
 By part, VMS was 81 percent of the quantity, and transmission parts were 19 percent.
 The increase was mainly driven by three things — rust, pulley concentricity, and a power outage.
-Rust was 11 percent of total quantity, up from 930 to 5,454 pieces. This was mostly a seasonal increase in summer.
-Pulley concentricity was 8 percent, 3,880 pieces, on the JHC100/6 press. We changed the feeder drive method and the mold structure on this line, and quality wasn't fully stable in the early stage after that change.
-And we had a lightning-induced power outage, 5 percent, 2,435 pieces — a lightning surge tripped the boiler and stopped the steam treatment furnace.
+Rust was 11 percent of total quantity. This was mostly a seasonal increase in summer.
+Pulley concentricity was 8 percent, on the JHC100/6 press. We changed the feeder drive method and the mold structure on this line, and quality wasn't fully stable in the early stage after that change.
+And we had a lightning-induced power outage, 5 percent — a lightning surge tripped the boiler and stopped the steam treatment furnace.
 For rust, we increased the rust-preventive coating, added anti-rust film, and we re-inspect long-stored parts before shipment.
 For the pulley issue, we're improving the feeder motion mechanism and verifying the mold structure.
 And for the lightning surge, we plan to expand our surge protection devices.
