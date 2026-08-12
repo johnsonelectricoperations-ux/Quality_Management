@@ -1,0 +1,31 @@
+[COPQ]
+This page is COPQ.
+In July, COPQ was 0.36 percent against a target of 0.31, and YTD we're at 0.30, just inside target.
+Scrap cost was 53 million won, and that was 100 percent of COPQ — we had no customer cost this month.
+The main driver was Carrier scrap from the sintering generator failure, 24 million won, about 45 percent of our total scrap.
+The root cause was a cooling coil crack, which let moisture into the endo gas and caused poor brazing joints.
+And this is improving — it was 38 million won in June, down to 24 million in July, so about 38 percent lower.
+We confirmed normal operation of the generator on July 6th, and we completed all five prevention actions by July 14th — an 8-year coil replacement cycle, separated piping for the two generators, gas ratio standards for each unit, a daily CO2 check sheet, and sampling every 12 hours.
+Going forward, we'll keep the moisture and CO2 monitoring routine going to prevent this from happening again.
+
+[Scrap Cost]
+This page is internal scrap cost.
+In July, it was 0.37 percent against a target of 0.17. YTD is 0.24.
+By part, transmission parts were 69 percent of the cost, 36 million won, and VMS parts were 31 percent, 16 million won.
+Same as the previous page, the main issue was the surge in Carrier defects from the generator failure — 24 million won, 45 percent of the total.
+The generator's normal operation was confirmed on July 6th, and prevention actions were completed by July 14th.
+We'll continue monitoring with the daily CO2 check and the 12-hour sampling process, and keep improving the process to bring this cost down.
+
+[Scrap Quantity]
+This page is scrap quantity.
+In July, it was 0.21 percent against a target of 0.17, so we did not achieve the target this month. YTD is 0.15, still within target.
+Total quantity was up 54 percent from June, from 32,000 to 49,000 pieces.
+By part, VMS was 81 percent of the quantity, and transmission parts were 19 percent.
+Three items drove most of the increase.
+Rust was 11 percent of total quantity, up from 930 to 5,454 pieces — that's a seasonal increase in summer.
+Pulley concentricity was 8 percent, 3,880 pieces, on the JHC100/6 press.
+And we had a lightning-induced power outage, 5 percent, 2,435 pieces — a lightning surge tripped the boiler and stopped the steam treatment furnace.
+For rust, we increased the rust-preventive coating, added anti-rust film, and we re-inspect long-stored parts before shipment.
+For the pulley issue, we're improving the feeder motion mechanism and verifying the mold structure.
+And for the lightning surge, we plan to expand our surge protection devices.
+Going forward, we'll continue rust prevention through the summer season and complete the pulley compacting standardization.
