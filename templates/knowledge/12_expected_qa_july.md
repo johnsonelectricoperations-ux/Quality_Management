@@ -39,8 +39,8 @@
 - 영어: "Year-to-date is 0.30 percent, just inside the 0.31 target, so there is very little margin. The brazing actions are all in place since mid-July, and the pulley standardization is targeted for August 30th."
 
 ### Q8. 8월에는 목표 안으로 돌아오나?
-- 한국어: 브레이징 대책이 모두 적용됐고 추세도 감소 중이라 개선을 기대함. 다만 Pulley 동심도는 8월 30일까지 조건 Test와 표준화가 진행 중이라 8월에도 일부 영향이 있을 수 있음. 8월 데이터로 확인해 공유하겠음.
-- 영어: "We expect improvement. All brazing actions are in place and the trend is going down. But the pulley standardization runs until August 30th, so there may still be some impact in August. I will share the August data."
+- 한국어: 개선을 기대하고 있음. 변성로는 정상화됐고 대책도 모두 적용됐음. 다만 수리 기간 중 생산한 재고가 일부 남아 있어 8월에도 소량 영향이 있을 수 있으나 미미할 것으로 보고, Pulley 동심도는 8월 30일까지 표준화가 진행 중임. 8월 데이터로 확인해 공유하겠음.
+- 영어: "We expect improvement. The generator is back to normal and all actions are in place. Some stock from the repair period remains, so there may be a minor impact in August. The pulley standardization runs until August 30th. I will share the August data."
 
 ### Q9. 4개월 연속 스크랩 비용 목표를 넘고 있는데 구조적 문제 아닌가?
 - 한국어: 지적에 동의함. 4~7월 모두 목표를 상회했고, 다만 매달 원인은 달랐음 — 4월은 3자 선별, 6월은 외주 소결과 변성로, 7월은 브레이징 잔여분임. 개별 이슈는 순차적으로 해소되고 있으나 목표 수준 자체에 대한 검토도 필요하다고 보며, 정리해서 회신하겠음.
@@ -86,7 +86,15 @@
 - 한국어: 납품 영향 없음. 라인을 세우면 고객 라인 정지로 이어지기 때문에 나머지 1대로 가동을 유지했고, 불량품은 전수 선별로 걸러내 양품만 출하했음.
 - 영어: "No. We kept the line running to protect the customer's supply, using the second generator. We sorted 100 percent of the parts, so only good parts were shipped."
 
-### Q16. 브레이징 불량이 8월에도 계속되면 어떻게 할 건가?
+### Q16. 브레이징 불량이 8월에도 나오나?
+- 한국어: 설비는 7월 6일에 정상 작동을 확인했고 재발 방지 대책도 7월 14일까지 모두 적용했음. 다만 **변성로 수리 기간 중에 생산한 제품이 아직 재고로 일부 남아 있어 8월에도 영향이 있을 수 있으나, 미미할 것으로 판단하고 있음.** 신규 발생분은 정상 수준으로 관리되고 있음.
+- 영어: "The equipment was confirmed running normally on July 6th, and all prevention actions were in place by July 14th. Some stock produced during the repair period still remains, so there may be a small impact in August, but we expect it to be minor. New production is at a normal level."
+
+### Q16-1. 수리 기간 중 생산한 재고가 얼마나 남았나?
+- 한국어: 정확한 잔여 수량은 확인해서 이메일로 회신하겠음. 다만 8월 실적에 미치는 영향은 미미할 것으로 보고 있음.
+- 영어: "Let me confirm the exact remaining quantity and follow up by email. But we expect the impact on August to be minor."
+
+### Q16-2. 8월에도 계속되면 어떻게 할 건가?
 - 한국어: 12시간마다 30개씩 모니터링하는 프로세스로 조기에 감지되므로, 발생 시 즉시 원인을 확인할 수 있음. 8월 데이터로 대책 효과를 확인해서 공유하겠고, 효과가 부족하면 추가 대책을 검토하겠음.
 - 영어: "Our twelve-hour sampling process will detect it early. I will confirm the effect with August data. If it is not enough, we will add further countermeasures."
 
@@ -237,9 +245,20 @@
 
 ## 【F. 목표·관리 체계】
 
-### Q43. 스크랩 비용 목표 0.17%인데 실적이 0.37%면 두 배가 넘는다. 목표가 비현실적인 것 아닌가?
-- 한국어: 목표는 연초에 설정된 연간 기준임. 다만 4~7월 실적이 계속 목표를 상회하고 있어 제품 믹스와 생산량 변화를 반영한 목표 검토가 필요하다는 지적은 타당함. 검토 후 회신하겠음.
-- 영어: "The target was set at the start of the year. You are right that we have been above it for several months. Let me review whether it should reflect the product mix, and follow up by email."
+### Q43. (핵심) 스크랩 비용 목표 0.17%인데 실적이 0.37%면 두 배가 넘는다. 목표가 비현실적인 것 아닌가?
+- 한국어: **목표 자체는 잘못되지 않았다고 봄.** 변성로 고장으로 Carrier 불량이 급증한 특별요인의 영향이 가장 큼. 실제로 Carrier 관련 스크랩을 제외하고 계산하면 6월은 0.10%로 목표를 크게 밑돌고, 7월도 0.20% 수준으로 목표에 근접함. 즉 상시 수준은 목표권 안에 있으며, 목표를 조정할 문제가 아니라 특별요인을 해소하는 것이 답이라고 판단함. Carrier 관련은 6월 38백만원에서 7월 24백만원으로 이미 38% 줄었음.
+- 영어: "We do not think the target is wrong. The main driver was a special cause — the generator failure that caused a surge in carrier defects. If we exclude carrier-related scrap, June is 0.10 percent, well below target, and July is about 0.20 percent, close to target. So our baseline is around the target level. The answer is to close the special cause, not to change the target. Carrier-related scrap is already down 38 percent, from 38 million won in June to 24 million in July."
+- **주의: "브레이징만 빼면 목표 달성"이라고 말하지 말 것.** 브레이징 유형만 제외하면 7월은
+  0.29%로 여전히 미달임. 반드시 **"Carrier 관련 전체"** 기준으로 답하고, 7월은
+  **"달성"이 아니라 "근접"**으로 표현할 것.
+
+### Q43-1. 그럼 4월도 목표를 넘었는데 그것도 변성로 때문인가?
+- 한국어: 4월은 다른 요인임. 외주 성형·소결·기타 불량이 28백만원으로 대부분을 차지했음. 변성로 이슈는 6월부터 발생한 건임.
+- 영어: "No, April was a different cause. Outsourced material defects accounted for about 28 million won. The generator issue started in June."
+
+### Q43-2. Carrier 관련이라는 게 브레이징 불량을 말하는 건가?
+- 한국어: 브레이징이 대표적이지만 그것만은 아님. 같은 Carrier 품목에서 발생한 소결·이물질·변형 등 다른 불량유형도 같은 설비 이슈에서 비롯된 것으로 보고 있어, Carrier 품목 전체 기준으로 보면 7월 24백만원, 6월 38백만원 규모임.
+- 영어: "Brazing is the main one, but not the only one. Other defect types on the same carrier items came from the same equipment issue. Taken together, carrier-related scrap was 24 million won in July and 38 million in June."
 
 ### Q44. 수량과 비용 중 어느 것이 KPI인가?
 - 한국어: 두 지표를 함께 관리하며, 비용 기준이 재무 영향을 직접 보여줌. 이번 달처럼 수량과 비용이 다르게 움직일 때는 두 지표를 같이 봐야 정확한 판단이 가능함.
