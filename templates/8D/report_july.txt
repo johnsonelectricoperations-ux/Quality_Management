@@ -4,8 +4,9 @@ In July, COPQ was 0.36 percent against a target of 0.31, and YTD we're at 0.30, 
 Scrap cost was 53 million won, and that was 100 percent of COPQ — we had no customer cost this month.
 The main driver was Carrier scrap from the sintering generator failure, 24 million won, about 45 percent of our total scrap.
 The root cause was a cooling coil crack, which let moisture into the endo gas and caused poor brazing joints.
+This actually started back in June, and we confirmed normal operation of the generator on July 6th.
+But the parts that were sintered while the generator was still faulty went on to downstream processing afterward, and that's where the defects showed up — so they landed in our July numbers, even though the equipment itself was already fixed.
 And this is improving — it was 38 million won in June, down to 24 million in July, so about 38 percent lower.
-We confirmed normal operation of the generator on July 6th.
 And by July 14th, we completed five prevention actions. On the equipment side, we set an 8-year coil replacement cycle and separated the piping for the two generators, with gas ratio standards for each. And on the monitoring side, we added a daily CO2 check and sampling every 12 hours.
 Going forward, we'll keep that monitoring routine going to prevent this from happening again.
 
