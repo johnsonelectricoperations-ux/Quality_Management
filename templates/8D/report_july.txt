@@ -6,7 +6,6 @@ The main driver was Carrier scrap from the sintering generator failure, 24 milli
 The root cause was a cooling coil crack, which let moisture into the endo gas and caused poor brazing joints.
 This actually started back in June, and we confirmed normal operation of the generator on July 6th.
 But the lot we processed during the repair period continued through downstream processing into early August, and that affected our July results.
-Even so, we're already seeing improvement — down from 38 million won in June to 24 million in July, about 38 percent lower.
 And by July 14th, we completed five prevention actions. On the equipment side, we set an 8-year coil replacement cycle and separated the piping for the two generators, with gas ratio standards for each. And on the monitoring side, we added a daily CO2 check and sampling every 12 hours.
 Going forward, we'll keep that monitoring routine going to prevent this from happening again.
 
