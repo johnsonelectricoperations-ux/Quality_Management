@@ -1,0 +1,23 @@
+[COPQ]
+This page is COPQ.
+In June, COPQ was 0.35 percent against a target of 0.31, but YTD we are still within target at 0.27.
+Scrap cost was 40 million won, and 17 million of that came from a gas generator failure, which affected the gas supply to our transmission part sintering process.
+So this was the main reason for the increase from last month.
+And, We already repaired the generator and the gas supply is back to normal, and we updated our PM checklist so this won't happen again.
+We also had 9 million won in customer cost, related to the damping force issue at Mando, We fixed this by improving the tooling design.
+
+[Scrap Cost]
+This page is internal scrap cost.
+In June, it was 0.30 percent against a target of 0.17. This is the same generator issue from the previous page.
+The scrap cost ratio was 70 percent for transmission parts, and 30 percent for VMS parts
+Normally, VMS is about 60 percent, and TM is about 40. So this month was unusual.
+This month, the generator issue pushed the TM part share up.
+We will keep improving the process to bring this cost down.
+
+[Scrap Quantity]
+This page is scrap quantity.
+In June, it was 0.15 percent against a target of 0.17. So on a quantity basis, we met the target.
+The quantity ratio was 91 percent for VMS parts, and 9 percent for transmission parts.
+As you saw on the previous page, TM parts cost much more per piece. So they are small in quantity, but big in cost.
+Going forward, we will continue preventive process checks, and keep analyzing damage factors between processes.
+
