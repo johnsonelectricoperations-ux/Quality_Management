@@ -40,10 +40,12 @@ In July, this was 0.21%. Our target was 0.17%. So this month we did not achieve 
 
 Our scrap quantity went up 54 percent from June — from 32,000 to 49,000 pieces.
 
-Most of the increase was low-cost VMS parts — rust, dimension adjustment, and dents. We also had a power outage on July 22nd, which added about 2,400 pieces.
+Most of the increase was low-cost VMS parts. Rust was the biggest one — this is a seasonal factor in summer. We increased the rust-preventive coating, we use anti-rust film in packaging, and we re-inspect long-stored parts before shipment.
 
-On the transmission side, the main quantity item was pulley concentricity — 3,880 pieces. This is our largest issue by quantity, but only about five percent by cost.
+We also had a lightning strike on July 22nd. It caused a power surge, and our boiler burner controller went down. Steam temperature and pressure dropped, so about 2,400 pieces came out with low hardness and rust. We sorted the lot and scrapped all defective parts. We are now reviewing surge protection for the 220 and 380-volt systems.
+
+On the transmission side, the main quantity item was pulley concentricity — 3,880 pieces. This is our largest issue by quantity, but only about five percent by cost. Our condition test was effective. We verified one of the two variables, and we will verify the die structure during August.
 
 By part: Part 1, VMS parts, was 81% of the quantity. Part 2 was 19%.
 
-Going forward, we are running condition tests on the pulley forming process, and we target standardization by August 30th."
+We target standardization of the pulley process by August 30th."

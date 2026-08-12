@@ -75,9 +75,8 @@
 - 영어: "After the repair, the CO2 ratio would not adjust. The two generators shared piping, so pressure differences kept changing the value. Since July 1st we run them separately, and we set a ratio standard for each unit."
 
 ### Q15-1. 지난달에는 7월 6일에 수리 완료했다고 했는데, 8D에는 6월 14일로 되어 있다. 어느 쪽인가?
-- 한국어: 냉각대 교체 같은 설비 수리는 6월 중에 완료했고, 가스 조건 안정화 확인과 재발 방지 대책 적용까지는 7월 중순에 마무리했음. 정확한 일자는 확인해서 이메일로 회신하겠음.
-- 영어: "The equipment repair, including the coil replacement, was done in June. Stabilizing the gas condition and completing the prevention actions ran through mid-July. Let me confirm the exact dates and follow up by email."
-- **주의: 특정 날짜를 단정하지 말 것. 자료 간 불일치가 있어 확인이 필요한 상태임.**
+- 한국어: 둘 다 맞으며 의미가 다름. 6월 14일은 냉각대와 Ni 촉매를 교체한 **부품 교체 완료일**이고, 7월 6일은 교체 후 가스 조건이 정상 범위로 안정화된 것을 확인한 **정상 작동 확인 완료일**임. 부품을 교체했다고 수리가 끝난 것이 아니기 때문에, 공식 수리 완료는 7월 6일로 보고 있음.
+- 영어: "Both are correct, but they mean different things. June 14th is when we finished replacing the cooling coil and the catalyst. July 6th is when we confirmed the gas condition was stable and the equipment was running normally. Replacing a part does not mean the repair is complete, so we count July 6th as the completion date."
 
 ### Q15-2. 변성로가 2대라고 했는데, 나머지 1대는 안전한가?
 - 한국어: 나머지 1대에도 동일한 점검 주기를 적용하고 있음. 7월부터는 두 호기를 분할 운영하면서 호기별로 Air:LNG 비율 기준을 따로 세웠고, CO2값도 매일 점검하고 있음.
@@ -104,8 +103,16 @@
 - 영어: "Two causes overlapped. After we changed the feeder system in April, powder filling became insufficient. And after we applied the two-step die-set in May, the core was binding. We reverted to the one-step die-set on July 14th, and defects went down, but the issue is not fully closed."
 
 ### Q19. 지금 무슨 조치를 하고 있나? 언제 끝나나?
-- 한국어: Feeder 전진속도를 270에서 320mm/s로 올려 분말 충진 시간을 23% 늘리는 조건 Test를 진행 중임. 1차 Test는 7월 29일 완료했고, 1785와 2206 품번에 순차 적용 중. 8월 30일까지 표준화를 완료하는 것이 목표임.
-- 영어: "We increased the feeder speed from 270 to 320 millimeters per second. That gives 23 percent more powder filling time. The first test was on July 29th. We are targeting standardization by August 30th."
+- 한국어: 원인을 두 가지 변수로 좁혔음. 첫째는 분말 충진 조건인데, Feeder 전진속도를 270에서 320mm/s로 올려 충진 시간을 23% 늘렸고 **효과가 검증됐음**. 둘째는 금형 구조인데 이건 8월 중 검증할 예정임. 두 가지가 마무리되면 8월 30일까지 표준화를 완료하는 것이 목표임.
+- 영어: "We narrowed it down to two variables. The first is the powder filling condition — we increased the feeder speed from 270 to 320 millimeters per second, and that is verified effective. The second is the die structure, which we will verify during August. We target standardization by August 30th."
+
+### Q19-1. (핵심) 조건 Test는 효과가 있었나?
+- 한국어: 네, 효과가 있었음. 두 가지 변수 중 분말 충진 조건은 검증을 완료했고 개선 효과를 확인했음. 남은 변수인 금형 구조는 8월 중 검증할 예정임.
+- 영어: "Yes, it was effective. Of the two variables, the powder filling condition is verified and we confirmed the improvement. The remaining variable, the die structure, will be verified during August."
+
+### Q19-2. 두 가지 변수가 정확히 뭔가?
+- 한국어: 첫째는 분말 충진 조건, 즉 Feeder 전진속도임 — 검증 완료. 둘째는 금형 구조로, 하 2단 Die-set의 Core 낌 현상 관련임 — 8월 중 검증 예정.
+- 영어: "First, the powder filling condition — the feeder advance speed. That is verified. Second, the die structure — the core binding on the two-step die-set. That will be verified in August."
 
 ### Q20. 왜 380mm/s가 아니라 320인가?
 - 한국어: 처음에는 380mm/s를 검토했으나 작업성 이슈가 있어 320mm/s로 조정했음.
@@ -128,73 +135,101 @@
 - 영어: "We changed the feeder from cam-driven to servo-driven, so we can control position and speed precisely. But the filling condition was not optimized after the change. The current condition test is to find that optimum."
 
 ### Q25. 8월 30일까지 못 끝나면?
-- 한국어: 조건 Test로 해결되지 않으면 캠을 원복한 뒤 모션 분석을 하는 대안을 준비해 두었음. 원복이 가능한 상태로 관리하고 있음.
-- 영어: "If the condition test does not solve it, we can revert the cam and run a motion analysis. We keep that option available."
+- 한국어: 조건 Test로 해결되지 않으면 캠을 원복한 뒤 모션 분석을 하는 대안을 준비해 두었음. 원복이 가능한 상태로 관리하고 있음. 다만 충진 조건 효과가 이미 검증됐기 때문에 일정 내 완료를 예상하고 있음.
+- 영어: "If needed, we can revert the cam and run a motion analysis. But the filling condition is already verified effective, so we expect to finish on schedule."
 
 ---
 
-## 【D. 정전 관련】
+## 【D. 7/22 낙뢰 정전 관련】
 
-### Q26. 정전 폐기 2,435개는 뭔가?
-- 한국어: 7월 22일 정전이 발생해 VMS Part에서 녹이 발생한 물량 2,435개를 폐기한 건임. 수량 지표에 반영되어 있음.
-- 영어: "On July 22nd we had a power outage. About 2,400 pieces rusted and were scrapped. It is included in our scrap quantity."
+### Q26. 7월 22일에 무슨 일이 있었나?
+- 한국어: 7월 22일 새벽 3시 11분경 낙뢰로 인한 과전압, 서지가 발생했음. 380V 기계실 인버터에 과전압이 걸리고 보일러 2호기 버너 컨트롤러에 에러가 나면서 증기 온도와 압력이 떨어졌고, 그 결과 증기 공정 제품에 경도 미달과 녹 불량이 발생했음. 2,435개를 선별해 전량 폐기했음.
+- 영어: "At about 3:11 in the morning on July 22nd, a lightning strike caused a power surge. It tripped the inverter in our 380-volt machine room and caused an error on the number two boiler burner controller. Steam temperature and pressure dropped, so the products came out with low hardness and rust. We sorted them and scrapped 2,435 pieces."
 
-### Q27. 정전 폐기 금액은 얼마인가?
+### Q27. 재발 방지 대책은?
+- 한국어: 서지, 즉 낙뢰 보호장치 설치를 검토 중임. 440V 계통에는 이미 설치해 운영 중이고, 220V와 380V 계통에 추가 설치하는 것을 8월 10일까지 검토하고 있음. 피뢰 시스템과 서지 보호 장치를 함께 보는 체계로 접근하고 있음.
+- 영어: "We are reviewing surge protection devices. We already have them on the 440-volt system, and we are reviewing additional installation on the 220 and 380-volt systems, targeting August 10th."
+
+### Q28. 낙뢰 피해가 처음인가?
+- 한국어: 2009년에도 낙뢰로 인한 재산 피해 이력이 있음. 그래서 이번에 보호장치 적용 범위를 넓히는 것을 검토하고 있음.
+- 영어: "No, we had lightning damage in 2009 as well. That is why we are now reviewing wider coverage for surge protection."
+
+### Q29. 불량품이 고객에게 갈 위험은 없었나?
+- 한국어: 없습니다. 해당 Lot을 펜딩 조치한 뒤 전량 재선별했고, 경도 미달과 녹 불량 2,435개는 전량 폐기했음. 양품만 출하했음.
+- 영어: "No. We put the lot on hold and sorted 100 percent of it. All 2,435 defective pieces were scrapped. Only good parts were shipped."
+
+### Q30. 정전 폐기 금액은 얼마인가?
 - 한국어: 해당 건의 금액은 확인해서 이메일로 회신하겠습니다.
 - 영어: "Let me confirm the amount and follow up by email."
 - **주의: 금액 및 비용 집계 방식은 절대 설명하지 말 것.**
 
-### Q28. 정전은 왜 났나? 재발 방지는?
-- 한국어: 자료에 상세가 없어 확인 후 이메일로 회신하겠음.
-- 영어: "I understand the question. I just want to make sure my answer is accurate, so I will send the details by email."
+---
+
+## 【D-2. 녹(rust) 불량 증가】
+
+### Q31. 녹 불량이 921개에서 5,442개로 6배 늘었다. 무슨 문제가 있나?
+- 한국어: 여름철 계절적 요인임. 고온다습한 환경에서 녹 불량이 구조적으로 증가하며, 매년 반복되는 패턴임. 특정 공정의 이상이나 새로운 불량 모드는 아님.
+- 영어: "This is a seasonal factor. Rust increases in summer because of high temperature and humidity. It is a pattern we see every year, not a new process problem."
+
+### Q32. 녹에 대한 대책은 뭔가?
+- 한국어: 세 가지를 지속 시행 중임. 방청량을 늘려 표면 보호를 강화하고, 포장에 방청 비닐을 적용해 습기를 차단하고, 장기 보관품은 출하 전에 재검사하고 있음. 발생 방지와 유출 방지를 함께 하고 있음.
+- 영어: "Three activities are ongoing. We increased the rust-preventive oil coating, we use anti-rust film in packaging, and we re-inspect long-stored parts before shipment. We cover both prevention and containment."
+
+### Q33. 녹 불량이 고객에게 갈 위험은 없나?
+- 한국어: 장기 보관품은 출하 전에 재검사하는 프로세스를 운영하고 있어 유출을 차단하고 있음.
+- 영어: "We re-inspect long-stored parts before shipment, so we prevent rust parts from reaching the customer."
+
+### Q34. 계절적 요인이라면 매년 반복되는데 근본 대책은 없나?
+- 한국어: 방청량 증대와 방청 비닐 적용이 발생 자체를 줄이는 대책이고, 출하 전 재검사가 유출을 막는 대책임. 보관 환경 개선을 포함한 추가 대책은 검토해서 회신하겠음.
+- 영어: "The increased coating and the anti-rust film reduce the occurrence itself, and the pre-shipment re-inspection prevents escapes. For further measures such as storage environment improvement, let me review and follow up by email."
 
 ---
 
 ## 【E. 파트별 비중 / 지표 구조】
 
-### Q29. Part1은 수량 81%인데 비용 31%, Part2는 수량 19%인데 비용 69%다. 왜 그런가?
+### Q36. Part1은 수량 81%인데 비용 31%, Part2는 수량 19%인데 비용 69%다. 왜 그런가?
 - 한국어: TM(Transmission) Part는 수량은 적지만 개당 단가가 매우 높아서 생기는 구조적 현상임. 참고로 6월에는 수량 12% / 비용 77%로 격차가 더 컸는데, 7월은 VMS 수량이 늘면서 격차가 다소 완화된 것.
 - 영어: "Transmission parts cost much more per piece, so a small quantity creates a large cost. This is structural, not an error. In June the gap was even wider, at 12 percent quantity and 77 percent cost."
 
-### Q30. COPQ가 스크랩의 100%인데 왜 COPQ는 0.36이고 스크랩은 0.37인가?
+### Q37. COPQ가 스크랩의 100%인데 왜 COPQ는 0.36이고 스크랩은 0.37인가?
 - 한국어: 실제로는 같은 값이며 0.364%임. 슬라이드에서 각각 내림과 올림으로 표기되어 그렇게 보이는 것이고, 스크랩이 COPQ보다 큰 것은 아님.
 - 영어: "They are actually the same number, 0.364 percent. It is just rounding on the slides. Scrap is not larger than COPQ."
 
-### Q31. 이번 달 고객 비용이 0원인 게 맞나?
+### Q38. 이번 달 고객 비용이 0원인 게 맞나?
 - 한국어: 맞습니다. 7월에는 워런티나 3자 선별 같은 고객 관련 비용이 한 건도 발생하지 않았음. 그래서 COPQ 전액이 내부 스크랩 비용임.
 - 영어: "Yes. In July we had no warranty or sorting costs at all. So the entire COPQ is internal scrap."
 
-### Q32. 정말 고객 이슈가 하나도 없었나?
+### Q39. 정말 고객 이슈가 하나도 없었나?
 - 한국어: 비용이 발생한 정식 Incident는 없었음. 경미한 고객 지적 몇 건은 내부적으로 관리하고 있으며, 상세는 이메일로 회신하겠음.
 - 영어: "There were no official incidents with cost. We track a few minor customer comments internally. Let me confirm the details and follow up by email."
 - **주의: 4건의 내용을 먼저 나열하지 말 것. 물으면 그때만 답한다.**
 
-### Q33. 만도 damping force 건은 어떻게 됐나?
+### Q40. 만도 damping force 건은 어떻게 됐나?
 - 한국어: 그건 6월 건이고 종결됐음. 7월에는 관련 신규 비용이 없음.
 - 영어: "That was a June item and it is closed. There was no new cost in July."
 
-### Q34. 워런티 비용은 이번 달 얼마인가?
+### Q41. 워런티 비용은 이번 달 얼마인가?
 - 한국어: 7월에는 신규 등록 건이 없어 0원이며, YTD 누계는 6월과 동일하게 36.6백만원으로 유지되고 있음.
 - 영어: "There were no new warranty items in July. The year-to-date total is unchanged at 36.6 million won."
 
-### Q34-1. YTD 워런티/선별 비용 36.6백만원의 구성은?
+### Q41-1. YTD 워런티/선별 비용 36.6백만원의 구성은?
 - 한국어: 6건임. 최대는 GMK 외관 crack 22.6백만원, 그다음 만도 damping force 9.0백만원. 나머지는 소액으로 MBC 반품점검 2.4, ZF 풀리 녹 1.2, 만도 필드클레임 1.0, 만도 라인 스크랩 0.4백만원임. 외부 회수 0.4백만원 합의했고 분쟁 중인 건은 없음.
 - 영어: "There are six items. The biggest is the GMK crack issue at 22.6 million won, then the Mando damping force issue at 9 million. The other four are small. We agreed a recovery of 0.4 million, and nothing is in dispute."
 
-### Q34-2. GMK 22.6백만원이 제일 큰데 그건 뭔가? 왜 이번 발표에서 안 다뤘나?
+### Q41-2. GMK 22.6백만원이 제일 큰데 그건 뭔가? 왜 이번 발표에서 안 다뤘나?
 - 한국어: GMK 외관 crack 이슈로, 성형 초기 세팅 시 springback 보상 부족이 원인임. 세팅 불량 카드 관리와 QC 검사원 교차 확인을 시행 중이고, 100% 자동 crack 검출을 위한 비파괴검사 설비를 도입할 예정임. 이번 달 신규 발생분이 아니라 누계 항목이라 별도로 다루지 않았음.
 - 영어: "That is the appearance crack issue at GMK. The cause was insufficient springback compensation during the initial compacting setting. We manage setting defect cards with QC cross-checks, and we will install non-destructive inspection for 100 percent automatic crack detection. It is a year-to-date item, not a new July cost."
 
-### Q34-3. ZF 풀리 녹 이슈는 뭔가?
+### Q41-3. ZF 풀리 녹 이슈는 뭔가?
 - 한국어: 물류 운송 중 전용 용기에 수분이 유입되어 풀리에 녹이 발생한 건임. 내부 용기 타입을 변경해 제품을 하나씩 독립 적재하고 점접촉으로 뜨게 해서 재발을 방지했음. 종결된 건임.
 - 영어: "Moisture got into the shipping container during transport and caused rust on the pulleys. We changed the container design, so each product is loaded separately with minimal contact. This issue is closed."
 
-### Q34-4. 만도 damping force 이슈의 원인과 현재 상태는?
+### Q41-4. 만도 damping force 이슈의 원인과 현재 상태는?
 - 한국어: 제품은 Self Body TM985임. 성형 공정에서 CRACK이 발생했고, 고객 조립 후 그 부위로 오일이 새어 감쇄력 불량으로 이어진 건임. 3자 선별 완료로 추가 비용은 없고, 금형 공차를 줄여 정밀도를 높인 개선 tooling을 이미 적용했으며, LOT별로 사내 CRACK 검사를 하고 있음. 종결된 이슈임.
 - 영어: "The product is the Self Body, TM985. A crack occurred during compacting. After assembly at Mando, oil leaked through the crack and caused the damping force failure. Sorting is complete with no additional cost, the improved tooling is applied, and we inspect every lot in-house. This issue is closed."
 - **주의: 이 건은 고객 단계에서 발견된 것이므로 "고객 유출 없음"과 섞어 답하지 말 것.**
 
-### Q35. VMS Part 비용이 12.3에서 16.4백만원으로 늘었는데 왜인가?
+### Q42. VMS Part 비용이 12.3에서 16.4백만원으로 늘었는데 왜인가?
 - 한국어: VMS Part는 특정 한 건이 아니라 녹·깨짐·찍힘 등 여러 항목이 고르게 늘었음. 수량도 28천 개에서 40천 개로 증가했음. 개별 항목별 상세는 정리해서 회신하겠음.
 - 영어: "It was not one single item. Several items increased together — rust, cracks, and dents. The quantity also went up from 28,000 to 40,000 pieces. I will send the item-level detail by email."
 
@@ -202,31 +237,31 @@
 
 ## 【F. 목표·관리 체계】
 
-### Q36. 스크랩 비용 목표 0.17%인데 실적이 0.37%면 두 배가 넘는다. 목표가 비현실적인 것 아닌가?
+### Q43. 스크랩 비용 목표 0.17%인데 실적이 0.37%면 두 배가 넘는다. 목표가 비현실적인 것 아닌가?
 - 한국어: 목표는 연초에 설정된 연간 기준임. 다만 4~7월 실적이 계속 목표를 상회하고 있어 제품 믹스와 생산량 변화를 반영한 목표 검토가 필요하다는 지적은 타당함. 검토 후 회신하겠음.
 - 영어: "The target was set at the start of the year. You are right that we have been above it for several months. Let me review whether it should reflect the product mix, and follow up by email."
 
-### Q37. 수량과 비용 중 어느 것이 KPI인가?
+### Q44. 수량과 비용 중 어느 것이 KPI인가?
 - 한국어: 두 지표를 함께 관리하며, 비용 기준이 재무 영향을 직접 보여줌. 이번 달처럼 수량과 비용이 다르게 움직일 때는 두 지표를 같이 봐야 정확한 판단이 가능함.
 - 영어: "We manage both. The cost metric shows the direct financial impact. This month they moved differently, so we need both to see the full picture."
 
-### Q38. 월별 Target이 연중 동일한데 조정 계획은 없나?
+### Q45. 월별 Target이 연중 동일한데 조정 계획은 없나?
 - 한국어: 현재 목표는 연초에 설정된 연간 기준. 생산량과 믹스 변화 반영은 검토해서 회신하겠음.
 - 영어: "The target was set as a flat annual level. We will review whether to adjust it, and follow up by email."
 
-### Q39. 8월 이후 Actual 라인이 7월과 같은 값인데 예측치인가?
+### Q46. 8월 이후 Actual 라인이 7월과 같은 값인데 예측치인가?
 - 한국어: 실적이 아니라 차트 형식상의 표시임. 실제 데이터는 4~7월까지만 있음.
 - 영어: "Those points are not actual data. They are just chart formatting. Real data is only from April to July."
 
-### Q40. 재발 방지 조치를 종합하면 뭔가?
+### Q47. 재발 방지 조치를 종합하면 뭔가?
 - 한국어: 브레이징 건은 냉각대 교체 완료에 더해 8년 주기 교환, 변성로 분할 운영, CO2 일일 점검, 12시간 주기 샘플 검사까지 5개 대책을 7월 중 적용 완료했음. 동심도 건은 조건 Test 후 8월 30일 표준화 목표로 진행 중임.
 - 영어: "For brazing, five actions are complete as of mid-July, including the coil replacement and daily CO2 checks. For concentricity, we are running condition tests, targeting standardization by August 30th."
 
-### Q41. 담당은 누구인가?
+### Q48. 담당은 누구인가?
 - 한국어: 브레이징 건은 보전팀, Pulley 동심도 건은 생산팀에서 담당하고 있음. 상세 담당자는 이메일로 회신하겠음.
 - 영어: "The maintenance team handles the brazing issue, and the production team handles the pulley issue. For details, let me follow up by email."
 
-### Q42. 하반기 회복 계획의 구체적 액션과 완료 시점은?
+### Q49. 하반기 회복 계획의 구체적 액션과 완료 시점은?
 - 한국어: 브레이징 대책은 7월 14일까지 전부 적용 완료됐고, Pulley 동심도는 8월 30일 표준화 완료가 목표임. 상세 액션 플랜과 일정은 이메일로 회신하겠음.
 - 영어: "The brazing actions were all completed by July 14th. Pulley standardization is targeted for August 30th. I will send the detailed plan by email."
 
@@ -234,23 +269,23 @@
 
 ## 【G. 기술 배경 질문】
 
-### Q43. 변성로(generator)가 무슨 설비인가?
+### Q50. 변성로(generator)가 무슨 설비인가?
 - 한국어: endo gas를 만드는 로. endo gas는 소결로 내부 분위기를 형성하는 가스로, 브레이징제가 잘 녹고 접합부에 고르게 응착되도록 돕는다.
 - 영어: "The generator produces endo gas. This gas creates the atmosphere inside the sintering furnace. It helps the brazing material melt and bond evenly."
 
-### Q44. 수분이 왜 불량을 만드나?
+### Q51. 수분이 왜 불량을 만드나?
 - 한국어: 수분이 섞이면 소결로 분위기가 산화성으로 변해 접합면에 산화막이 생기고, 브레이징제가 표면에 고르게 퍼지지 못해 접합 불량이 발생함.
 - 영어: "Moisture makes the atmosphere oxidizing. An oxide layer forms on the joint, so the brazing material cannot wet the surface properly."
 
-### Q45. Carrier가 어떤 부품인가?
+### Q52. Carrier가 어떤 부품인가?
 - 한국어: TM(Transmission) 소결 공정에서 브레이징으로 접합되는 부품류임. HMC 8속 변속기용 Carrier 4종이 이번 모니터링 대상임.
 - 영어: "Carriers are parts joined by brazing in the TM sintering process. Four carrier items for the HMC 8-speed transmission are under monitoring."
 
-### Q46. 동심도가 뭔가?
+### Q53. 동심도가 뭔가?
 - 한국어: 부품의 안쪽 원과 바깥쪽 원의 중심이 얼마나 일치하는지를 나타내는 치수임. 이 값이 규격을 벗어나면 조립이나 회전 성능에 문제가 생길 수 있음.
 - 영어: "Concentricity is how well the inner and outer circles share the same center. If it is out of specification, it can affect assembly and rotation."
 
-### Q47. COPQ는 어떻게 계산하나?
+### Q54. COPQ는 어떻게 계산하나?
 - 한국어: SVP 대비 %로, 내부 스크랩 비용과 고객 비용을 합친 것. 7월은 스크랩 100%, 고객 비용 0%였음.
 - 영어: "COPQ includes internal scrap cost and customer cost, as a percent of SVP. In July it was 100 percent scrap and no customer cost."
 
