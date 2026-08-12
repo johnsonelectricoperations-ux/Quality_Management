@@ -87,12 +87,12 @@
 - 영어: "No. We kept the line running to protect the customer's supply, using the second generator. We sorted 100 percent of the parts, so only good parts were shipped."
 
 ### Q16. 브레이징 불량이 8월에도 나오나?
-- 한국어: 설비는 7월 6일에 정상 작동을 확인했고 재발 방지 대책도 7월 14일까지 모두 적용했음. 다만 **변성로 수리 기간 중에 생산한 제품이 아직 재고로 일부 남아 있어 8월에도 영향이 있을 수 있으나, 미미할 것으로 판단하고 있음.** 신규 발생분은 정상 수준으로 관리되고 있음.
-- 영어: "The equipment was confirmed running normally on July 6th, and all prevention actions were in place by July 14th. Some stock produced during the repair period still remains, so there may be a small impact in August, but we expect it to be minor. New production is at a normal level."
+- 한국어: 설비는 7월 6일에 정상 작동을 확인했고 재발 방지 대책도 7월 14일까지 모두 적용했음. 다만 고장 기간 중 소결한 물량 약 15만 개가 후공정을 거치면서 8월 초까지 가공이 진행됐기 때문에, 그 여진으로 8월 초까지는 일부 영향이 있을 수 있음. 다만 미미할 것으로 판단하고 있음. 신규로 소결하는 물량은 정상 수준으로 관리되고 있음.
+- 영어: "The equipment was confirmed running normally on July 6th, and all prevention actions were in place by July 14th. But about 150,000 pieces were sintered during the failure period, and that lot was still being processed through early August. So there may be some impact into early August, though we expect it to be minor. New production is at a normal level."
 
 ### Q16-1. 수리 기간 중 생산한 재고가 얼마나 남았나?
-- 한국어: 정확한 잔여 수량은 확인해서 이메일로 회신하겠음. 다만 8월 실적에 미치는 영향은 미미할 것으로 보고 있음.
-- 영어: "Let me confirm the exact remaining quantity and follow up by email. But we expect the impact on August to be minor."
+- 한국어: 고장 기간 중 소결한 물량이 약 15만 개였고, 이 로트가 후공정을 거치면서 8월 초까지 가공이 이어졌음. 다만 그중 실제로 브레이징 불량으로 이어진 수량은 일부(6월 993개, 7월 726개)에 그쳤고, 대책도 이미 적용돼 있어 남은 영향은 미미할 것으로 본다.
+- 영어: "About 150,000 pieces were sintered during the failure period, and that lot continued through downstream processing into early August. Only a portion of that actually became brazing defects — 993 pieces in June and 726 in July. With the prevention actions already in place, we expect the remaining impact to be minor."
 
 ### Q16-2. 8월에도 계속되면 어떻게 할 건가?
 - 한국어: 12시간마다 30개씩 모니터링하는 프로세스로 조기에 감지되므로, 발생 시 즉시 원인을 확인할 수 있음. 8월 데이터로 대책 효과를 확인해서 공유하겠고, 효과가 부족하면 추가 대책을 검토하겠음.
@@ -105,6 +105,10 @@
 ### Q17. Pulley 동심도 불량은 뭔가?
 - 한국어: 성형 공정에서 분말 충진이 고르지 않아 밀도 편차가 생기고, 그것이 정형 공정을 거치면서 동심도 초과로 나타나는 불량임. 7월에 3,880개 발생했고 설비는 JHC100/6임.
 - 영어: "Uneven powder filling during compacting creates a density variation. It shows up as a concentricity failure after the sizing process. We had 3,880 pieces in July, on the JHC100/6 press."
+
+### Q17-1. 동심도 규격이 얼마인가? NG는 어느 정도로 나오나?
+- 한국어: 규격은 0.05 이하이며, 이번 불량은 0.08에서 0.10 수준으로 나왔음.
+- 영어: "The specification is 0.05 or less. The defective parts measured about 0.08 to 0.10."
 
 ### Q18. 원인이 뭔가?
 - 한국어: 두 가지가 겹쳤음. 4월 22일 Feeder System을 변경한 뒤 분말 충진이 미흡해진 것, 그리고 5월 6일 하 2단 Die-set을 적용한 뒤 Core부 낌 현상으로 동심도가 틀어진 것. 7월 14일에 하 1단으로 원복해서 불량이 줄었지만 아직 완전히 잡히지는 않았음.
