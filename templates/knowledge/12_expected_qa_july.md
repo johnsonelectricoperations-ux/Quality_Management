@@ -175,9 +175,9 @@
 
 ## 【D-2. 녹(rust) 불량 증가】
 
-### Q31. 녹 불량이 921개에서 5,442개로 6배 늘었다. 무슨 문제가 있나?
-- 한국어: 여름철 계절적 요인임. 고온다습한 환경에서 녹 불량이 구조적으로 증가하며, 매년 반복되는 패턴임. 특정 공정의 이상이나 새로운 불량 모드는 아님.
-- 영어: "This is a seasonal factor. Rust increases in summer because of high temperature and humidity. It is a pattern we see every year, not a new process problem."
+### Q31. 녹 불량이 930개에서 5,454개로 늘었다(+486%). 무슨 문제가 있나?
+- 한국어: 여름철 계절적 요인임. 고온다습한 환경에서 녹 불량이 구조적으로 증가하며, 매년 반복되는 패턴임. 특정 공정의 이상이나 새로운 불량 모드는 아님. 전체 불량수량의 11%를 차지함.
+- 영어: "This is a seasonal factor. Rust increases in summer because of high temperature and humidity. It is a pattern we see every year, not a new process problem. It is 11 percent of our total scrap quantity."
 
 ### Q32. 녹에 대한 대책은 뭔가?
 - 한국어: 세 가지를 지속 시행 중임. 방청량을 늘려 표면 보호를 강화하고, 포장에 방청 비닐을 적용해 습기를 차단하고, 장기 보관품은 출하 전에 재검사하고 있음. 발생 방지와 유출 방지를 함께 하고 있음.
