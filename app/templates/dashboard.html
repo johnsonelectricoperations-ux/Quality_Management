@@ -35,7 +35,7 @@
 
 {# 이번주/지난주, 이번달/지난달 전환 가능한 버전 — 행 tbody 두 벌을 함께 그려두고 버튼으로
    보이는 것만 바꾼다(1PART/2PART 전환과 같은 방식, 2026-07-30 신설). #}
-{% macro top_table_week(cur_sub, cur_rows, prev_sub, prev_rows, part_label) %}
+{% macro top_table_week(cur_sub, cur_rows, cur_asof, prev_sub, prev_rows, prev_asof, part_label) %}
 <div class="panel">
   <div class="phead"><h2>이번주 누적</h2>
     <div class="seg wkseg" style="margin-left:10px;">
@@ -46,14 +46,14 @@
   </div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th class="num">불량율(ppm)</th><th>불량유형별 수량</th></tr></thead>
-    {% for wk, rows in [('cur', cur_rows), ('prev', prev_rows)] %}
+    {% for wk, rows, asof in [('cur', cur_rows, cur_asof), ('prev', prev_rows, prev_asof)] %}
     <tbody data-wkrows="{{ wk }}"{% if wk == 'prev' %} style="display:none;"{% endif %}>
     {% for r in rows %}
       <tr><td><span class="rank {{ 'r1' if loop.index==1 }}{{ 'r2' if loop.index==2 }}{{ 'r3' if loop.index==3 }}">{{ loop.index }}</span></td>
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
         <td class="num" style="font-weight:700;{{ 'color:var(--err);' if loop.index<=3 }}">{{ r.defect|cf }}</td>
         <td class="num">{{ r.ppm|cf if r.ppm is not none else '-' }}</td>
-        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
+        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag dtrend" data-tm="{{ r.tm }}" data-defect="{{ b[0] }}" data-asof="{{ asof }}">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
     {% else %}
       <tr><td colspan="7" style="color:var(--tx3);">데이터 없음</td></tr>
     {% endfor %}
@@ -74,14 +74,14 @@
   </div>
   <table>
     <thead><tr><th style="width:32px;">#</th><th>TM-NO</th><th>품명</th><th class="num">생산량</th><th class="num">불량</th><th class="num">불량율(ppm)</th><th>불량유형별 수량</th></tr></thead>
-    {% for mo, rows in [('cur', cur_rows), ('prev', prev_rows)] %}
+    {% for mo, rows, asof in [('cur', cur_rows, cur_sub), ('prev', prev_rows, prev_sub)] %}
     <tbody data-morows="{{ mo }}"{% if mo == 'prev' %} style="display:none;"{% endif %}>
     {% for r in rows %}
       <tr><td><span class="rank {{ 'r1' if loop.index==1 }}{{ 'r2' if loop.index==2 }}{{ 'r3' if loop.index==3 }}">{{ loop.index }}</span></td>
         <td class="mono">{{ r.tm }}</td><td>{{ r.name }}</td><td class="num">{{ r.prod|cf }}</td>
         <td class="num" style="font-weight:700;{{ 'color:var(--err);' if loop.index<=3 }}">{{ r.defect|cf }}</td>
         <td class="num">{{ r.ppm|cf if r.ppm is not none else '-' }}</td>
-        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
+        <td style="max-width:230px;"><div class="dtags" style="overflow:hidden;">{% for b in r.by %}<span class="dtag dtrend" data-tm="{{ r.tm }}" data-defect="{{ b[0] }}" data-asof="{{ asof }}">{{ b[0] }}<b>{{ b[1] }}</b></span>{% endfor %}</div></td></tr>
     {% else %}
       <tr><td colspan="7" style="color:var(--tx3);">데이터 없음</td></tr>
     {% endfor %}
@@ -102,6 +102,27 @@
 .kpi.sel{outline:2px solid var(--p-500);outline-offset:-2px;}
 .kpi.sel::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
   border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid var(--p-500);}
+
+/* TOP5 '불량유형별 수량' 클릭 팝업 — 최근 7개월/7주 불량율(PPM) 추이(월마감/주마감과 동일,
+   2026-08-13 대시보드에도 추가). */
+.dtag.dtrend{cursor:pointer;}
+.dtag.dtrend:hover{opacity:.7;}
+#dmodal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;
+  justify-content:center;z-index:9999;}
+#dmodal.on{display:flex;}
+#dmodal .dbox{background:var(--card);border-radius:8px;padding:20px 24px;width:540px;max-width:90vw;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);position:relative;color:var(--tx);}
+#dmodal h4{margin:0 0 3px;font-size:15px;color:var(--tx);}
+#dmodal .dsub{color:var(--tx3);font-size:11.5px;margin-bottom:12px;}
+#dmodal .dlbl{font-size:11.5px;font-weight:700;color:var(--tx2);margin:12px 0 4px;display:flex;
+  align-items:center;gap:6px;}
+#dmodal .dtag2{font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:#fdecea;}
+#dmodal .dchart{height:94px;}
+#dmodal .dchart svg{display:block;}
+#dmodal .dclose{position:absolute;top:10px;right:14px;cursor:pointer;font-size:18px;
+  color:var(--tx3);line-height:1;}
+#dmodal .dclose:hover{color:var(--tx);}
+#dmodal .dload{color:var(--tx3);font-size:12px;padding:24px 0;text-align:center;}
 </style>
 
 <div class="kpis">
@@ -151,12 +172,15 @@
   <span style="margin-left:auto;font:500 12px/1 inherit;color:var(--tx3);">발생 수량 순 · 불량유형별 수량</span></div>
 <div class="grid2" data-topgrid="VMS PART" style="{{ '' if d.top_part_default=='VMS PART' else 'display:none;' }}">
   {{ top_table_month('%04d-%02d'|format(d.cy, d.cm), d.top5['VMS PART'].month, d.prev_month_label, d.top5['VMS PART'].prev_month, 'VMS PART') }}
-  {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['VMS PART'].week, d.prev_week_label, d.top5['VMS PART'].prev_week, 'VMS PART') }}
+  {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['VMS PART'].week, d.cur_week_end, d.prev_week_label, d.top5['VMS PART'].prev_week, d.prev_week_end, 'VMS PART') }}
 </div>
 <div class="grid2" data-topgrid="TM PART" style="{{ '' if d.top_part_default=='TM PART' else 'display:none;' }}">
   {{ top_table_month('%04d-%02d'|format(d.cy, d.cm), d.top5['TM PART'].month, d.prev_month_label, d.top5['TM PART'].prev_month, 'TM PART') }}
-  {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['TM PART'].week, d.prev_week_label, d.top5['TM PART'].prev_week, 'TM PART') }}
+  {{ top_table_week('%d월 %d주차'|format(d.cm, d.cur_week), d.top5['TM PART'].week, d.cur_week_end, d.prev_week_label, d.top5['TM PART'].prev_week, d.prev_week_end, 'TM PART') }}
 </div>
+
+<div id="dmodal"><div class="dbox"><span class="dclose" id="dclose">✕</span>
+  <div id="dbody"><div class="dload">불러오는 중…</div></div></div></div>
 {% endblock %}
 
 {% block scripts %}<script src="/static/charts.js"></script>
@@ -284,6 +308,81 @@
   }
   fitDtags();
   window.addEventListener("resize", fitDtags);
+})();
+
+// TOP5 '불량유형별 수량' 클릭 → 최근 7개월/7주 불량율 추이 팝업(2026-08-13 신설, 월마감/주마감과 동일)
+(function(){
+  var modal = document.getElementById('dmodal'), body = document.getElementById('dbody'),
+      dclose = document.getElementById('dclose');
+  function openModal(){ modal.classList.add('on'); }
+  function closeModal(){ modal.classList.remove('on'); }
+  dclose.addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e){ if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && modal.classList.contains('on')) closeModal();
+  });
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+  function chartSVG(pts, upColor){
+    var W = 480, H = 94, n = pts.length, padTop = 16, padBottom = 16;
+    var bw = W / n;
+    var vals = pts.map(function(p){ return p.ppm == null ? 0 : p.ppm; });
+    var vmax = Math.max.apply(null, vals.concat([1]));
+    var bars = '', labels = '';
+    pts.forEach(function(p, i){
+      var v = p.ppm == null ? 0 : p.ppm;
+      var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
+      var x = i * bw + bw * 0.22, w = bw * 0.56, y = H - padBottom - h;
+      bars += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + Math.max(h, 1) +
+              '" rx="2" fill="#4472c4"></rect>';
+      bars += '<text x="' + (x + w / 2) + '" y="' + (y - 4) + '" font-size="9.5" fill="#888" ' +
+              'text-anchor="middle">' + (p.ppm == null ? '-' : p.ppm.toLocaleString()) + '</text>';
+      labels += '<text x="' + (i * bw + bw / 2) + '" y="' + (H - 3) + '" font-size="9" fill="#888" ' +
+                'text-anchor="middle">' + esc(p.label) + '</text>';
+    });
+    var linePts = [];
+    pts.forEach(function(p, i){
+      if (p.fit == null) return;
+      var v = Math.max(0, p.fit);
+      var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
+      linePts.push((i * bw + bw / 2) + ',' + (H - padBottom - h));
+    });
+    var line = linePts.length >= 2 ?
+      '<polyline points="' + linePts.join(' ') + '" fill="none" stroke="' + upColor +
+      '" stroke-width="2" stroke-dasharray="5,3"></polyline>' : '';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' +
+           bars + line + labels + '</svg>';
+  }
+
+  document.addEventListener('click', function(e){
+    var el = e.target.closest ? e.target.closest('.dtrend') : null;
+    if (!el) return;
+    var tm = el.getAttribute('data-tm'), defect = el.getAttribute('data-defect'),
+        asof = el.getAttribute('data-asof');
+    if (!asof) return;
+    body.innerHTML = '<div class="dload">불러오는 중…</div>';
+    openModal();
+    fetch('/report/defect-trend?tm=' + encodeURIComponent(tm) + '&defect=' + encodeURIComponent(defect) +
+          '&asof=' + encodeURIComponent(asof))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d || !d.months) { body.innerHTML = '<div class="dload">데이터가 없습니다</div>'; return; }
+        var monthTag = d.month_up ? '<span class="dtag2" style="color:#c55a11;background:#fdf1e6;">▲ 증가추세</span>' : '';
+        var weekTag = d.week_up ? '<span class="dtag2" style="color:#1f6f3c;background:#e9f5ee;">▲ 증가추세</span>' : '';
+        body.innerHTML =
+          '<h4>' + esc(d.tm) + ' ' + esc(d.name) + '</h4>' +
+          '<div class="dsub">주요유형: ' + esc(d.defect) + ' · 단위 PPM(불량율)</div>' +
+          '<div class="dlbl">최근 7개월 추이 ' + monthTag + '</div>' +
+          '<div class="dchart">' + chartSVG(d.months, '#c55a11') + '</div>' +
+          '<div class="dlbl">최근 7주 추이 ' + weekTag + '</div>' +
+          '<div class="dchart">' + chartSVG(d.weeks, '#1f6f3c') + '</div>';
+      })
+      .catch(function(){ body.innerHTML = '<div class="dload">불러오기 실패</div>'; });
+  });
 })();
 </script>
 {% endblock %}

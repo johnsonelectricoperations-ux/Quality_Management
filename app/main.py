@@ -422,7 +422,7 @@ def build_dashboard(conn, m, daily, part):
     return {"cy": cy, "cm": cm, "cur_fy": calc.fy_label(cur_fy), "cards": cards,
             "charts": charts, "top5": top5, "top_part_default": top_part_default,
             "prev_week_label": prev_week_label, "prev_month_label": prev_month_label,
-            "cur_week": cur_week}
+            "cur_week": cur_week, "cur_week_end": we, "prev_week_end": pw_e}
 
 
 def build_weekly(conn, m, daily, cy, cm, part):
