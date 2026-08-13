@@ -8,6 +8,8 @@
 .attach .fchip form{display:inline;}
 .attach .fchip button{border:0;background:none;color:var(--err);cursor:pointer;font-size:12px;padding:0 2px;}
 .thumb{height:52px;border:1px solid var(--bd);border-radius:5px;object-fit:cover;}
+.clickrow{cursor:pointer;}
+.clickrow:hover{background:var(--hover, rgba(0,0,0,.03));}
 </style>
 {% if can_edit %}
 <div class="panel"><div class="phead"><h2>{{ '내부품질 Issue 수정' if edit_row else '내부품질 Issue 등록' }}</h2>
@@ -29,7 +31,7 @@
           <option value="{{ edit_row.process }}" selected>{{ edit_row.process }}</option>
           {% endif %}
         </select></div>
-        <div class="f"><label>발생위치</label><input class="in" name="location" value="{{ edit_row.location if edit_row }}" placeholder="예: 소결 3라인"></div>
+        <div class="f"><label>발생위치</label><input class="in" name="location" value="{{ edit_row.location if edit_row }}"></div>
         <div class="f" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:6px;">
           <label style="display:flex;align-items:center;gap:6px;">
             <input type="checkbox" name="is_official" {{ 'checked' if (not edit_row) or edit_row.is_official }}> 공식</label>
@@ -42,7 +44,7 @@
       </div>
 
       <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
-        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}" placeholder="예: 1545-01"></div>
+        <div class="f"><label>TM-NO</label><input class="in" name="tm_no" value="{{ edit_row.tm_no if edit_row }}"></div>
         <div class="f"><label>품명</label><input class="in" name="product_name" value="{{ edit_row.product_name if edit_row }}" placeholder="품명"></div>
         <div class="f"><label>불량수량 (EA)</label><input class="in" type="number" min="0" name="defect_qty"
                value="{{ edit_row.defect_qty if edit_row else '' }}" style="text-align:right;"></div>
@@ -50,16 +52,13 @@
 
       <div class="frow" style="grid-template-columns:1fr;margin-top:10px;">
         <div class="f"><label>문제사항 (내용)</label>
-          <input class="in" name="content" value="{{ edit_row.content if edit_row }}"
-                 placeholder="예: 소결 공정 치수 불량 다발"></div>
+          <input class="in" name="content" value="{{ edit_row.content if edit_row }}"></div>
       </div>
       <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
         <div class="f"><label>발생원인</label>
-          <textarea class="in" name="cause" rows="3" style="resize:vertical;"
-                    placeholder="예: 금형 마모로 인한 치수 이탈">{{ edit_row.cause if edit_row }}</textarea></div>
+          <textarea class="in" name="cause" rows="3" style="resize:vertical;">{{ edit_row.cause if edit_row }}</textarea></div>
         <div class="f"><label>개선대책</label>
-          <textarea class="in" name="action" rows="3" style="resize:vertical;"
-                    placeholder="예: 1) 금형 교체&#10;2) 전수검사 강화">{{ edit_row.action if edit_row }}</textarea></div>
+          <textarea class="in" name="action" rows="3" style="resize:vertical;">{{ edit_row.action if edit_row }}</textarea></div>
       </div>
 
       <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
@@ -99,6 +98,46 @@
     {% endif %}
   </div>
 </div>
+{% elif edit_row %}
+<div class="panel"><div class="phead"><h2>내부품질 Issue 상세</h2>
+  <a class="btn btn-s btn-sm" href="/input/internal-issue" style="margin-left:auto;text-decoration:none;">닫기</a></div>
+  <div class="pbody">
+    <div class="frow" style="grid-template-columns:150px 120px 150px 1fr 120px;">
+      <div class="f"><label>발생일자</label><div class="in">{{ edit_row.d }}</div></div>
+      <div class="f"><label>파트</label><div class="in">{{ edit_row.part|pl }}</div></div>
+      <div class="f"><label>공정명</label><div class="in">{{ edit_row.process or '-' }}{% if edit_row.process=='기타' and edit_row.process_etc %} ({{ edit_row.process_etc }}){% endif %}</div></div>
+      <div class="f"><label>발생위치</label><div class="in">{{ edit_row.location or '-' }}</div></div>
+      <div class="f"><label>공식</label><div class="in">{{ '공식' if edit_row.is_official else '비공식' }}</div></div>
+    </div>
+    <div class="frow" style="grid-template-columns:180px 1fr 120px;margin-top:10px;">
+      <div class="f"><label>TM-NO</label><div class="in">{{ edit_row.tm_no or '-' }}</div></div>
+      <div class="f"><label>품명</label><div class="in">{{ edit_row.product_name or '-' }}</div></div>
+      <div class="f"><label>불량수량 (EA)</label><div class="in" style="text-align:right;">{{ edit_row.defect_qty|cf if edit_row.defect_qty else '-' }}</div></div>
+    </div>
+    <div class="frow" style="grid-template-columns:1fr;margin-top:10px;">
+      <div class="f"><label>문제사항 (내용)</label><div class="in">{{ edit_row.content or '-' }}</div></div>
+    </div>
+    <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
+      <div class="f"><label>발생원인</label><div class="in" style="white-space:pre-wrap;min-height:70px;">{{ edit_row.cause or '-' }}</div></div>
+      <div class="f"><label>개선대책</label><div class="in" style="white-space:pre-wrap;min-height:70px;">{{ edit_row.action or '-' }}</div></div>
+    </div>
+
+    {% if edit_row.files %}
+    <div style="margin-top:12px;">
+      <label style="font:600 11px/1 inherit;color:var(--tx3);">첨부</label>
+      <div class="attach">
+        {% for f in edit_row.files %}
+        {% set fhref = ('/view/pdf?src=/input/internal-issue/file/' ~ f.id ~ '&name=' ~ (f.orig_name|urlencode)) if (f.orig_name|is_pdf) else ('/input/internal-issue/file/' ~ f.id) %}
+        <span class="fchip">
+          {% if f.kind == 'photo' %}<img class="thumb" src="/input/internal-issue/file/{{ f.id }}" alt="">{% endif %}
+          <a href="{{ fhref }}" target="_blank">{{ '🖼' if f.kind=='photo' else '📄' }} {{ f.orig_name }}</a>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
 {% endif %}
 
 <div class="panel"><div class="phead"><h2>내부품질 Issue 이력</h2><span class="tot">{{ rows|length }}건</span></div>
@@ -107,7 +146,7 @@
       <th class="num">불량수량</th><th>문제사항</th><th>첨부</th><th style="width:60px;">공식</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr {% if not r.is_official %}style="color:var(--tx3);"{% endif %}>
+      <tr class="clickrow" data-href="/input/internal-issue?edit={{ r.id }}" {% if not r.is_official %}style="color:var(--tx3);"{% endif %}>
         <td class="mono">{{ r.d }}</td><td>{{ r.part|pl }}</td>
         <td>{{ r.process or '-' }}{% if r.process=='기타' and r.process_etc %} ({{ r.process_etc }}){% endif %}</td>
         <td>{{ r.location or '-' }}</td>
@@ -137,4 +176,14 @@
     </tbody>
   </table>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.clickrow').forEach(function(tr){
+  tr.addEventListener('click', function(e){
+    if (e.target.closest('a,button,input,form')) return;
+    location.href = tr.dataset.href;
+  });
+});
+</script>
 {% endblock %}
