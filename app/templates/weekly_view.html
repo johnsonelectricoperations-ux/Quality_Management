@@ -211,6 +211,11 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   color:#999;line-height:1;}
 #dmodal .dclose:hover{color:#333;}
 #dmodal .dload{color:#999;font-size:12px;padding:24px 0;text-align:center;}
+.photos img{cursor:zoom-in;}
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;
+  justify-content:center;z-index:100;cursor:zoom-out;}
+#zoom img{max-width:96%;max-height:96%;object-fit:contain;}
+#zoom .cl{position:fixed;top:14px;right:18px;color:#fff;font-size:26px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -372,7 +377,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <span class="tx"><b>{{ it.content }}</b>
               <br>{{ it.process or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
               {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
-              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}</span></div>
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}
+              {% if it.photos %}<div class="photos">{% for fid in it.photos[:4] %}<img src="/input/internal-issue/file/{{ fid }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>{% endif %}
+              {% if it.docs %}<div class="docs">{% for f in it.docs %}
+                {% set fhref = ('/view/pdf?src=/input/internal-issue/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/internal-issue/file/' ~ f.id) %}
+                <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>{% endif %}
+              </span></div>
           {% else %}<div class="empty">등록된 내부품질 Issue가 없습니다.</div>{% endfor %}
         </div>
       </div>
@@ -383,7 +393,12 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <span class="tx"><b>{{ it.content }}</b>
               <br>{{ it.customer or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
               {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
-              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}</span></div>
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}
+              {% if it.photos %}<div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>{% endif %}
+              {% if it.docs %}<div class="docs">{% for f in it.docs %}
+                {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
+                <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>{% endif %}
+              </span></div>
           {% else %}<div class="empty">등록된 고객 품질 ISSUE가 없습니다.</div>{% endfor %}
         </div>
       </div>
@@ -414,6 +429,11 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 
 <div id="dmodal"><div class="dbox"><span class="dclose" id="dclose">✕</span>
   <div id="dbody"><div class="dload">불러오는 중…</div></div></div></div>
+
+<div id="zoom" onclick="if(event.target===this) closeZoom();">
+  <span class="cl" onclick="closeZoom()">✕</span>
+  <img id="zoomImg" src="" alt="">
+</div>
 
 <div id="hint">← → 이동 · F 전체화면 · P 인쇄(PDF) · Esc 닫기</div>
 <div id="nav">
@@ -485,6 +505,14 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   // capture 단계에서 먼저 가로채 슬라이드 쪽 Esc(창 닫기)로 넘어가지 않게 한다.
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && modal.classList.contains('on')) { closeModal(); e.stopPropagation(); }
+  }, true);
+
+  // 주요 품질 이슈 사진 클릭 확대(2026-08-13 신설)
+  var zoomEl = document.getElementById('zoom'), zImg = document.getElementById('zoomImg');
+  window.zoom = function(src){ zImg.src = src; zoomEl.style.display = 'flex'; };
+  window.closeZoom = function(){ zoomEl.style.display = 'none'; };
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && zoomEl.style.display === 'flex') { closeZoom(); e.stopPropagation(); }
   }, true);
 
   function esc(s){

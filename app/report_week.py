@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 11
+CACHE_VERSION = 12
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -400,14 +400,29 @@ def _top_items(conn, m, wk, part, limit=5):
 
 
 def _issue_block(conn, wk):
-    """그 주에 등록된 내부품질 Issue / 고객 Incident 목록."""
+    """그 주에 등록된 내부품질 Issue / 고객 Incident 목록 — 첨부(사진/문서)도 함께 싣는다
+    (2026-08-13, 월마감 report_monthly._issue_block/_internal_issue_block과 동일 패턴)."""
     d0, d1 = week_bounds(wk)
     internal = [dict(r) for r in conn.execute(
-        "SELECT d,part,process,tm_no,product_name,content,defect_qty,cause,action "
+        "SELECT id,d,part,process,tm_no,product_name,content,defect_qty,cause,action "
         "FROM internal_issue WHERE is_official=1 AND d BETWEEN ? AND ? ORDER BY d,id", (d0, d1))]
+    for row in internal:
+        row["photos"] = [f["id"] for f in conn.execute(
+            "SELECT id FROM internal_issue_file WHERE internal_issue_id=? AND kind='photo' ORDER BY id",
+            (row["id"],))]
+        row["docs"] = [{"id": f["id"], "name": f["orig_name"]} for f in conn.execute(
+            "SELECT id, orig_name FROM internal_issue_file WHERE internal_issue_id=? AND kind='doc' ORDER BY id",
+            (row["id"],))]
     customer = [dict(r) for r in conn.execute(
-        "SELECT d,part,customer,tm_no,product_name,content,defect_qty,cause,action "
+        "SELECT id,d,part,customer,tm_no,product_name,content,defect_qty,cause,action "
         "FROM incident WHERE is_official=1 AND d BETWEEN ? AND ? ORDER BY d,id", (d0, d1))]
+    for row in customer:
+        row["photos"] = [f["id"] for f in conn.execute(
+            "SELECT id FROM incident_file WHERE incident_id=? AND kind='photo' ORDER BY id",
+            (row["id"],))]
+        row["docs"] = [{"id": f["id"], "name": f["orig_name"]} for f in conn.execute(
+            "SELECT id, orig_name FROM incident_file WHERE incident_id=? AND kind='doc' ORDER BY id",
+            (row["id"],))]
     return {"internal": internal, "customer": customer}
 
 
