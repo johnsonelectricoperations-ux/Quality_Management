@@ -492,28 +492,30 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
     });
   }
-  // 막대(불량율 PPM) + 추세선(선형회귀 적합값, 점선)을 SVG로 함께 그린다.
-  function chartSVG(pts, upColor){
+  // 막대(불량율 PPM 또는 불량수량 EA) + 추세선(선형회귀 적합값, 점선)을 SVG로 함께 그린다.
+  // valueKey/fitKey로 어떤 필드를 그릴지 고른다(위: ppm/fit, 아래: qty/fit_qty).
+  function chartSVG(pts, upColor, valueKey, fitKey){
+    valueKey = valueKey || 'ppm'; fitKey = fitKey || 'fit';
     var W = 480, H = 94, n = pts.length, padTop = 16, padBottom = 16;
     var bw = W / n;
-    var vals = pts.map(function(p){ return p.ppm == null ? 0 : p.ppm; });
+    var vals = pts.map(function(p){ return p[valueKey] == null ? 0 : p[valueKey]; });
     var vmax = Math.max.apply(null, vals.concat([1]));
     var bars = '', labels = '';
     pts.forEach(function(p, i){
-      var v = p.ppm == null ? 0 : p.ppm;
+      var v = p[valueKey] == null ? 0 : p[valueKey];
       var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
       var x = i * bw + bw * 0.22, w = bw * 0.56, y = H - padBottom - h;
       bars += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + Math.max(h, 1) +
               '" rx="2" fill="#4472c4"></rect>';
       bars += '<text x="' + (x + w / 2) + '" y="' + (y - 4) + '" font-size="9.5" fill="#333" ' +
-              'text-anchor="middle">' + (p.ppm == null ? '-' : p.ppm.toLocaleString()) + '</text>';
+              'text-anchor="middle">' + (p[valueKey] == null ? '-' : p[valueKey].toLocaleString()) + '</text>';
       labels += '<text x="' + (i * bw + bw / 2) + '" y="' + (H - 3) + '" font-size="9" fill="#666" ' +
                 'text-anchor="middle">' + esc(p.label) + '</text>';
     });
     var linePts = [];
     pts.forEach(function(p, i){
-      if (p.fit == null) return;
-      var v = Math.max(0, p.fit);
+      if (p[fitKey] == null) return;
+      var v = Math.max(0, p[fitKey]);
       var h = vmax ? (v / vmax) * (H - padTop - padBottom) : 0;
       linePts.push((i * bw + bw / 2) + ',' + (H - padBottom - h));
     });
@@ -537,14 +539,13 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       .then(function(d){
         if (!d || !d.months) { body.innerHTML = '<div class="dload">데이터가 없습니다</div>'; return; }
         var monthTag = d.month_up ? '<span class="dtag" style="color:#c55a11;background:#fdf1e6;">▲ 증가추세</span>' : '';
-        var weekTag = d.week_up ? '<span class="dtag" style="color:#1f6f3c;background:#e9f5ee;">▲ 증가추세</span>' : '';
         body.innerHTML =
           '<h4>' + esc(d.tm) + ' ' + esc(d.name) + '</h4>' +
-          '<div class="dsub">주요유형: ' + esc(d.defect) + ' · 단위 PPM(불량율)</div>' +
-          '<div class="dlbl">최근 7개월 추이 ' + monthTag + '</div>' +
-          '<div class="dchart">' + chartSVG(d.months, '#c55a11') + '</div>' +
-          '<div class="dlbl">최근 7주 추이 ' + weekTag + '</div>' +
-          '<div class="dchart">' + chartSVG(d.weeks, '#1f6f3c') + '</div>';
+          '<div class="dsub">주요유형: ' + esc(d.defect) + '</div>' +
+          '<div class="dlbl">불량율 7개월 추이 <small style="font-weight:600;color:#999;">(PPM)</small> ' + monthTag + '</div>' +
+          '<div class="dchart">' + chartSVG(d.months, '#c55a11', 'ppm', 'fit') + '</div>' +
+          '<div class="dlbl">불량수량 7개월 추이 <small style="font-weight:600;color:#999;">(EA)</small></div>' +
+          '<div class="dchart">' + chartSVG(d.months, '#1f6f3c', 'qty', 'fit_qty') + '</div>';
       })
       .catch(function(){ body.innerHTML = '<div class="dload">불러오기 실패</div>'; });
   });

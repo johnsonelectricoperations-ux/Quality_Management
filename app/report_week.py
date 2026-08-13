@@ -151,12 +151,18 @@ def defect_trend(conn, m, tm, defect_group, asof):
         we -= _dt.timedelta(days=WEEK_DAYS)
     week_pts.reverse()
 
+    # 증가추세 판정은 불량율(PPM) 기준 그대로 유지한다(생산량 착시 배제, 기존 확정 사항).
     month_up, month_fit = _trend_stats([p["ppm"] for p in month_pts])
     week_up, week_fit = _trend_stats([p["ppm"] for p in week_pts])
     for p, f in zip(month_pts, month_fit):
         p["fit"] = round(f, 1) if f is not None else None
     for p, f in zip(week_pts, week_fit):
         p["fit"] = round(f, 1) if f is not None else None
+    # 팝업 아래쪽 그래프용 — 같은 7개월 데이터의 수량(EA) 추세선(2026-08-13: 주간 그래프를
+    # 월간 불량수량 그래프로 교체하면서 추가. 증가추세 판정에는 쓰지 않고 그래프 표시 전용).
+    _, month_qty_fit = _trend_stats([p["qty"] for p in month_pts])
+    for p, f in zip(month_pts, month_qty_fit):
+        p["fit_qty"] = round(f, 1) if f is not None else None
     cls = "up-both" if (month_up and week_up) else ("up-month" if month_up else ("up-week" if week_up else ""))
     name = m.product.get(tm, ("?",))[0]
     return {"tm": tm, "name": name, "defect": defect_group,
