@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 13
+CACHE_VERSION = 14
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -228,12 +228,12 @@ def _svp_estimate(conn, daily, d0, d1, parts):
     return denom, est
 
 
-def week_kpi(conn, m, daily, wk, part):
-    """한 주(금~목)의 KPI dict. 월 KPI(`calc.month_kpi`)와 같은 키를 쓰되 분모는 추정이다.
+def _range_kpi(conn, m, daily, d0, d1, part):
+    """임의 날짜 구간(d0~d1)의 KPI dict. 월 KPI(`calc.month_kpi`)와 같은 키를 쓰되 분모는 추정이다.
 
-    클레임·Warranty는 **실제 발생일자로** 그 주에 든 건만 더한다(월 금액을 주별로 안분하지
-    않는다 — 주간 보고에서는 언제 터졌는지가 중요하므로)."""
-    d0, d1 = week_bounds(wk)
+    클레임·Warranty는 **실제 발생일자로** 그 구간에 든 건만 더한다(월 금액을 안분하지 않는다 —
+    언제 터졌는지가 중요하므로). `week_kpi`(그 주 금~목)와 "해당월 누적"(그 달 1일~누적종료일)이
+    같은 계산을 공유한다(2026-08-21, 페이지2 KPI 타일에도 월누적을 추가하며 공통화)."""
     parts = calc._parts_for(part)
     agg = calc._sum_cells(daily, _dates_between(d0, d1), parts)
     denom, est = _svp_estimate(conn, daily, d0, d1, parts)
@@ -263,7 +263,7 @@ def week_kpi(conn, m, daily, wk, part):
 
     scrap_qty = agg["proc_qty"] + agg["set_qty"]
     return {
-        "wk": wk, "start": d0, "end": d1,
+        "start": d0, "end": d1,
         "scrap_cost": scrap_cost_r, "scrap_cost_pct": pct(scrap_cost_r, denom_r),
         "scrap_qty": scrap_qty, "scrap_qty_pct": pct(scrap_qty, agg["prod_qty"]),
         "copq_cost": copq_cost_r, "copq_pct": pct(copq_cost_r, denom_r),
@@ -273,6 +273,14 @@ def week_kpi(conn, m, daily, wk, part):
         "proc_qty": agg["proc_qty"], "set_qty": agg["set_qty"], "prod_qty": agg["prod_qty"],
         "denom": denom_r, "denom_est": est,
     }
+
+
+def week_kpi(conn, m, daily, wk, part):
+    """한 주(금~목)의 KPI dict — `_range_kpi`를 그 주 범위로 호출."""
+    d0, d1 = week_bounds(wk)
+    out = _range_kpi(conn, m, daily, d0, d1, part)
+    out["wk"] = wk
+    return out
 
 
 # 주간 보고에 올릴 지표 — (키, 표시명, 단위, 소수자리, 낮을수록 좋은지, 추정치 여부)
@@ -308,11 +316,6 @@ TREND_WEEKS = 5       # 주간 KPI 타일에 함께 그리는 최근 주차 수(
 TARGET_KEY = {"proc_ppm": "proc_ppm", "set_ppm": "set_ppm", "scrap_qty_pct": "scrap_qty",
               "scrap_cost_pct": "scrap_cost", "copq_pct": "copq"}
 
-# 공정불량율/셋팅불량율 타일만 대표수치·미니그래프에 '해당월 누적'을 같이 보여준다(2026-08-21
-# 사용자 확정) — Scrap Quantity/Cost·COPQ·Incident는 그대로 주간 값만.
-MONTH_CUM_KEYS = ("proc_ppm", "set_ppm")
-
-
 def _month_range_for_week(wk):
     """그 주(금~목) 중 **더 많은 날이 속한 달**을 '해당월'로 판단한다.
 
@@ -334,23 +337,14 @@ def _month_range_for_week(wk):
     return month_start.isoformat(), cum_end.isoformat(), y, mo
 
 
-def _month_cum_ppm(conn, daily, wk, part):
-    """해당월(위 판단 기준) 1일 ~ 누적종료일까지 공정/셋팅 불량 PPM. 미니그래프 맨 왼쪽 막대와
-    타일 대표수치에 쓴다."""
+def _month_cum_kpi(conn, m, daily, wk, part):
+    """해당월(위 판단 기준) 1일 ~ 누적종료일까지 KPI(주간과 같은 키 전부). 페이지2(주요 KPI
+    현황)·페이지3·4(공정불량율 현황) 타일의 미니그래프 맨 왼쪽 막대와 대표수치에 공통으로 쓴다
+    (2026-08-21, `_range_kpi` 재사용 — Scrap Cost·COPQ 추정치 안분 로직도 그대로 적용됨)."""
     ms, me, _y, mo = _month_range_for_week(wk)
-    parts = calc._parts_for(part)
-    agg = calc._sum_cells(daily, _dates_between(ms, me), parts)
-
-    def ppm(a, b):
-        return round(a / b * 1_000_000) if b else 0
-
-    has_prod = bool(agg["prod_qty"])
-    return {
-        "proc_ppm": ppm(agg["proc_qty"], agg["prod_qty"]) if has_prod else None,
-        "set_ppm": ppm(agg["set_qty"], agg["prod_qty"]) if has_prod else None,
-        "label": f"{mo}월누적",
-        "start": ms, "end": me,
-    }
+    out = _range_kpi(conn, m, daily, ms, me, part)
+    out["label"] = f"{mo}월누적"
+    return out
 
 
 def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
@@ -368,7 +362,7 @@ def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
         labels.append(f"{sd.month}/{sd.day}")
     # 목표는 FY 단위로 등록돼 있다. 주가 월을 넘나들 수 있으므로 **목요일(마감일)** 기준으로 잡는다.
     fy = calc.fy_of(int(wk[:4]), int(wk[5:7]))
-    mcum = _month_cum_ppm(conn, daily, wk, part)
+    mcum = _month_cum_kpi(conn, m, daily, wk, part)
     out = {}
     for key, _name, _unit, dec, _lb, _est in WEEK_METRICS:
         # 생산 데이터가 아예 없는 주는 **0이 아니라 빈칸**으로 둔다. 0으로 그리면 보고서에서
@@ -382,12 +376,12 @@ def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
             tgt = _target_val(conn, fy, part, tk)
             if tgt:
                 vmax = max(vmax, tgt)
-        month = None
-        if key in MONTH_CUM_KEYS:
-            mv = mcum[key]
-            if mv is not None:
-                vmax = max(vmax, mv)
-            month = {"value": mv, "label": mcum["label"]}
+        # 모든 지표(공정/셋팅불량 PPM·Scrap Qty/Cost·COPQ·Incident)에 해당월 누적을 같이 준다
+        # (2026-08-21, 페이지2 요약 KPI에도 확대 적용).
+        mv = (mcum.get(key) or 0) if mcum["prod_qty"] else None
+        if mv is not None:
+            vmax = max(vmax, mv)
+        month = {"value": mv, "label": mcum["label"]}
         out[key] = {"labels": labels, "values": vals, "vmax": vmax or 1, "target": tgt, "dec": dec,
                     "month": month}
     return out
