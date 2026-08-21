@@ -1,8 +1,13 @@
 @echo off
 REM ============================================================
-REM  QMS - 공정단가 연간 재계산 (매년 4월 1일 실행)
-REM  최근 3개월 입고실적으로 성형/소결/정형/가공/기타 단가를 재계산하고,
-REM  그 해 4월 1일부터만 적용되도록 저장한다(과거 원가는 불변).
+REM  QMS - annual process unit-cost recalculation (runs every April 1)
+REM  Recalculates unit cost per process (forming/sintering/sizing/
+REM  machining/etc.) from the last 3 months of intake results, and
+REM  saves it to take effect from that year's April 1 only (past
+REM  cost stays unchanged).
+REM  (Comments kept in English only - Korean text in REM lines can be
+REM  misread as commands when the shell's active code page does not
+REM  match the file's encoding. 2026-08-21.)
 REM ============================================================
 cd /d "%~dp0\.."
 call venv\Scripts\activate.bat
