@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 12
+CACHE_VERSION = 13
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -308,6 +308,50 @@ TREND_WEEKS = 5       # 주간 KPI 타일에 함께 그리는 최근 주차 수(
 TARGET_KEY = {"proc_ppm": "proc_ppm", "set_ppm": "set_ppm", "scrap_qty_pct": "scrap_qty",
               "scrap_cost_pct": "scrap_cost", "copq_pct": "copq"}
 
+# 공정불량율/셋팅불량율 타일만 대표수치·미니그래프에 '해당월 누적'을 같이 보여준다(2026-08-21
+# 사용자 확정) — Scrap Quantity/Cost·COPQ·Incident는 그대로 주간 값만.
+MONTH_CUM_KEYS = ("proc_ppm", "set_ppm")
+
+
+def _month_range_for_week(wk):
+    """그 주(금~목) 중 **더 많은 날이 속한 달**을 '해당월'로 판단한다.
+
+    처음엔 마감일(목요일) 기준으로 하려 했으나, 목요일이 월초(예: 9/1)면 주의 나머지 6일이
+    전부 지난달인데도 "이번 달 누적"이 하루치만 표시되는 문제가 있었다(2026-08-21 사용자 지적).
+    그래서 요일수로 다수결을 내고, 누적 종료일은 그 주 중 그 달에 속하는 마지막 날(=주가
+    다음 달로 안 넘어갔으면 목요일 그대로, 넘어갔으면 그 달 말일)로 잡는다 — 월말 근처 주는
+    자연스럽게 그 달 전체(=월마감에 가까운 값)를 보여주게 된다.
+    반환: (그 달 1일, 누적종료일, 연, 월) — 날짜는 ISO 문자열."""
+    d0, d1 = week_bounds(wk)
+    cnt = defaultdict(int)
+    for ds in _dates_between(d0, d1):
+        d = _dt.date.fromisoformat(ds)
+        cnt[(d.year, d.month)] += 1
+    (y, mo), _n = max(cnt.items(), key=lambda kv: kv[1])
+    month_start = _dt.date(y, mo, 1)
+    month_last = _dt.date(y, mo, calendar.monthrange(y, mo)[1])
+    cum_end = min(_dt.date.fromisoformat(d1), month_last)
+    return month_start.isoformat(), cum_end.isoformat(), y, mo
+
+
+def _month_cum_ppm(conn, daily, wk, part):
+    """해당월(위 판단 기준) 1일 ~ 누적종료일까지 공정/셋팅 불량 PPM. 미니그래프 맨 왼쪽 막대와
+    타일 대표수치에 쓴다."""
+    ms, me, _y, mo = _month_range_for_week(wk)
+    parts = calc._parts_for(part)
+    agg = calc._sum_cells(daily, _dates_between(ms, me), parts)
+
+    def ppm(a, b):
+        return round(a / b * 1_000_000) if b else 0
+
+    has_prod = bool(agg["prod_qty"])
+    return {
+        "proc_ppm": ppm(agg["proc_qty"], agg["prod_qty"]) if has_prod else None,
+        "set_ppm": ppm(agg["set_qty"], agg["prod_qty"]) if has_prod else None,
+        "label": f"{mo}월누적",
+        "start": ms, "end": me,
+    }
+
 
 def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
     """최근 n주 추이 — 타일마다 작은 막대그래프를 그리기 위한 값.
@@ -324,6 +368,7 @@ def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
         labels.append(f"{sd.month}/{sd.day}")
     # 목표는 FY 단위로 등록돼 있다. 주가 월을 넘나들 수 있으므로 **목요일(마감일)** 기준으로 잡는다.
     fy = calc.fy_of(int(wk[:4]), int(wk[5:7]))
+    mcum = _month_cum_ppm(conn, daily, wk, part)
     out = {}
     for key, _name, _unit, dec, _lb, _est in WEEK_METRICS:
         # 생산 데이터가 아예 없는 주는 **0이 아니라 빈칸**으로 둔다. 0으로 그리면 보고서에서
@@ -337,7 +382,14 @@ def _trend(conn, m, daily, wk, part, n=TREND_WEEKS):
             tgt = _target_val(conn, fy, part, tk)
             if tgt:
                 vmax = max(vmax, tgt)
-        out[key] = {"labels": labels, "values": vals, "vmax": vmax or 1, "target": tgt, "dec": dec}
+        month = None
+        if key in MONTH_CUM_KEYS:
+            mv = mcum[key]
+            if mv is not None:
+                vmax = max(vmax, mv)
+            month = {"value": mv, "label": mcum["label"]}
+        out[key] = {"labels": labels, "values": vals, "vmax": vmax or 1, "target": tgt, "dec": dec,
+                    "month": month}
     return out
 
 

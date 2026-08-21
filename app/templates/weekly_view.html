@@ -158,6 +158,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   border:1px solid #f0c48a;border-radius:999px;padding:1px 5px;}
 .mtile .vv{font-size:34px;font-weight:800;color:#1f3864;line-height:1.15;margin-top:3px;}
 .mtile .vv small{font-size:14px;font-weight:700;color:#7f7f7f;margin-left:3px;}
+.mtile .vv .vvwk{font-size:13px;font-weight:700;color:#7f7f7f;margin-left:8px;vertical-align:middle;}
 .mtile .cmp{font-size:11px;margin-top:4px;color:#7f7f7f;}
 .mtile .cmp b{font-size:13px;}
 /* 타일 안 미니 추이 그래프 — 주간 보고는 절대값보다 흐름이 중요해서 최근 8주를 같이 보여준다. */
@@ -169,6 +170,11 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   border-radius:2px 2px 0 0;min-height:1px;}
 .mtile .mini .col.cur .bar{background:linear-gradient(180deg,#4472c4,#1f3864);}
 .mtile .mini .col.cur .x{color:#1f3864;font-weight:800;}
+/* 해당월 누적 막대 — 주간 막대(파랑)와 다른 색(청록)으로 구분 + 점선으로 구획(2026-08-21). */
+.mtile .mini .col.month{border-right:1px dashed #cfd6e0;margin-right:3px;padding-right:3px;}
+.mtile .mini .col.month .bar{background:linear-gradient(180deg,#3fb6a8,#1f7d72);}
+.mtile .mini .col.month .x{color:#1f7d72;font-weight:800;}
+.mtile .mini .col.month .bv{color:#1f7d72;}
 .mtile .mini .x{font-size:8px;color:#888;margin-top:2px;white-space:nowrap;letter-spacing:-0.3px;}
 .mtile .mini .bv{font-size:8px;color:#5a5a5a;font-weight:700;margin-bottom:1px;white-space:nowrap;
   letter-spacing:-0.3px;}
@@ -223,7 +229,13 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 {% macro kpi_tile(r, t) %}
 <div class="mtile">
   <div class="nm">{{ r.name }}{% if r.est %}<span class="est">추정</span>{% endif %}</div>
+  {% if t.month and t.month.value is not none %}
+  {# 공정불량율·셋팅불량율 타일은 대표수치를 '해당월 누적'으로, 주간 값은 옆에 작게(2026-08-21 확정). #}
+  <div class="vv">{{ '%.*f'|format(r.dec, t.month.value) if r.dec else '{:,}'.format(t.month.value) }}<small>{{ r.unit }}</small>
+    <span class="vvwk">주 {{ '%.*f'|format(r.dec, r.cur) if r.dec else '{:,}'.format(r.cur) }}{{ r.unit }}</span></div>
+  {% else %}
   <div class="vv">{{ '%.*f'|format(r.dec, r.cur) if r.dec else '{:,}'.format(r.cur) }}<small>{{ r.unit }}</small></div>
+  {% endif %}
   <div class="cmp">
     전주 {{ '%.*f'|format(r.dec, r.prev) if r.dec else '{:,}'.format(r.prev) }}{{ r.unit }}
     {% if r.delta %}
@@ -241,6 +253,18 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     {% if t.target %}
     {# 목표선. 막대 높이와 같은 비율(74%)로 맞춰 눈금이 어긋나지 않게 한다. #}
     <div class="tl" style="bottom:calc({{ (t.target / t.vmax * 100)|round(1) }}% * 0.74 + 14px)"></div>
+    {% endif %}
+    {% if t.month %}
+    {# 맨 왼쪽에 해당월 누적 막대 — 주간 막대와 다른 색으로 구분(2026-08-21 확정). #}
+    <div class="col month">
+      {% if t.month.value is none %}
+      <div class="nod" title="데이터 없음">–</div>
+      {% else %}
+      <div class="bv">{{ '%.*f'|format(t.dec, t.month.value) if t.dec else '{:,}'.format(t.month.value) }}</div>
+      <div class="bar" style="height:{{ (t.month.value / t.vmax * 74)|round(1) }}%"></div>
+      {% endif %}
+      <div class="x">{{ t.month.label }}</div>
+    </div>
     {% endif %}
     {% for v in t['values'] %}
     <div class="col {{ 'cur' if loop.last }}">
