@@ -85,6 +85,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   border:1px solid #ccd6e4;border-radius:4px;padding:2px 6px;text-decoration:none;background:#f4f7fb;}
 .tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
 .empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
+/* 이슈 한 건이 유독 길어 그 항목 하나만으로도 페이지가 넘칠 때(_paginate_items의 tight)
+   폰트를 줄여 최대한 한 페이지 안에 다 보이게 한다(2026-08-21). */
+.card.tight .narr{font-size:9.5px;line-height:1.4;}
+.card.tight .photos img{height:76px;}
 
 /* 조작 바 */
 #nav{transition:opacity .4s;}
@@ -172,13 +176,19 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   <div class="badge2">CONFIDENTIAL</div>
 </section>
 
+{# 이후 모든 슬라이드의 "Page N"은 이 카운터로 계산한다(2026-08-21) — 내부품질 Issue/고객
+   품질 ISSUE 페이지가 등록 건수에 따라 자동으로 늘어날 수 있어(아래 참고), 이후 슬라이드
+   번호를 하드코딩하면 어긋난다. 슬라이드마다 footer 직전에 ns.page를 1씩 올려서 쓴다. #}
+{% set ns = namespace(page=1) %}
+
 {# ───────── 2. 목차 ───────── #}
 <section class="slide">
   <div class="stitle">CONTENTS</div>
   <div class="body"><ul class="toc">
     {% for c in d.contents %}<li><span>{{ loop.index }}</span>{{ c[4:] }}</li>{% endfor %}
   </ul></div>
-  <div class="foot"><span>Page 2</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 {# ───────── 3~5. KOI 현황 ───────── #}
@@ -223,14 +233,14 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     </div>
     {% endfor %}
   </div></div>
-  <div class="foot"><span>Page {{ 2 + loop.index }}</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 {% endfor %}
 
 {# ───────── 6~11. 공정불량 + 반별목표제 (파트별) ───────── #}
 {% for lbl in ['생산1P','생산2P'] %}
 {% set p = d.proc[lbl] %}
-{% set base = 5 + (loop.index0 * 3) %}
 <section class="slide">
   <div class="stitle">(2) {{ lbl }} 공정불량 현황 <small>— 단위 PPM</small></div>
   <div class="body" style="display:flex;flex-direction:column;gap:10px;">
@@ -308,7 +318,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       {% endif %}
     </div>
   </div>
-  <div class="foot"><span>Page {{ base + 1 }}</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 {% for pair in [['성형','소결'], ['정형','가공']] %}
@@ -366,18 +377,24 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     </div>
     {% endfor %}
   </div></div>
-  <div class="foot"><span>Page {{ base + 1 + loop.index }}</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 {% endfor %}
 {% endfor %}
 
 {# ───────── 12~13. 내부품질 Issue ─────────
    Customer Incident(고객 품질 ISSUE)와 같은 구성이되 고객사 대신 공정명으로 집계한다.
-   이 지표는 KPI 목표가 없는(관리 로그 성격) 항목이라 목표선·달성율은 넣지 않는다(2026-07-30). #}
+   이 지표는 KPI 목표가 없는(관리 로그 성격) 항목이라 목표선·달성율은 넣지 않는다(2026-07-30).
+   발생 상세 건수가 많아 카드 한 페이지에 안 들어가면 report_monthly._internal_issue_block()이
+   이슈 단위로 미리 페이지를 나눠 놓는다(ii.pages) — 왼쪽 요약 카드는 페이지마다 그대로 반복해
+   보여주고, 오른쪽 상세만 페이지별로 다르다(2026-08-21). #}
 {% for lbl in ['생산1P','생산2P'] %}
 {% set ii = d.internal_issue[lbl] %}
+{% set n_ii_pages = ii.pages|length %}
+{% for ipg in ii.pages %}
 <section class="slide">
-  <div class="stitle">(3) 내부품질 Issue <small>— {{ lbl }} · 단위 건</small></div>
+  <div class="stitle">(3) 내부품질 Issue <small>— {{ lbl }} · 단위 건{% if n_ii_pages > 1 %} · {{ loop.index }}/{{ n_ii_pages }}페이지{% endif %}</small></div>
   <div class="body" style="display:flex;gap:12px;">
     <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
       <div class="card">
@@ -408,10 +425,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         </table>
       </div>
     </div>
-    <div class="card" style="flex:1;min-width:0;">
+    <div class="card{{ ' tight' if ipg.tight }}" style="flex:1;min-width:0;">
       <h3>{{ d.ym }} 발생 상세</h3>
       <div style="overflow:hidden;flex:1;min-height:0;">
-      {% for it in ii.details %}
+      {% for it in ipg.rows %}
         <div class="narr" style="border-bottom:1px solid #e6e6e6;padding-bottom:6px;margin-bottom:6px;">
           <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b>
             <span class="k" style="margin-left:auto;">발생수량</span><b>{{ num(it.defect_qty) }} EA</b></div>
@@ -429,21 +446,27 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
           {% endif %}
         </div>
-      {% else %}
-        <div class="empty">{{ d.ym }} 발생한 내부품질 Issue가 없습니다.</div>
       {% endfor %}
+      {% if not ipg.rows and loop.index == 1 %}
+        <div class="empty">{{ d.ym }} 발생한 내부품질 Issue가 없습니다.</div>
+      {% endif %}
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page {{ 11 + loop.index }}</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 {% endfor %}
+{% endfor %}
 
-{# ───────── 14~15. 고객 품질 ISSUE ───────── #}
+{# ───────── 14~15. 고객 품질 ISSUE ───────── 발생 상세가 많으면 내부품질 Issue와 같은 방식으로
+   자동 페이지 분할(2026-08-21). #}
 {% for lbl in ['생산1P','생산2P'] %}
 {% set s = d.issue[lbl] %}
+{% set n_s_pages = s.pages|length %}
+{% for spg in s.pages %}
 <section class="slide">
-  <div class="stitle">(4) 고객 품질 ISSUE <small>— {{ lbl }} · 단위 건</small></div>
+  <div class="stitle">(4) 고객 품질 ISSUE <small>— {{ lbl }} · 단위 건{% if n_s_pages > 1 %} · {{ loop.index }}/{{ n_s_pages }}페이지{% endif %}</small></div>
   <div class="body" style="display:flex;gap:12px;">
     <div style="width:390px;display:flex;flex-direction:column;gap:10px;">
       <div class="card">
@@ -485,10 +508,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         </table>
       </div>
     </div>
-    <div class="card" style="flex:1;min-width:0;">
+    <div class="card{{ ' tight' if spg.tight }}" style="flex:1;min-width:0;">
       <h3>{{ d.ym }} 발생 상세</h3>
       <div style="overflow:hidden;flex:1;min-height:0;">
-      {% for it in s.details %}
+      {% for it in spg.rows %}
         <div class="narr" style="border-bottom:1px solid #e6e6e6;padding-bottom:6px;margin-bottom:6px;">
           <div class="row"><span class="k">문제사항</span><b>{{ it.content }}</b>
             <span class="k" style="margin-left:auto;">발생수량</span><b>{{ num(it.defect_qty) }} EA</b></div>
@@ -505,14 +528,17 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
             <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>
           {% endif %}
         </div>
-      {% else %}
-        <div class="empty">{{ d.ym }} 발생한 고객 품질 ISSUE가 없습니다.</div>
       {% endfor %}
+      {% if not spg.rows and loop.index == 1 %}
+        <div class="empty">{{ d.ym }} 발생한 고객 품질 ISSUE가 없습니다.</div>
+      {% endif %}
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page {{ 13 + loop.index }}</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
+{% endfor %}
 {% endfor %}
 
 {# ───────── 16. 고객 Claim ───────── #}
@@ -560,7 +586,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </table>
     </div>
   </div>
-  <div class="foot"><span>Page 16</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 {# ───────── 17. Scrap Cost ───────── #}
@@ -635,7 +662,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       {% endfor %}
     </div>
   </div>
-  <div class="foot"><span>Page 17</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 {# ───────── 18. COPQ ───────── #}
@@ -675,7 +703,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     </div>
     {% endfor %}
   </div></div>
-  <div class="foot"><span>Page 18</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 {# ───────── 19. 주요 업무 진행 현황 ───────── #}
@@ -688,7 +717,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
     <div class="empty">입력된 내용이 없습니다. [리포트 → 월마감] 화면에서 작성하세요.</div>
     {% endif %}
   </div>
-  <div class="foot"><span>Page 19</span><span>Confidential</span></div>
+  {% set ns.page = ns.page + 1 %}
+  <div class="foot"><span>Page {{ ns.page }}</span><span>Confidential</span></div>
 </section>
 
 </div>

@@ -80,6 +80,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   border:1px solid #ccd6e4;border-radius:4px;padding:2px 6px;text-decoration:none;background:#f4f7fb;}
 .tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
 .empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
+/* 이슈 한 건이 유독 길어 그 항목 하나만으로도 페이지가 넘칠 때(_paginate_items의 tight)
+   폰트를 줄여 최대한 한 페이지 안에 다 보이게 한다(2026-08-21). */
+.card.tight .lst{font-size:10px;line-height:1.35;}
+.card.tight .photos img{height:74px;}
 
 /* 조작 바 */
 #nav{transition:opacity .4s;}
@@ -389,14 +393,19 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 </section>
 {% endfor %}
 
-<!-- (4) 주요 품질 이슈 -->
+<!-- (4) 주요 품질 이슈 — 등록건이 많아 카드 한 페이지에 안 들어가면 report_week._issue_block()이
+     이슈 단위로 미리 페이지를 나눠 놓는다(d.issues.pages). 한 이슈가 페이지 경계에서 잘리지
+     않도록 항목 단위로만 끊고, 그래도 항목 하나가 페이지보다 크면 그 페이지는 tight=True라
+     .card.tight로 폰트를 줄인다(2026-08-21 확정). -->
+{% set n_issue_pages = d.issues.pages|length %}
+{% for ipg in d.issues.pages %}
 <section class="slide">
-  <div class="stitle">(4) 주요 품질 이슈 <small>금주 등록분</small></div>
+  <div class="stitle">(4) 주요 품질 이슈 <small>금주 등록분{% if n_issue_pages > 1 %} · {{ loop.index }}/{{ n_issue_pages }}페이지{% endif %}</small></div>
   <div class="body">
     <div class="grid2">
-      <div class="card"><h3>내부품질 Issue ({{ d.issues.internal|length }}건)</h3>
+      <div class="card{{ ' tight' if ipg.internal.tight }}"><h3>내부품질 Issue ({{ d.issues.internal|length }}건)</h3>
         <div class="lst">
-          {% for it in d.issues.internal %}
+          {% for it in ipg.internal.rows %}
           <div class="it"><span class="dt">{{ it.d[5:] }}</span>
             <span class="tx"><b>{{ it.content }}</b>
               <br>{{ it.process or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
@@ -407,12 +416,13 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
                 {% set fhref = ('/view/pdf?src=/input/internal-issue/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/internal-issue/file/' ~ f.id) %}
                 <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>{% endif %}
               </span></div>
-          {% else %}<div class="empty">등록된 내부품질 Issue가 없습니다.</div>{% endfor %}
+          {% endfor %}
+          {% if not ipg.internal.rows and loop.index == 1 %}<div class="empty">등록된 내부품질 Issue가 없습니다.</div>{% endif %}
         </div>
       </div>
-      <div class="card"><h3>고객 품질 ISSUE ({{ d.issues.customer|length }}건)</h3>
+      <div class="card{{ ' tight' if ipg.customer.tight }}"><h3>고객 품질 ISSUE ({{ d.issues.customer|length }}건)</h3>
         <div class="lst">
-          {% for it in d.issues.customer %}
+          {% for it in ipg.customer.rows %}
           <div class="it"><span class="dt">{{ it.d[5:] }}</span>
             <span class="tx"><b>{{ it.content }}</b>
               <br>{{ it.customer or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
@@ -423,13 +433,15 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
                 {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
                 <a href="{{ fhref }}" target="_blank">📄 {{ f.name }}</a>{% endfor %}</div>{% endif %}
               </span></div>
-          {% else %}<div class="empty">등록된 고객 품질 ISSUE가 없습니다.</div>{% endfor %}
+          {% endfor %}
+          {% if not ipg.customer.rows and loop.index == 1 %}<div class="empty">등록된 고객 품질 ISSUE가 없습니다.</div>{% endif %}
         </div>
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page 5</span><span>Confidential</span></div>
+  <div class="foot"><span>Page {{ 4 + loop.index }}</span><span>Confidential</span></div>
 </section>
+{% endfor %}
 
 <!-- (5) 품질 주요 업무현황 -->
 <section class="slide">
@@ -446,7 +458,7 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
       </div>
     </div>
   </div>
-  <div class="foot"><span>Page 6</span><span>Confidential</span></div>
+  <div class="foot"><span>Page {{ 4 + n_issue_pages + 1 }}</span><span>Confidential</span></div>
 </section>
 
 </div>

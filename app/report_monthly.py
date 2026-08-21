@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 19
+CACHE_VERSION = 20
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -341,6 +341,31 @@ def _top5(conn, m, agg, y, mth, part):
     return rows
 
 
+# 월마감 내부품질 Issue/고객 품질 ISSUE 상세 카드(주마감보다 폭이 넓다) 한 줄에 대략 들어가는
+# 글자수 — 11px 폰트, 상세카드(약 800px 폭) 기준 눈대중(2026-08-21). 정확한 렌더 폭 측정이
+# 아니라 대략치라 실사용 보며 MONTH_ISSUE_CHARS_PER_LINE·MONTH_ISSUE_PAGE_LINES 둘 다 조정 가능.
+MONTH_ISSUE_CHARS_PER_LINE = 70
+MONTH_ISSUE_PAGE_LINES = 26
+
+
+def _month_issue_cost(it):
+    def wrap(s, cpl=MONTH_ISSUE_CHARS_PER_LINE):
+        s = str(s or "").strip()
+        return max(1, -(-len(s) // cpl)) if s else 0
+    c = 1.4                          # 항목 사이 여백·구분선 몫
+    c += wrap(it.get("content")) or 1
+    c += 1                           # 발생일자/공정(또는 위치)
+    c += 1                           # 발생위치(내부이슈만) — 고객이슈는 이 줄이 없지만 여유로 둔다
+    c += 1                           # 품번/품명
+    c += wrap(it.get("cause"))       # 발생원인
+    c += wrap(it.get("action"))      # 개선대책
+    if it.get("photos"):
+        c += 6                       # 사진 썸네일(96px) ≈ 텍스트 6줄 분량
+    if it.get("docs"):
+        c += 1
+    return c
+
+
 # ── (3) 고객 품질 ISSUE ─────────────────────────────────
 def _issue_block(conn, fy, part, upto):
     months = [mo for (_y, mo) in calc.fy_months(fy)]
@@ -383,6 +408,9 @@ def _issue_block(conn, fy, part, upto):
             "fy_target": ft, "fy_ach": achieve(fy_official, ft),
             "by_cust": sorted(([k] + v for k, v in by_cust.items()), key=lambda x: -(x[1] + x[2])),
             "details": details,
+            # 상세 건수가 많아 카드 한 페이지에 안 들어가면 이슈 단위로 자동 페이지 분할
+            # (2026-08-21, 한 이슈가 페이지 경계에서 잘리지 않게 항목 단위로만 끊는다).
+            "pages": report_week._paginate_items(details, _month_issue_cost, MONTH_ISSUE_PAGE_LINES),
             # FY27 누계 단일 막대 그래프(KOI 방식)용 축 — 2026-07-30, FY26 표시 제거하며 추가.
             "cum_vmax": max([v for v in [fy_official, ft] if v] + [0]),
             "vmax": max([v for v in off if v] + [1])}
@@ -427,6 +455,7 @@ def _internal_issue_block(conn, fy, part, upto):
     return {"months": months, "upto_i": upto_i, "count": cnt, "fy_count": fy_count,
             "by_proc": sorted(by_proc.items(), key=lambda x: -x[1]),
             "details": details,
+            "pages": report_week._paginate_items(details, _month_issue_cost, MONTH_ISSUE_PAGE_LINES),
             "vmax": max([v for v in cnt if v] + [1])}
 
 

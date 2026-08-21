@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 14
+CACHE_VERSION = 15
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -445,9 +445,62 @@ def _top_items(conn, m, wk, part, limit=5):
     return rows
 
 
+def _paginate_items(items, cost_fn, budget):
+    """items를 순서대로 쌓다가, 다음 항목을 더하면 budget을 넘는 지점에서 페이지를 끊는다.
+
+    **항목 하나는 절대 쪼개지 않는다** — 페이지 경계에서 한 이슈의 내용이 반토막 나지 않게
+    하기 위함이다(2026-08-21 사용자 확정). 그래서 어떤 항목 하나가 budget보다 커도 통째로
+    한 페이지를 차지하며, 그 페이지는 `tight=True`로 표시해 화면단에서 폰트를 줄이도록 한다.
+    cost_fn은 그 항목이 차지할 '줄(line) 수'를 어림잡아 반환하는 함수 — 실제 렌더링 폭·글자
+    수를 정확히 재는 게 아니라 대략적인 추정치라, budget과 함께 실사용 보며 조정할 수 있다.
+    반환: [{"rows": [...], "tight": bool}, ...] (rows가 비어도 빈 페이지 1개는 항상 반환
+    — "등록된 건이 없습니다" 안내를 보여줄 자리가 있어야 하므로)."""
+    pages, cur, cur_cost = [], [], 0
+    for it in items:
+        c = cost_fn(it)
+        if cur and cur_cost + c > budget:
+            pages.append(cur)
+            cur, cur_cost = [], 0
+        cur.append(it)
+        cur_cost += c
+    if cur or not pages:
+        pages.append(cur)
+    # 키 이름은 "items"가 아니라 "rows"다 — Jinja는 obj.items를 dict.items() 메서드로 먼저
+    # 해석해버려서(속성 접근이 dict.items() 내장 메서드와 충돌) "items"를 키로 쓰면 템플릿에서
+    # 못 꺼내 쓴다(2026-08-21 실제로 겪음).
+    return [{"rows": p, "tight": sum(cost_fn(i) for i in p) > budget} for p in pages]
+
+
+# 주마감 "주요 품질 이슈" 카드(폭이 좁다) 한 줄에 대략 들어가는 글자수 — 11.5px 폰트,
+# .lst 컬럼 폭 기준 눈대중(2026-08-21). 정확한 렌더 폭 측정이 아니라 대략치라 실사용 보며
+# WEEK_ISSUE_CHARS_PER_LINE·WEEK_ISSUE_PAGE_LINES 둘 다 조정 가능.
+WEEK_ISSUE_CHARS_PER_LINE = 44
+WEEK_ISSUE_PAGE_LINES = 26          # 카드 안에 들어가는 대략적인 줄 수
+
+
+def _week_issue_cost(it):
+    def wrap(s, cpl=WEEK_ISSUE_CHARS_PER_LINE):
+        s = str(s or "").strip()
+        return max(1, -(-len(s) // cpl)) if s else 0
+    c = 1.4                          # 항목 사이 여백·구분선 몫
+    c += wrap(it.get("content")) or 1
+    c += 1                           # 공정/품번/품명 요약줄
+    if it.get("action"):
+        c += wrap(it["action"])
+    if it.get("photos"):
+        c += 6                       # 사진 썸네일(96px) ≈ 텍스트 6줄 분량
+    if it.get("docs"):
+        c += 1
+    return c
+
+
 def _issue_block(conn, wk):
     """그 주에 등록된 내부품질 Issue / 고객 Incident 목록 — 첨부(사진/문서)도 함께 싣는다
-    (2026-08-13, 월마감 report_monthly._issue_block/_internal_issue_block과 동일 패턴)."""
+    (2026-08-13, 월마감 report_monthly._issue_block/_internal_issue_block과 동일 패턴).
+
+    항목이 많아 카드 한 페이지에 다 안 들어가면 자동으로 페이지를 나눈다(2026-08-21) — 한
+    이슈가 페이지 경계에서 잘리지 않도록 이슈 단위로만 나누고, 내부/고객 이슈 페이지 수가
+    다를 수 있어 더 긴 쪽 기준으로 짝을 맞춰(`pages`) 슬라이드마다 나란히 보여준다."""
     d0, d1 = week_bounds(wk)
     internal = [dict(r) for r in conn.execute(
         "SELECT id,d,part,process,tm_no,product_name,content,defect_qty,cause,action "
@@ -469,7 +522,14 @@ def _issue_block(conn, wk):
         row["docs"] = [{"id": f["id"], "name": f["orig_name"]} for f in conn.execute(
             "SELECT id, orig_name FROM incident_file WHERE incident_id=? AND kind='doc' ORDER BY id",
             (row["id"],))]
-    return {"internal": internal, "customer": customer}
+    internal_pages = _paginate_items(internal, _week_issue_cost, WEEK_ISSUE_PAGE_LINES)
+    customer_pages = _paginate_items(customer, _week_issue_cost, WEEK_ISSUE_PAGE_LINES)
+    empty_page = {"rows": [], "tight": False}
+    n = max(len(internal_pages), len(customer_pages))
+    pages = [{"internal": internal_pages[i] if i < len(internal_pages) else empty_page,
+              "customer": customer_pages[i] if i < len(customer_pages) else empty_page}
+             for i in range(n)]
+    return {"internal": internal, "customer": customer, "pages": pages}
 
 
 def _texts(conn, wk):
