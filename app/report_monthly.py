@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 21
+CACHE_VERSION = 22
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -351,7 +351,13 @@ MONTH_ISSUE_PAGE_LINES = 26
 def _month_issue_cost(it):
     def wrap(s, cpl=MONTH_ISSUE_CHARS_PER_LINE):
         s = str(s or "").strip()
-        return max(1, -(-len(s) // cpl)) if s else 0
+        if not s:
+            return 0
+        # 사람이 직접 줄바꿈을 넣은 줄(문제사항·발생원인·개선대책 모두 2026-08-22부터 여러
+        # 줄 입력 가능)은 그 줄바꿈 수만큼은 최소한 확보한다 — 글자수만 보면 짧은 줄 여러
+        # 개를 한 줄로 오판해 예산을 실제보다 적게 잡는다.
+        lines = s.splitlines()
+        return max(len(lines), -(-len(s) // cpl))
     c = 1.4                          # 항목 사이 여백·구분선 몫
     c += wrap(it.get("content")) or 1
     c += 1                           # 발생일자/공정(또는 위치)

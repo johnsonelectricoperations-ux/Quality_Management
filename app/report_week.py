@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 16
+CACHE_VERSION = 17
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -481,7 +481,13 @@ WEEK_ISSUE_PAGE_LINES = 26          # 카드 안에 들어가는 대략적인 �
 def _week_issue_cost(it):
     def wrap(s, cpl=WEEK_ISSUE_CHARS_PER_LINE):
         s = str(s or "").strip()
-        return max(1, -(-len(s) // cpl)) if s else 0
+        if not s:
+            return 0
+        # 사람이 직접 줄바꿈을 넣은 줄(문제사항·발생원인·개선대책도 2026-08-22부터 여러 줄
+        # 입력 가능)은 그 줄바꿈 수만큼은 최소한 확보한다 — 글자수만 보면 짧은 줄 여러 개를
+        # 한 줄로 오판해 예산을 실제보다 적게 잡는다.
+        lines = s.splitlines()
+        return max(len(lines), -(-len(s) // cpl))
     c = 1.4                          # 항목 사이 여백·구분선 몫
     c += wrap(it.get("content")) or 1
     c += 1                           # 공정/품번/품명 요약줄

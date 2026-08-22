@@ -46,7 +46,7 @@
 
       <div class="frow" style="grid-template-columns:1fr;margin-top:10px;">
         <div class="f"><label>문제사항 (내용)</label>
-          <input class="in" name="content" value="{{ edit_row.content if edit_row }}"></div>
+          <textarea class="in" name="content" rows="3" style="resize:vertical;">{{ edit_row.content if edit_row }}</textarea></div>
       </div>
       <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
         <div class="f"><label>발생원인</label>
@@ -112,7 +112,7 @@
       <div class="f"><label>불량수량 (EA)</label><div class="in" style="text-align:right;">{{ edit_row.defect_qty|cf if edit_row.defect_qty else '-' }}</div></div>
     </div>
     <div class="frow" style="grid-template-columns:1fr;margin-top:10px;">
-      <div class="f"><label>문제사항 (내용)</label><div class="in">{{ edit_row.content or '-' }}</div></div>
+      <div class="f"><label>문제사항 (내용)</label><div class="in" style="white-space:pre-wrap;min-height:70px;">{{ edit_row.content or '-' }}</div></div>
     </div>
     <div class="frow" style="grid-template-columns:1fr 1fr;margin-top:10px;">
       <div class="f"><label>발생원인</label><div class="in" style="white-space:pre-wrap;min-height:70px;">{{ edit_row.cause or '-' }}</div></div>

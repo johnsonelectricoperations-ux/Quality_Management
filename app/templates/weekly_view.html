@@ -410,10 +410,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         <div class="lst">
           {% for it in ipg.internal.rows %}
           <div class="it"><span class="dt">{{ it.d[5:] }}</span>
-            <span class="tx"><b>{{ it.content }}</b>
+            <span class="tx"><b>{{ it.content|nl2br }}</b>
               <br>{{ it.process or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
               {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
-              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|nl2br }}</span>{% endif %}
               {% if it.photos %}<div class="photos">{% for fid in it.photos[:4] %}<img src="/input/internal-issue/file/{{ fid }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>{% endif %}
               {% if it.docs %}<div class="docs">{% for f in it.docs %}
                 {% set fhref = ('/view/pdf?src=/input/internal-issue/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/internal-issue/file/' ~ f.id) %}
@@ -427,10 +427,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         <div class="lst">
           {% for it in ipg.customer.rows %}
           <div class="it"><span class="dt">{{ it.d[5:] }}</span>
-            <span class="tx"><b>{{ it.content }}</b>
+            <span class="tx"><b>{{ it.content|nl2br }}</b>
               <br>{{ it.customer or '-' }} · {{ it.tm_no or '-' }} {{ it.product_name or '' }}
               {% if it.defect_qty %} · {{ '{:,}'.format(it.defect_qty) }}ea{% endif %}
-              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|oneline }}</span>{% endif %}
+              {% if it.action %}<br><span style="color:#1f6f3c;">대책: {{ it.action|nl2br }}</span>{% endif %}
               {% if it.photos %}<div class="photos">{% for fid in it.photos[:4] %}<img src="/input/incident/file/{{ fid }}" alt="" onclick="zoom(this.src)">{% endfor %}</div>{% endif %}
               {% if it.docs %}<div class="docs">{% for f in it.docs %}
                 {% set fhref = ('/view/pdf?src=/input/incident/file/' ~ f.id ~ '&name=' ~ (f.name|urlencode)) if (f.name|is_pdf) else ('/input/incident/file/' ~ f.id) %}
