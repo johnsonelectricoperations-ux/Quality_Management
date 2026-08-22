@@ -23,7 +23,7 @@ from collections import defaultdict
 from . import calc, db, report_kpi
 
 # 캐시 구조·계산이 바뀌면 이 숫자를 올린다 → 저장된 캐시가 자동으로 버려지고 다시 계산된다.
-CACHE_VERSION = 15
+CACHE_VERSION = 16
 
 WEEK_END_WEEKDAY = 3      # 목요일 (월=0 … 일=6)
 WEEK_DAYS = 7
@@ -535,7 +535,9 @@ def _issue_block(conn, wk):
 def _texts(conn, wk):
     saved = {r["section"]: r["content"] for r in conn.execute(
         "SELECT section, content FROM report_text WHERE ym=?", (wk,))}
-    return {k: saved.get(k, "") for k, _n, _h in WEEK_SECTIONS}
+    # 리치 에디터(2026-08-22) 이전 순수 텍스트도 줄바꿈이 유지되게 HTML로 변환 — 화면에서는
+    # |safe로 그대로 찍는다.
+    return {k: calc.text_to_html(saved.get(k, "")) for k, _n, _h in WEEK_SECTIONS}
 
 
 def build(conn, m, wk):

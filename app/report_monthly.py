@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 20
+CACHE_VERSION = 21
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -668,7 +668,9 @@ def build(conn, m, y, mth):
         "claim": _claim_block(conn, fy, mth),
         "scrap": _scrap_block(conn, m, agg, fy, y, mth),
         "copq": copq,
-        "main_tasks": (txt["content"] if txt else ""),
+        # 리치 에디터(2026-08-22) 이전 순수 텍스트도 줄바꿈이 유지되게 HTML로 변환 —
+        # 화면에서는 |safe로 그대로 찍는다.
+        "main_tasks": calc.text_to_html(txt["content"] if txt else ""),
         "built_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "v": CACHE_VERSION,
     }

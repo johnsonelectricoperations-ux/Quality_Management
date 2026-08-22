@@ -1,0 +1,24 @@
+{# 서술 항목(주요 업무 진행 현황 등) 리치 에디터 필드 — 월마감/주마감 작성화면 공용
+   (2026-08-22 신설). ym: report_text.ym 값(월마감 'YYYY-MM' / 주마감 'YYYY-MM-DD') —
+   이미지 붙여넣기 업로드 API가 이 값으로 권한(월마감/주마감)을 가른다. #}
+{% macro rte_field(key, content, ym, can_edit) %}
+<div class="rte" data-ym="{{ ym }}" data-section="{{ key }}">
+  {% if can_edit %}
+  <div class="rte-tb">
+    <button type="button" class="rte-btn" data-cmd="bold" title="굵게"><b>B</b></button>
+    <button type="button" class="rte-btn" data-cmd="italic" title="기울임"><i>I</i></button>
+    <button type="button" class="rte-btn" data-cmd="underline" title="밑줄"><u>U</u></button>
+    <span class="rte-sep"></span>
+    <button type="button" class="rte-btn" data-cmd="insertUnorderedList" title="글머리 기호">• 목록</button>
+    <button type="button" class="rte-btn" data-cmd="insertOrderedList" title="번호 매기기">1. 목록</button>
+    <span class="rte-sep"></span>
+    <button type="button" class="rte-btn" data-cmd="table" title="표 삽입(3×3)">⊞ 표</button>
+    <span class="rte-hint">이미지는 복사한 뒤 이 안에 Ctrl+V로 붙여넣으세요</span>
+  </div>
+  <div class="rte-editor" contenteditable="true"></div>
+  <textarea name="{{ key }}" style="display:none;">{{ content }}</textarea>
+  {% else %}
+  <div class="rte-editor readonly">{{ content|safe }}</div>
+  {% endif %}
+</div>
+{% endmacro %}

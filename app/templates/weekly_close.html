@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_rte_macro.html" import rte_field %}
 {% block content %}
 <div class="fyrow">
   <label style="font:600 11px/1 inherit;color:var(--tx3);">보고 주차</label>
@@ -53,10 +54,7 @@
   </div>
     <div class="pbody">
       <div style="color:var(--tx3);font-size:11.5px;margin:-2px 0 8px;white-space:pre-line;">{{ s.hint }}</div>
-      <textarea class="in" name="{{ s.key }}" rows="10"
-                style="width:100%;font:400 13px/1.7 inherit;resize:vertical;"
-                {{ 'readonly' if not can_edit }}
-                placeholder="예)&#10;· 소결로 벨트 교체 완료 (8/5)&#10;· TM6027 Crack 재현시험 진행 중&#10;· 협력사 정기 감사 1개사 시행">{{ s.content }}</textarea>
+      {{ rte_field(s.key, s.content, wk, can_edit) }}
     </div>
   </div>
   {% endfor %}
@@ -70,4 +68,5 @@
   </div></div>
   {% endif %}
 </form>
+<script src="/static/rte.js"></script>
 {% endblock %}

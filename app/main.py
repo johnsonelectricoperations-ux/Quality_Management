@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, calc, ingest, scan, init_data, price_calc, report_kpi, report_monthly, report_week
+from . import db, calc, ingest, scan, init_data, price_calc, report_kpi, report_monthly, report_week, htmlsan
 
 BASE = os.path.dirname(__file__)
 app = FastAPI(title="통합품질관리시스템")
@@ -690,7 +690,9 @@ def monthly_close(request: Request, ym: str = "", msg: str = "", err: str = ""):
     cache = dict(cache) if cache else None
     conn.close()
     sections = [{"key": k, "name": n, "hint": h,
-                 "content": saved.get(k, {}).get("content", ""),
+                 # 리치 에디터 도입 이전 순수 텍스트도 편집창에 줄바꿈이 유지된 채 열리게
+                 # HTML로 변환한다(2026-08-22, 이미 HTML인 값은 그대로 통과).
+                 "content": calc.text_to_html(saved.get(k, {}).get("content", "")),
                  "updated_at": saved.get(k, {}).get("updated_at", ""),
                  "updated_by": saved.get(k, {}).get("updated_by", "")}
                 for k, n, h in REPORT_SECTIONS]
@@ -754,11 +756,13 @@ async def monthly_close_save(request: Request):
     for key, _name, _hint in REPORT_SECTIONS:
         if key not in form:
             continue
+        # 리치 에디터가 보낸 HTML은 화이트리스트로 정제한 뒤 저장한다(저장형 XSS 방지,
+        # 2026-08-22 — 서식·이미지·표 붙여넣기 지원과 함께 도입).
         conn.execute(
             "INSERT INTO report_text(ym,section,content,updated_at,updated_by) VALUES(?,?,?,?,?) "
             "ON CONFLICT(ym,section) DO UPDATE SET content=excluded.content, "
             "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
-            (ym, key, (form.get(key) or "").strip(), now, u["name"]))
+            (ym, key, htmlsan.sanitize((form.get(key) or "").strip()), now, u["name"]))
     conn.commit()
     # 서술 내용은 발표용 캐시(report_cache)에 함께 구워져 들어간다. 저장만 하고 캐시를 그대로
     # 두면 보고서에는 옛 내용이 계속 보이므로, 저장 즉시 다시 계산해 둔다(약 0.3초).
@@ -795,7 +799,7 @@ def weekly_close(request: Request, wk: str = "", msg: str = "", err: str = ""):
     cache = dict(cache) if cache else None
     conn.close()
     sections = [{"key": k, "name": n, "hint": h,
-                 "content": saved.get(k, {}).get("content", ""),
+                 "content": calc.text_to_html(saved.get(k, {}).get("content", "")),
                  "updated_at": saved.get(k, {}).get("updated_at", ""),
                  "updated_by": saved.get(k, {}).get("updated_by", "")}
                 for k, n, h in report_week.WEEK_SECTIONS]
@@ -857,7 +861,7 @@ async def weekly_close_save(request: Request):
             "INSERT INTO report_text(ym,section,content,updated_at,updated_by) VALUES(?,?,?,?,?) "
             "ON CONFLICT(ym,section) DO UPDATE SET content=excluded.content, "
             "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
-            (wk, key, (form.get(key) or "").strip(), now, u["name"]))
+            (wk, key, htmlsan.sanitize((form.get(key) or "").strip()), now, u["name"]))
     conn.commit()
     # 서술 내용도 캐시에 함께 구워지므로, 저장 즉시 다시 계산해 둔다(월마감과 동일).
     if wk in {o for o, _l in _week_opts(conn)}:
@@ -865,6 +869,63 @@ async def weekly_close_save(request: Request):
     conn.close()
     return RedirectResponse(f"/report/weekly?wk={wk}&msg=저장됨 (보고서에 바로 반영됨)",
                             status_code=303)
+
+
+# ── 서술 항목(리치 에디터) 붙여넣은 이미지 ──────────────
+# report_text.ym은 월마감이면 'YYYY-MM'(7자), 주마감이면 'YYYY-MM-DD'(10자)라 길이로
+# 어느 메뉴 권한을 볼지 가른다(weekly_close_save 주석의 규칙과 동일, 2026-08-22).
+REPORT_TEXT_UPLOAD_ROOT = os.path.abspath(os.path.join(BASE, "..", "uploads", "report_text"))
+
+
+def _report_text_menu(ym):
+    return "monthly" if len(ym) == 7 else "weekly"
+
+
+@app.post("/report-text/image")
+async def report_text_image_upload(request: Request, ym: str = Form(...), section: str = Form(...),
+                                    file: UploadFile = File(...)):
+    """서술 항목 편집창에서 이미지를 붙여넣으면 즉시 이 API로 업로드되고, 돌아온 URL을
+    <img>로 편집창에 삽입한다(저장 버튼을 누르기 전에도 업로드된다 — 다른 첨부 화면들과
+    달리 report_text는 아직 레코드가 없을 수도 있어 ym+section을 키로 쓴다)."""
+    u = current_user(request)
+    if u is None or not (u["role"] == "admin" or has_perm(u["role"], _report_text_menu(ym), "edit")):
+        return JSONResponse({"error": "권한이 없습니다"}, status_code=403)
+    data = file.file.read()
+    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return JSONResponse({"error": f"{MAX_UPLOAD_MB}MB를 넘는 이미지는 붙여넣을 수 없습니다"}, status_code=400)
+    ext = os.path.splitext(_safe_name(file.filename or ""))[1].lower()
+    if ext not in IMAGE_EXTS:
+        return JSONResponse({"error": "이미지 파일만 붙여넣을 수 있습니다"}, status_code=400)
+    os.makedirs(REPORT_TEXT_UPLOAD_ROOT, exist_ok=True)
+    orig = _safe_name(file.filename) or f"pasted{ext}"
+    stored = f"{ym}_{section}_{secrets.token_hex(6)}{ext}"
+    with open(os.path.join(REPORT_TEXT_UPLOAD_ROOT, stored), "wb") as f:
+        f.write(data)
+    conn = db.connect()
+    cur = conn.execute(
+        "INSERT INTO report_text_file(ym,section,orig_name,stored_name,size,uploaded_at,uploaded_by) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (ym, section, orig, stored, len(data), _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), u["name"]))
+    conn.commit()
+    fid = cur.lastrowid
+    conn.close()
+    return JSONResponse({"url": f"/report-text/image/{fid}"})
+
+
+@app.get("/report-text/image/{fid}")
+def report_text_image_get(request: Request, fid: int):
+    u = current_user(request)
+    if u is None:
+        return RedirectResponse("/login", status_code=303)
+    conn = db.connect()
+    r = conn.execute("SELECT ym, orig_name, stored_name FROM report_text_file WHERE id=?", (fid,)).fetchone()
+    conn.close()
+    if not r or not (u["role"] == "admin" or has_perm(u["role"], _report_text_menu(r["ym"]), "view")):
+        return RedirectResponse("/", status_code=303)
+    path = os.path.join(REPORT_TEXT_UPLOAD_ROOT, r["stored_name"])
+    if not os.path.isfile(path):
+        return RedirectResponse("/", status_code=303)
+    return FileResponse(path, filename=r["orig_name"], content_disposition_type="inline")
 
 
 # ── 제품 마스터 관리 (CSV 가져오기 + 등록/수정/삭제) ────

@@ -78,7 +78,10 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
 .docs{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
 .docs a{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#3a5a8a;
   border:1px solid #ccd6e4;border-radius:4px;padding:2px 6px;text-decoration:none;background:#f4f7fb;}
-.tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;}
+.tasks{font-size:15px;line-height:2.0;white-space:pre-wrap;padding:8px 4px;overflow:auto;}
+.tasks img{max-width:100%;max-height:340px;object-fit:contain;}
+.tasks table{width:auto;max-width:100%;margin:6px 0;}
+.tasks ul,.tasks ol{padding-left:26px;}
 .empty{color:#a0a0a0;font-size:12px;padding:10px 2px;}
 /* 이슈 한 건이 유독 길어 그 항목 하나만으로도 페이지가 넘칠 때(_paginate_items의 tight)
    폰트를 줄여 최대한 한 페이지 안에 다 보이게 한다(2026-08-21). */
@@ -449,11 +452,11 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
   <div class="body">
     <div class="grid2">
       <div class="card"><h3>지난주 진행 현황</h3>
-        {% if d.texts.last_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.last_week_tasks }}</div>
+        {% if d.texts.last_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.last_week_tasks|safe }}</div>
         {% else %}<div class="empty">입력된 내용이 없습니다. [리포트 → 주마감] 화면에서 작성하세요.</div>{% endif %}
       </div>
       <div class="card"><h3>금주 계획</h3>
-        {% if d.texts.this_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.this_week_tasks }}</div>
+        {% if d.texts.this_week_tasks %}<div class="tasks" style="font-size:13px;">{{ d.texts.this_week_tasks|safe }}</div>
         {% else %}<div class="empty">입력된 내용이 없습니다.</div>{% endif %}
       </div>
     </div>

@@ -449,6 +449,38 @@
 
 ## 최근 로그
 
+### 2026-08-22 (100) — "주요 업무 진행 현황" 입력을 순수 텍스트 → 리치 에디터(서식·표·이미지)로 교체
+
+- 대상: 월마감 "주요 업무 진행 현황" 1칸, 주마감 "지난주/금주 계획" 2칸(작성 화면
+  `/report/monthly`, `/report/weekly`) — 지금까지는 `<textarea>` 줄글만 가능했음.
+- **외부 라이브러리 없이**(사내망 서버라 CDN 불가, 기존 차트도 순수 JS 원칙) `contenteditable`
+  + `document.execCommand` 기반 리치 에디터 신설(`app/static/rte.js`, 매크로
+  `app/templates/_rte_macro.html`). 툴바: 굵게·기울임·밑줄·글머리기호·번호매기기·표 삽입(3×3).
+  이미지는 별도 버튼 없이 **편집창에 Ctrl+V로 붙여넣으면** 자동 업로드된다.
+- 이미지 붙여넣기: `paste` 이벤트를 가로채 클립보드의 이미지 파일을 `/report-text/image`로
+  즉시 업로드(저장 버튼 누르기 전에도 동작) → 돌아온 URL을 `<img>`로 편집창에 삽입. 새 테이블
+  `report_text_file`(ym+section을 키로 — 아직 report_text 레코드가 없을 수 있어서 그 id 대신
+  이 조합을 씀) + 기존 `internal_issue_file`과 동일한 파일시스템 저장 패턴(`uploads/report_text/`).
+- **저장형 XSS 방지**: 리치 에디터가 보낸 HTML을 그대로 저장하면 다른 사람이 보고서를 볼 때
+  악성 스크립트가 같이 실행될 수 있어, 저장 시 `app/htmlsan.py`(신설, `HTMLParser` 기반
+  화이트리스트 새니타이저)로 허용 태그(`b/i/u/br/div/p/span/ul/ol/li/table.../img`)·속성
+  (img의 src·alt, 그마저도 src는 `/report-text/image/`로 시작하는 것만)만 남기고 나머지는
+  제거. `<script>/<style>`은 내용까지 통째로 버림.
+- **레거시 순수 텍스트 호환**: 기존에 저장된 줄바꿈뿐인 텍스트를 그대로 리치 에디터에 넣으면
+  줄바꿈이 사라지는 문제가 있어, `calc.text_to_html()`(태그가 전혀 없는 값만 이스케이프 후
+  줄바꿈→`<br>`, 이미 HTML이면 그대로 통과)을 편집화면 로드 시·보고서 렌더 시 양쪽에 적용 —
+  기존 입력분은 수정 없이도 편집창·보고서 둘 다 그대로 보인다(검증 완료, 아래 참고).
+- 보고서 화면(`weekly_view.html`/`monthly_view.html`)의 `.tasks` div를 `{{ ... }}` →
+  `{{ ... |safe }}`로 변경(이제 HTML을 그대로 찍어야 하므로), 표/이미지가 슬라이드를 벗어나지
+  않게 `.tasks img{max-width:100%;max-height:340px;}` 등 보조 CSS 추가.
+- `report_week.CACHE_VERSION` 15→16, `report_monthly.CACHE_VERSION` 20→21.
+- **검증**: Playwright로 주마감 편집화면에서 굵게 서식 입력 + 표 삽입 + 이미지 붙여넣기(합성
+  ClipboardEvent로 실제 파일 첨부 흉내) → 저장 → 새창 보고서 화면까지 열어 굵게·표·이미지
+  셋 다 그대로 반영되는 것 확인(스크린샷). 월마감의 기존(리치 에디터 도입 이전) 순수 텍스트
+  항목도 편집화면·보고서 화면 양쪽에서 줄바꿈이 그대로 유지되는 것 확인 — 아무 것도 다시
+  입력하지 않아도 정상 표시됨. `htmlsan.sanitize()`로 `<script>`·`onerror` 등 실제로 걸러지는지
+  단위 테스트. 업로드 테스트 파일은 정리, qms.db는 `git checkout -- qms.db`로 원복.
+
 ### 2026-08-21 (99) — 주마감·월마감 "주요 품질 이슈" 등록건 많으면 잘리던 문제 → 자동 페이지 분할
 
 - 사용자 보고: 주마감(4번 슬라이드)·월마감(내부품질 Issue/고객 품질 ISSUE) 화면에서 등록건수가

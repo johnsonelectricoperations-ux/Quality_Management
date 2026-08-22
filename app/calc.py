@@ -7,11 +7,25 @@
 - COPQ의 Scrap Cost는 '성형' 등 COPQ제외 공정 배분분을 제외.
 - 분모(SVP): 월별은 SVP 입력값, 없으면 생산금액 합(추정).
 """
+import html as _html
 import re
 from collections import defaultdict
 from datetime import date, timedelta
 
 from . import db
+
+
+def text_to_html(s):
+    """report_text.content를 보고서/편집화면에 HTML로 내보낼 때 쓰는 변환.
+
+    리치 에디터(굵게·표·이미지) 도입(2026-08-22) 이전에 저장된 값은 줄바꿈 문자만 있는
+    순수 텍스트다 — 그대로 HTML에 꽂으면 줄바꿈이 무시돼 한 줄로 붙어버리므로, 태그가
+    전혀 없는(=에디터로 저장되기 전) 값만 이스케이프 후 줄바꿈을 <br>로 바꿔준다.
+    이미 태그가 있으면(에디터로 저장된 새 값) 그대로 반환한다."""
+    s = s or ""
+    if "<" in s:
+        return s
+    return _html.escape(s).replace("\n", "<br>")
 
 
 def base_tmno(tm):

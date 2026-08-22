@@ -165,6 +165,15 @@ CREATE TABLE IF NOT EXISTS report_text (
   updated_at TEXT DEFAULT '', updated_by TEXT DEFAULT '',
   UNIQUE(ym, section)
 );
+CREATE TABLE IF NOT EXISTS report_text_file (
+  -- report_text 서술 항목(리치 에디터)에 붙여넣은 이미지. 저장 전에도 붙여넣기가 먼저
+  -- 일어날 수 있어(글 작성 중 이미지부터 붙여넣음) report_text.id가 아니라 report_text와
+  -- 같은 방식으로 ym+section을 직접 키로 쓴다(2026-08-22 신설).
+  id INTEGER PRIMARY KEY, ym TEXT NOT NULL, section TEXT NOT NULL,
+  orig_name TEXT NOT NULL, stored_name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0,
+  uploaded_at TEXT DEFAULT '', uploaded_by TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_reporttextfile ON report_text_file(ym, section);
 CREATE TABLE IF NOT EXISTS fy_actual (
   -- FY 연간 실적(월별로 쪼갤 수 없는 과거 집계값). 월마감 보고서의 'FY26' 열 전용.
   -- FY27 이후는 원천 데이터로 시스템이 직접 계산하므로 여기에 넣지 않는다(FY26 일회성 시드).
