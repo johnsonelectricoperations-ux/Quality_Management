@@ -577,7 +577,8 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         <thead><tr><th>집계월</th><th>부서</th><th class="l">고객</th><th>품번</th><th class="l">품명</th>
           <th class="l">CLAIM 내용</th><th>전표금액</th><th>Re-claim</th><th>합계</th></tr></thead>
         <tbody>
-        {% for r in c.details[:9] %}
+        {% set claim_rows = 9 %}{# 슬라이드 한 장에 들어가는 행 수 — 넘치는 건은 '외 N건'으로 표시 #}
+        {% for r in c.details[:claim_rows] %}
           <tr><td>{{ r.ym }}</td><td>{{ r.part }}</td><td class="l">{{ r.customer or '-' }}</td>
             <td>{{ r.tm_no or '-' }}</td><td class="l">{{ (r.product_name or '')[:16] }}</td>
             <td class="l">{{ r.content or r.item }}</td><td class="r">{{ num(r.amount) }}</td>
@@ -585,6 +586,9 @@ tr.sum td{background:#f5f7fa;font-weight:800;}
         {% else %}
           <tr><td colspan="9" class="empty">발생 내역이 없습니다.</td></tr>
         {% endfor %}
+        {% if c.details|length > claim_rows %}
+          <tr><td colspan="9" class="empty">최신순 {{ claim_rows }}건 표시 · 외 {{ c.details|length - claim_rows }}건 (위 월별 표 금액에는 포함)</td></tr>
+        {% endif %}
         </tbody>
       </table>
     </div>

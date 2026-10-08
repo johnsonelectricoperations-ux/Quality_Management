@@ -28,7 +28,7 @@ PART_LABEL = {"VMS PART": "생산1P", "TM PART": "생산2P", "통합": "합계"}
 
 # 캐시 payload 구조 버전. 화면(monthly_view.html)이 새 항목을 쓰기 시작하면 이 값을 올린다.
 # 그러면 옛 캐시는 자동으로 버려지고 다시 계산된다 → 배포 직후 발표해도 화면이 깨지지 않는다.
-CACHE_VERSION = 22
+CACHE_VERSION = 23
 
 # (지표키, 표시명, 단위, 소수자리, 월별 실적 필드, FY누적 계산방식)
 # 누적방식 ("sum", 필드)      — 4월부터 당월까지 단순 합계 (금액·건수)
@@ -492,10 +492,12 @@ def _claim_block(conn, fy, upto):
         row[0] = sum(v for v in row[1:] if v)
     # 집계 미포함(use_agg=0) 건은 애초에 지표 집계에 안 쓰이는 건이라 보고서 발생내역에도
     # 노출하지 않는다(2026-07-30 확정 — 이전엔 전부 보여주고 '비고'로 구분했었다).
+    # 화면은 상위 9건만 그리므로 **최신순**으로 정렬한다. 오래된 순이면 건수가 쌓일수록
+    # 마감월 건이 가장 먼저 잘려 나갔다(2026-10-08 — 9월 마감에 9월 건이 안 보이던 문제).
     details = []
     for r in conn.execute(
             "SELECT d,part,customer,tm_no,product_name,item,amount,reclaim,content FROM claim "
-            "WHERE use_agg=1 AND d BETWEEN ? AND ? ORDER BY d",
+            "WHERE use_agg=1 AND d BETWEEN ? AND ? ORDER BY d DESC, id DESC",
             (ymlist[0] + "-01", ymlist[upto_i] + "-31")):
         details.append({"ym": r["d"][:7], "part": PART_LABEL.get(r["part"], r["part"]),
                         "customer": r["customer"], "tm_no": r["tm_no"],
