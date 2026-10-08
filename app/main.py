@@ -781,7 +781,18 @@ async def monthly_close_save(request: Request):
 # ── 주마감 보고서 (월요일 아침 보고용) ──────────────────
 # 주차 = 금~목. 월마감·대시보드의 주차(월~일, 월 경계 안 넘음)와 다르다 — app/report_week.py 참고.
 def _week_opts(conn, n=13):
-    return [(wk, report_week.week_label(wk)) for wk in report_week.recent_weeks(conn, n)]
+    opts = [(wk, report_week.week_label(wk)) for wk in report_week.recent_weeks(conn, n)]
+    ow = report_week.open_week(conn)
+    if ow:                          # 진행 중인 주는 맨 위에 두되, 기본 선택은 끝난 주(_default_week)
+        wk, last = ow
+        lm, ld = int(last[5:7]), int(last[8:10])
+        opts.insert(0, (wk, f"{report_week.week_label(wk)} — 진행 중 ({lm}/{ld}까지 데이터)"))
+    return opts
+
+
+def _default_week(conn):
+    """주차를 지정하지 않았을 때 보여줄 주 = 가장 최근에 **끝난** 주."""
+    return report_week.recent_weeks(conn, 1)[0]
 
 
 @app.get("/report/weekly", response_class=HTMLResponse)
@@ -794,7 +805,7 @@ def weekly_close(request: Request, wk: str = "", msg: str = "", err: str = ""):
     opts = _week_opts(conn)
     valid = {o for o, _l in opts}
     if wk not in valid:
-        wk = opts[0][0]
+        wk = _default_week(conn)
     saved = {r["section"]: dict(r) for r in conn.execute(
         "SELECT section, content, updated_at, updated_by FROM report_text WHERE ym=?", (wk,))}
     cache = conn.execute("SELECT built_at, built_by FROM week_cache WHERE wk=?", (wk,)).fetchone()
@@ -821,7 +832,7 @@ def weekly_view(request: Request, wk: str = "", rebuild: str = ""):
     conn = db.connect()
     opts = _week_opts(conn)
     if wk not in {o for o, _l in opts}:
-        wk = opts[0][0]
+        wk = _default_week(conn)
     m = calc.Masters(conn)
     if rebuild == "1":
         data = report_week.rebuild(conn, m, wk, u["name"])

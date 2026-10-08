@@ -170,18 +170,33 @@ def defect_trend(conn, m, tm, defect_group, asof):
             "month_up": month_up, "week_up": week_up, "cls": cls}
 
 
+def _last_prod_date(conn):
+    row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
+    last = row["m"] if row and row["m"] else _dt.date.today().isoformat()
+    return _dt.date.fromisoformat(last)
+
+
 def recent_weeks(conn, n=13):
     """주마감 대상 후보 주차(목요일 키) 목록 — 최신 주가 위로.
 
     생산량이 등록된 마지막 날짜를 기준으로, **이미 끝난 주**만 후보로 올린다
     (진행 중인 주를 마감하면 반쪽짜리 숫자가 보고되므로)."""
-    row = conn.execute("SELECT MAX(d) m FROM production").fetchone()
-    last = row["m"] if row and row["m"] else _dt.date.today().isoformat()
-    last_d = _dt.date.fromisoformat(last)
+    last_d = _last_prod_date(conn)
     end = week_end_of(last_d)
     if end > last_d:                 # 아직 안 끝난 주 → 직전 주로 내린다
         end -= _dt.timedelta(days=WEEK_DAYS)
     return [(end - _dt.timedelta(days=WEEK_DAYS * i)).isoformat() for i in range(n)]
+
+
+def open_week(conn):
+    """아직 목요일 생산량이 안 들어온 **진행 중인 주** → (주차키, 마지막 생산일). 없으면 None.
+
+    목요일 다음날(금)이 휴일이면 목요일분이 차주 월요일에야 집계돼, 회의 전에 보고서를 미리
+    만들 수 없었다. 그래서 진행 중인 주도 **선택은 가능**하게 하되 기본값으로는 쓰지 않는다
+    (2026-10-08). 반쪽 데이터라는 점은 주차 선택 목록에 표시한다."""
+    last_d = _last_prod_date(conn)
+    end = week_end_of(last_d)
+    return (end.isoformat(), last_d.isoformat()) if end > last_d else None
 
 
 def _dates_between(d0, d1):
