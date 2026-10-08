@@ -2,8 +2,8 @@
 {% block content %}
 <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
   <div class="seg">
-    <a class="segb {{ 'on' if fy==26 }}" href="/admin/target?fy=26&part={{ part }}">FY26</a>
-    <a class="segb {{ 'on' if fy==27 }}" href="/admin/target?fy=27&part={{ part }}">FY27</a>
+    {% for f in fy_list %}
+    <a class="segb {{ 'on' if fy==f }}" href="/admin/target?fy={{ f }}&part={{ part }}">FY{{ f }}</a>{% endfor %}
   </div>
   <div class="seg">
     {% for p in ['통합','VMS PART','TM PART'] %}

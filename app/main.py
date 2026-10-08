@@ -1837,11 +1837,19 @@ PART_ONLY_KPIS = set(MONTHLY_KPIS) | set(BAN_KPIS)
 
 
 @app.get("/admin/target", response_class=HTMLResponse)
-def admin_target(request: Request, fy: int = 27, part: str = "통합"):
+def admin_target(request: Request, fy: int = 0, part: str = "통합"):
     u, g = _perm_guard(request, "target", "view")
     if g:
         return g
     conn = db.connect()
+    # FY 버튼 = 목표가 저장된 FY + 현재 FY ±1(다음 FY 목표를 미리 입력할 수 있게).
+    # 예전엔 FY26·FY27이 템플릿에 고정돼 있어 FY28이 되어도 버튼이 생기지 않았다.
+    cy, cm = latest_month(conn)
+    cur_fy = calc.fy_of(cy, cm) % 100
+    fy_list = sorted({r["fy"] for r in conn.execute("SELECT DISTINCT fy FROM target")}
+                     | {cur_fy - 1, cur_fy, cur_fy + 1})
+    if not fy:
+        fy = cur_fy
     rows = {}
     for r in conn.execute("SELECT * FROM target WHERE fy=? AND part=?", (fy, part)):
         rows[(r["kpi"], r["mon"])] = r["value"]
@@ -1866,7 +1874,7 @@ def admin_target(request: Request, fy: int = 27, part: str = "통합"):
                 "vals": [{"mon": mm, "value": rows.get((k, mm), "")} for mm in fy_months]}
                for k, n, un in order if k in MONTHLY_KPIS]
     return render(request, "target.html", u, active="target", heading="목표 관리",
-                  crumb="관리", pending=pending_count(), fy=fy, part=part, items=items,
+                  crumb="관리", pending=pending_count(), fy=fy, fy_list=fy_list, part=part, items=items,
                   monthly=monthly, fy_months=fy_months,
                   can_edit=(u["role"] == "admin" or has_perm(u["role"], "target", "edit")))
 

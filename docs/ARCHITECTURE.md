@@ -402,6 +402,7 @@ erDiagram
   /admin/scan                폴더 반영 — 초기 구축 / 스캔 실행 / 루트 설정     [관리자]
   /masters                   마스터 조회
   /admin/target              목표 관리 (공정·셋팅 불량율은 월별)              [관리자]
+                              FY 버튼은 저장된 FY + 현재 FY±1로 자동 구성(고정 아님)
   /admin/users               사용자 관리                                      [관리자]
 ```
 
